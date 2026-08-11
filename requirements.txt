@@ -1,0 +1,12 @@
+# AECB Analyzer V2 -- runtime dependencies.
+#
+# streamlit 1.50.0 is the LAST release that supports Python 3.9; 1.51.0 and
+# later require >=3.10. Do not bump this pin without first confirming the
+# target server's Python version.
+#
+# Note: streamlit 1.50.0 declares "!=3.9.7,>=3.9" -- Python 3.9.7 exactly is
+# excluded upstream. Check `python3 -V` on the server before deploying.
+#
+# The application itself has no other direct dependency; everything else in the
+# wheel bundle is pulled in transitively by streamlit.
+streamlit==1.50.0

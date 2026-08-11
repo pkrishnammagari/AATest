@@ -1,0 +1,1159 @@
+/* Report stylesheet -- extracted from the CR5 mockup.
+ * Colours, type stacks and geometry come from aecb/render/tokens.py
+ * via the generated :root block; nothing here hard-codes a brand colour. */
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-body); background:var(--canvas); color:var(--ink);
+  font-size:13px; line-height:1.5; -webkit-font-smoothing:antialiased; font-variant-numeric:tabular-nums;
+  padding-bottom:26px}
+h1,h2,h3{font-family:var(--font-display); letter-spacing:-.015em}
+button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
+.mono{font-family:var(--font-mono)}
+.aed{font-size:.72em; color:var(--ink-3); font-weight:500; margin-right:2px}
+
+/* ---------- TOP BAR ---------- */
+.topbar{position:sticky; top:0; z-index:50; height:52px; background:var(--surface);
+  border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:14px; padding:0 20px; box-shadow:var(--shadow)}
+.brand{display:flex; align-items:center; gap:10px; flex:none}
+.brand-mark{width:28px; height:28px; border-radius:7px;
+  background:linear-gradient(150deg,var(--fh-blue),var(--fh-blue-d));
+  display:grid; place-items:center; font-family:var(--font-display); font-weight:800;
+  font-size:12px; color:#fff; letter-spacing:.02em; flex:none;
+  box-shadow:0 1px 3px rgba(0,66,106,.30)}
+/* A supplied logo sits on its own; no tile, no gradient behind it. */
+.brand-mark.has-logo{background:none; box-shadow:none; width:auto; height:28px;
+  min-width:28px; border-radius:0}
+.brand-mark.has-logo img{height:28px; width:auto; max-width:170px; display:block; object-fit:contain}
+/* The wordmark is the second-loudest name on the page and never the loudest:
+   19px/700 sits a clear step below the customer name (.id-name-lg, 24px/800)
+   while still reading as a title rather than a label. The bar keeps its 52px
+   height -- a 19px display line boxes to ~28px, the same as .brand-mark, so
+   nothing grows. */
+.brand-t{font-family:var(--font-display); font-weight:800; font-size:19px;
+  line-height:1.2; letter-spacing:-.02em; color:var(--fh-blue); white-space:nowrap}
+.tb-sep{width:1px; height:22px; background:var(--line)}
+.tb-valid{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+  color:var(--green-ink); background:var(--green-wash); border:1px solid var(--green-line);
+  padding:4px 11px; border-radius:20px; white-space:nowrap; flex:none}
+.tb-valid .pd{width:7px; height:7px; border-radius:50%; background:var(--green)}
+.tb-spacer{flex:1}
+.brief-btn{display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+  color:#fff; background:var(--fh-blue); border:1px solid var(--fh-blue);
+  padding:6px 13px; border-radius:8px; margin-left:8px; transition:background .15s}
+.brief-btn:hover{background:var(--fh-blue-d); border-color:var(--fh-blue-d)}
+.brief-btn .bb-ic{font-size:11px; opacity:.9}
+/* Pressed-in look while the rail is showing, so the toggle reads as stateful. */
+body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--fh-blue-d)}
+
+/* ---------- SPINE ---------- */
+/* The spine is a sticky COLUMN of the page grid, not a fixed overlay.
+   Fixed positioning pinned it to the iframe's own viewport -- which is taller
+   than the browser window -- so it drifted out of view as the outer page
+   scrolled, and the two nested scroll contexts made the page feel stuck.
+   Sticky keeps everything in one scroll context, matching the brief rail. */
+.spine{position:sticky; top:66px; align-self:start; z-index:20; width:var(--spine-w)}
+.spine-inner{display:flex; flex-direction:column; align-items:center; gap:2px; position:relative}
+.spine-line{position:absolute; top:14px; bottom:14px; left:50%; transform:translateX(-50%);
+  width:1px; background:var(--line-2); z-index:-1}
+.spine-dot{width:var(--spine-w); height:32px; display:grid; place-items:center;
+  position:relative; cursor:pointer}
+.spine-dot .n{font-family:var(--font-mono); font-size:10px; font-weight:600; color:var(--ink-4);
+  background:var(--canvas); width:24px; height:24px; border-radius:50%; display:grid; place-items:center;
+  border:1px solid var(--line-2); transition:color .18s,border-color .18s,background .18s,box-shadow .18s}
+.spine-dot:hover .n{color:var(--fh-blue); border-color:var(--fh-blue); background:var(--fh-blue-wash)}
+.spine-dot.active .n{background:var(--fh-blue); color:#fff; border-color:var(--fh-blue);
+  box-shadow:0 0 0 3px var(--fh-blue-wash)}
+
+/* Section name slides out of the marker on hover. pointer-events:none keeps the
+   label from swallowing the click meant for the dot. */
+.spine-label{position:absolute; left:calc(100% - 6px); top:50%; transform:translateY(-50%) translateX(-4px);
+  background:var(--ink); color:#EAF0F5; font-size:11px; font-weight:500; line-height:1;
+  padding:6px 10px; border-radius:6px; white-space:nowrap; pointer-events:none;
+  opacity:0; transition:opacity .13s,transform .13s; box-shadow:var(--shadow-lg); z-index:60}
+.spine-label::before{content:''; position:absolute; right:100%; top:50%; transform:translateY(-50%);
+  border:4px solid transparent; border-right-color:var(--ink)}
+.spine-dot:hover .spine-label,.spine-dot:focus-visible .spine-label{opacity:1; transform:translateY(-50%) translateX(0)}
+
+/* ---------- LAYOUT ---------- */
+.wrap{display:grid; grid-template-columns:var(--spine-w) minmax(0,1fr) 372px; gap:20px;
+  max-width:1572px; padding:22px 26px 22px 8px; align-items:start}
+.report{display:flex; flex-direction:column; gap:14px; min-width:0}
+
+/* ---------- SECTION CARD ---------- */
+.sec{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow);
+  padding:20px 22px; scroll-margin-top:70px; transition:box-shadow .25s}
+.sec.flash{box-shadow:0 0 0 2px var(--fh-blue),var(--shadow-lg)}
+.sec-head{display:flex; align-items:flex-start; gap:13px; margin-bottom:17px}
+.sec-no{font-family:var(--font-mono); font-size:11px; font-weight:600; color:#fff; background:var(--ink);
+  width:26px; height:26px; border-radius:7px; display:grid; place-items:center; flex:none; margin-top:1px}
+.sec-htxt{flex:1; min-width:0}
+.sec-title{font-size:17px; font-weight:700; line-height:1.15}
+.sec-purpose{font-size:11.5px; color:var(--ink-3); margin-top:2px}
+.sec-aside{margin-left:auto; flex:none; display:flex; align-items:center; gap:8px}
+.tag{font-size:11px; font-weight:500; padding:3px 9px; border-radius:6px; background:var(--surface-3);
+  color:var(--ink-2); border:1px solid var(--line); display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
+.tag.good{background:var(--green-wash); border-color:var(--green-line); color:var(--green-ink)}
+.tag.warn{background:var(--amber-wash); border-color:var(--amber-line); color:var(--amber-ink)}
+.tag.bad{background:var(--red-wash); border-color:var(--red-line); color:var(--red-ink)}
+.tag.brand{background:var(--fh-blue-wash); border-color:var(--fh-blue-line); color:var(--fh-blue-ink)}
+.hint{width:14px; height:14px; border-radius:50%; background:var(--line-2); color:#fff; font-size:9px; font-weight:700;
+  display:inline-grid; place-items:center; cursor:help; position:relative; flex:none; font-family:var(--font-body)}
+.hint:hover{background:var(--fh-blue)}
+.hint::after{content:attr(data-hint); position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%);
+  width:230px; background:var(--ink); color:#EAF0F5; font-size:11px; font-weight:450; line-height:1.4; letter-spacing:0;
+  padding:8px 10px; border-radius:7px; box-shadow:var(--shadow-lg); opacity:0; pointer-events:none; transition:opacity .12s; z-index:70; text-align:left}
+.hint:hover::after{opacity:1}
+
+/* ---------- COLLAPSIBLE SECTIONS ---------- */
+.sec-toggle{width:24px; height:24px; border-radius:6px; border:1px solid var(--line); background:var(--surface);
+  color:var(--ink-2); font-size:11px; display:grid; place-items:center; flex:none; transition:transform .15s,background .15s}
+.sec-toggle:hover{border-color:var(--fh-blue); background:var(--fh-blue-wash); color:var(--fh-blue-ink)}
+.sec.coll .sec-head{margin-bottom:0; cursor:pointer; user-select:none}
+.sec.coll .sec-body{margin-top:17px}
+.sec.coll.closed .sec-body{display:none}
+.sec.coll.closed .sec-toggle{transform:rotate(-90deg)}
+
+/* ========== 02 IDENTITY ========== */
+/* The name in both scripts shares one row and mirrors from opposite margins;
+   the traits sit on a quieter line beneath. Splitting them this way means a long
+   name in either script grows into open space rather than colliding with
+   metadata, which is what forced wrapping when they shared a line. */
+.id-name-h{margin-bottom:16px; padding-bottom:13px; border-bottom:1px solid var(--line)}
+.id-name-row{display:flex; align-items:baseline; justify-content:space-between;
+  gap:28px; flex-wrap:wrap}
+.id-name-lg{font-family:var(--font-display); font-weight:800; font-size:24px;
+  line-height:1.15; letter-spacing:-.022em; color:var(--ink); min-width:0}
+/* Traits line: dots between items rather than pills, so it reads as one quiet
+   statement instead of a row of chips. Only separators between -- no leading
+   dot on the first item. */
+.id-traits{display:flex; align-items:baseline; flex-wrap:wrap; margin-top:7px}
+.id-trait{font-size:12.5px; font-weight:500; color:var(--ink-2); white-space:nowrap}
+.id-trait + .id-trait{position:relative; padding-left:15px; margin-left:1px}
+.id-trait + .id-trait::before{content:''; position:absolute; left:5px; top:50%;
+  transform:translateY(-50%); width:3.5px; height:3.5px; border-radius:50%;
+  background:var(--line-2)}
+.id-dob{color:var(--ink-3); font-size:11.5px}
+/* Arabic reads right-to-left, so it sits against the right edge of the name
+   row. It wraps to its own line before it will squeeze the English name. */
+.id-name-ar{margin-left:auto; font-family:var(--font-arabic); font-size:17px;
+  font-weight:500; color:var(--ink-2); direction:rtl; text-align:right;
+  line-height:1.45; min-width:0}
+.facts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-items:stretch}
+.facts.id-grid{grid-template-columns:repeat(6,1fr)}
+.fact.c2{grid-column:span 2}
+.fact.c3{grid-column:span 3}
+.fact.c6{grid-column:span 6}
+.fact{background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:11px 13px}
+.fact.w2{grid-column:span 2}
+.mob-list{display:flex; flex-direction:column; gap:5px}
+.mob{display:flex; align-items:center; gap:7px}
+.mob .num{font-family:var(--font-mono); font-size:13px; font-weight:600; letter-spacing:.01em}
+.mob .when{font-size:9.5px; color:var(--ink-4); margin-left:auto; white-space:nowrap; font-family:var(--font-mono)}
+.fact .k{font-family:var(--font-mono); font-size:9px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); font-weight:500; display:flex; align-items:center; gap:5px}
+.fact .v{font-size:13.5px; font-weight:600; margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.fact .v .mono{font-size:12.5px}
+.fact .v .age{color:var(--ink-2); font-weight:500}
+/* The passport's expiry, ON the value line rather than under it. It belongs to
+   the number it qualifies, and as its own block it gave the passport tile a
+   third line while its neighbours have two -- .facts stretches every tile to
+   the tallest in the row, so that one line left dead space in all of them.
+   margin-left:auto pushes it to the tile's right edge, so the number and the
+   expiry sit at opposite ends of one line instead of colliding mid-row. */
+.v-sub{font-size:11px; color:var(--ink-2); font-weight:500;
+  margin-left:auto; white-space:nowrap}
+.v-sub b{font-weight:600; color:var(--ink)}
+.v-sub.na{font-style:italic; color:var(--ink-4)}
+.v-sub.expired{color:var(--red-ink)}
+.v-sub.expired b{color:var(--red-ink)}
+/* The wider tiles carry longer values -- keep them a touch smaller. */
+.fact.c3 .v,.fact.c6 .v{font-size:13px}
+.fact .v .mono{overflow-wrap:anywhere; min-width:0}
+.chevron{font-size:9.5px; color:var(--fh-blue-ink); cursor:pointer; font-weight:600; user-select:none;
+  background:var(--fh-blue-wash); border:1px solid var(--fh-blue-line); padding:0 5px; border-radius:4px; white-space:nowrap}
+.chevron:hover{background:var(--fh-blue); color:#fff; border-color:var(--fh-blue)}
+.cell-hist{display:none; margin-top:9px; padding-top:9px; border-top:1px dashed var(--line-2)}
+.cell-hist.show{display:block}
+.hist-row{display:flex; justify-content:space-between; gap:10px; padding:3px 0; font-size:11px; color:var(--ink-2)}
+.hist-row + .hist-row{border-top:1px solid var(--line)}
+.hist-row b{color:var(--ink); font-weight:600}
+.hist-row .when{font-size:9px; color:var(--ink-4); margin-left:auto; white-space:nowrap; font-family:var(--font-mono)}
+.histflag{font-size:8px; font-weight:600; color:var(--ink-3); background:var(--surface-3); padding:0 5px; border-radius:3px; border:1px solid var(--line)}
+
+/* ========== 02 SCORE & BUREAU HISTORY ==========
+   One strip -- score, delivered bands, gauge, history -- following the same
+   grammar as the top-bar validity strip. The previous two-column layout spent
+   277px on five facts, most of it vertical padding around a 155px right column
+   and three stacked gauge rows conveying a single position. */
+.score-strip{display:flex; align-items:center; gap:26px; min-width:0}
+
+.ss-score{display:flex; flex-direction:column; flex:none}
+.ss-val{font-family:var(--font-display); font-weight:800; font-size:38px;
+  line-height:.95; letter-spacing:-.03em; color:var(--ink)}
+.ss-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500; margin-top:3px}
+
+/* Stacked, not side by side: the two chips are short, and stacking hands the
+   reclaimed width to the gauge -- which is the part that earns its space.
+   Stretched to one width, so the pair reads as two rows of one table rather
+   than two loose chips; the scorecard name sits on the right edge of both. */
+.ss-bands{display:flex; flex-direction:column; align-items:stretch; gap:5px; flex:none}
+/* 15px, not 12px, and the size is budgeted rather than chosen: .ss-hist sets
+   the strip's height, so .ss-bands had ~13px of free height in the binding
+   rail-open case. At 15px a chip measures ~32.5px and the pair plus its gap
+   comes to ~70px, inside that budget with a few px to spare; 16px would eat
+   all of it. The chips are filled SOLID in s03_score.py -- see the note on
+   _FILL there -- which is where most of the prominence actually comes from. */
+.ss-band{display:flex; align-items:center; gap:10px;
+  font-size:15px; font-weight:700; padding:4px 12px; border-radius:7px;
+  border:1px solid; white-space:nowrap}
+.ss-band.neutral{background:var(--surface-3); color:var(--ink-2); border-color:var(--line)}
+.ss-band em{font-style:normal; font-weight:500; opacity:.65; margin-left:auto; font-size:10.5px}
+
+/* The gauge takes the flexible middle. Zone names are in the tooltip, not a
+   third row -- the band chip already says which zone the applicant is in. */
+/* 44px tall, which is free: the strip's height is set by the score block at
+   52px, so the gauge has room to put the marker ABOVE the bar. Sitting it below
+   collided with the tick labels. Vertical order: dot 0-11, pin through the bar
+   16-26, ticks from 32. */
+/* The gauge is the one thing here that shows rather than states, so it gets the
+   flexible width and a bar substantial enough to read at a glance. Vertical
+   order: dot 0-13, pin through the bar 18-32, ticks from 38. */
+/* No max-width: the gauge is the strip's only elastic member, so whatever the
+   strip gains it has to absorb. Capping it while .ss-hist is pushed right by
+   margin-left:auto opened the surplus as a hole between the band chips and the
+   history block -- 396px of it at 1560 with the brief rail closed. Widening
+   costs nothing here, unlike the SVG timelines: the bar is flexed divs and the
+   ticks are placed by percentage, so no type is magnified, and a longer scale
+   only separates the zones more clearly. */
+.ss-gauge{position:relative; flex:1; min-width:180px;
+  height:50px; cursor:help}
+.ss-bar{display:flex; height:14px; border-radius:7px; overflow:hidden; margin-top:18px}
+.ss-bar i{height:100%}
+.ss-marker{position:absolute; top:6px; left:0; width:3px; height:26px;
+  background:var(--ink); border-radius:2px; transform:translateX(-50%); z-index:2}
+.ss-marker::after{content:''; position:absolute; top:-6px; left:50%;
+  transform:translateX(-50%); width:13px; height:13px; border-radius:50%;
+  background:var(--ink); border:2px solid #fff; box-shadow:0 2px 6px rgba(20,30,44,.35)}
+/* Ticks are absolutely placed at their true scale position -- see
+   derive/scoring.gauge(). Evenly spacing them mispositioned the boundaries
+   relative to the marker. */
+.ss-ticks{position:relative; height:12px; margin-top:6px;
+  font-family:var(--font-mono); font-size:8.5px; color:var(--ink-4)}
+.ss-ticks i{position:absolute; font-style:normal; transform:translateX(-50%); white-space:nowrap}
+.ss-ticks i:first-child{transform:none}
+.ss-ticks i:last-child{transform:translateX(-100%)}
+
+.ss-hist{display:flex; flex-direction:column; flex:none; margin-left:auto;
+  padding-left:26px; border-left:1px solid var(--line); gap:6px}
+.ss-hist .ss-k{cursor:help}
+/* The file-length figure is a peer of the score, so it takes the same type at
+   the same size -- two headline numbers reading as one pair. */
+/* Figure, then a narrow column carrying the vintage band over the unit word.
+   Both share the column's width, which the word sets -- so the band stretches
+   to it. The column fits inside the line the 38px figure already occupies. */
+.ss-hline{display:flex; align-items:center; gap:9px}
+.ss-hv{font-family:var(--font-display); font-weight:800; font-size:38px;
+  line-height:.95; letter-spacing:-.03em; color:var(--ink)}
+/* The column beside the figure now carries BOTH small lines -- the unit word
+   and the since-date. Together they measure ~35px, which fits inside the line
+   the 38-46px figure already occupies, so they cost the block nothing. That is
+   what funds the vintage bar above. */
+.ss-hunit{display:flex; flex-direction:column; align-items:flex-start; gap:2px}
+/* The unit is a word, not part of the figure: body type, small and light, so
+   it annotates the number instead of competing with it. */
+.ss-hu{font-size:10px; font-weight:400; line-height:1; color:var(--ink-3)}
+/* Solid brand blue, not a wash: the vintage band has to carry from across the
+   strip, and blue keeps it out of the red/amber/green risk vocabulary -- file
+   length is a fact about the file, not a grade.
+   Full width of the block and label-left / code-right, so it reads as a stated
+   band rather than as two characters floating in a lot of blue. */
+.ss-vint{display:flex; align-items:center; justify-content:space-between;
+  gap:10px; font-size:14px; font-weight:700; line-height:1.2; padding:3px 9px;
+  border-radius:5px; color:#fff; background:var(--fh-blue);
+  border:1px solid var(--fh-blue); cursor:help}
+.ss-vint-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
+  text-transform:uppercase; font-weight:600; opacity:.8}
+.ss-hs{font-size:11.5px; color:var(--ink-2); font-weight:500}
+
+/* ========== 04 INCOME ========== */
+.trend-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px}
+.trend-title{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); font-weight:500}
+.chart-svg{width:100%; height:auto; display:block}
+
+/* Two halves: delivered records left, what can be drawn from them right. The
+   left half never depends on the right -- with nothing drawable the records
+   still stand on their own, so the split holds in every payload state.
+   Shared by sections 04 and 05, which follow the same grammar. */
+/* Columns stretch rather than sitting at their own heights, so the divider
+   runs the full card whichever half is taller. */
+.inc-split{display:grid; grid-template-columns:1fr 1.08fr; align-items:stretch}
+.inc-detail{padding-right:24px}
+.inc-vis{padding-left:24px; border-left:1px solid var(--line)}
+
+/* The header figure: the most recent salary the payload supports. One row, so
+   the whole of it survives the section being collapsed on load -- figure, whose
+   it is, and since when, without becoming a block in the header. */
+.inc-latest{display:flex; align-items:baseline; gap:9px; cursor:help;
+  white-space:nowrap}
+.inc-latest-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500}
+.inc-latest-v{font-family:var(--font-display); font-weight:700; font-size:18px;
+  letter-spacing:-.01em; color:var(--ink)}
+.inc-latest-v small{font-family:var(--font-body); font-size:10.5px;
+  font-weight:500; color:var(--ink-3); margin-left:1px}
+.inc-latest-s{font-size:11px; color:var(--ink-3); overflow:hidden;
+  text-overflow:ellipsis}
+.inc-latest.none .inc-latest-v{font-family:var(--font-body); font-size:12px;
+  font-weight:500; color:var(--ink-3)}
+
+/* The timeline. Its height comes from the lane count, so a five-employer
+   payload is taller than a one-employer payload rather than squashed.
+   Side by side it fills its half: the head above it already spans the column,
+   so a capped chart stranded the delivered badge over open space and read as
+   a rendering fault. The magnification that follows is bounded and small --
+   .wrap is capped at 1572px, which puts the widest this half can ever be at
+   about 714px against a 520-unit viewBox, so labels grow by at most ~1.37x
+   and only when the brief rail is closed and there is room for them.
+   Stacked, the cap comes back in the 1180px query below: there the row is the
+   whole card and the same rule would magnify every label by twice that. */
+.inc-svg{max-width:100%}
+.inc-svg [data-info]{cursor:help}
+.inc-legend{display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px}
+.inc-lg{display:inline-flex; align-items:center; gap:6px; font-size:10.5px; color:var(--ink-3)}
+.inc-lg i{flex:none}
+.inc-lg .dot{width:9px; height:9px; border-radius:50%; background:var(--fh-blue)}
+.inc-lg .dot.hollow{background:var(--surface); border:2px solid var(--fh-blue)}
+.inc-lg .bar{width:22px; height:7px; border-radius:2px; background:var(--fh-blue); opacity:.55}
+.inc-lg .bar.fade{opacity:1; background:linear-gradient(90deg,rgba(0,66,106,.5),rgba(0,66,106,0))}
+
+/* Figures the bureau delivered but that the chart cannot account for. Each
+   says what stopped it, which is the only thing worth knowing here. */
+.inc-tray{margin-top:11px; padding-top:11px; border-top:1px dashed var(--line-2)}
+.inc-tray-k{display:block; font-family:var(--font-mono); font-size:9px;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3);
+  font-weight:500; margin-bottom:7px}
+.inc-chips{display:flex; flex-direction:column; gap:5px}
+.inc-chip{display:flex; align-items:baseline; gap:7px; font-size:11px;
+  color:var(--ink-2); background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--r-sm); padding:4px 9px}
+.inc-chip b{color:var(--ink); font-weight:600; white-space:nowrap}
+.inc-why{margin-left:auto; font-size:10px; color:var(--ink-3); white-space:nowrap}
+/* A mark, not a phrase: the row keeps reading as a figure, and the reason is
+   one hover away. Same 14px bubble as .hint, in the warning colour. */
+.attn{width:14px; height:14px; border-radius:50%; background:var(--amber);
+  color:#fff; font-size:9px; font-weight:700; display:inline-grid;
+  place-items:center; cursor:help; flex:none; font-family:var(--font-body);
+  vertical-align:middle}
+
+/* ---------- record tiles ----------
+   The shared unit for the delivered-record lists in sections 03 and 04 and
+   for their empty statements. One vocabulary, so an employer, a returned
+   cheque and a "none reported" all read as members of the same family --
+   the same treatment the not-on-the-chart tray established. */
+.rec-list{display:flex; flex-direction:column; gap:8px}
+.rec{background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--r-sm); padding:9px 12px}
+.rec-h{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.rec-meta{font-size:11px; color:var(--ink-3); margin-top:4px; display:flex;
+  flex-wrap:wrap; align-items:center; gap:6px 12px}
+.rec-meta b{color:var(--ink-2); font-weight:600}
+/* An absence stated as a tile of its own -- dashed, as the card-level
+   empty states are, so "nothing here" never reads as a delivered record. */
+.rec-none{border:1px dashed var(--line-2); border-radius:var(--r-sm);
+  padding:9px 12px; font-size:11.5px; color:var(--ink-4); font-style:italic;
+  font-weight:500}
+
+.emp-name{font-size:13px; font-weight:600}
+.emp-cur{font-size:9px; font-weight:600; color:#fff; background:var(--fh-blue); padding:1px 6px; border-radius:4px}
+/* 6px to match .fact .v in section 02, where the same provider set sits in a
+   flex row with that gap -- '+N' then lands 9px from its badge in both. */
+.emp-prov{display:inline-flex; align-items:center; gap:6px}
+.other-inc{margin-top:18px; padding-top:16px; border-top:1px dashed var(--line-2)}
+
+/* ========== 05 RETURNS ==========
+   Shares the two-half .inc-split frame and the tray/legend classes with
+   section 04. The .timeline/.tl-* family below the returns rules belongs to
+   section 09's enquiry strip -- do not fold it into this block. */
+/* Window first, instrument second: a "Last 6 months" label over one tile per
+   instrument, then a folded "Earlier" with the same arrangement inside. The
+   label row carries the delivered badge -- the section has no other header. */
+.ret-grp{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600;
+  margin-bottom:6px}
+.ret-grp.win{display:flex; align-items:center; justify-content:space-between}
+/* Instrument tile internals: the head names the kind, entries stack under it
+   behind hairlines. */
+.rec-t{font-size:11.5px; font-weight:600; color:var(--ink)}
+.rec-item{margin-top:7px; padding-top:7px; border-top:1px solid var(--line)}
+/* Slim fold for the earlier returns -- the full .sub-wrap dashed treatment
+   is a card-level device and overweights a sub-list. */
+.sub-wrap.slim{margin-top:6px; padding-top:0; border-top:none}
+.sub-wrap.slim .sub-bar{padding:7px 0}
+.sub-wrap.slim .sub-bar-t{font-size:9px; color:var(--ink-3)}
+.sub-wrap.slim .sec-toggle{width:20px; height:20px; font-size:10px}
+.ret-amt{font-size:14px; font-weight:700; color:var(--ink)}
+.ret-date{font-size:11.5px; color:var(--ink-2); font-weight:500}
+/* Instrument type is a category, so the chip is neutral; the risk reading
+   belongs to the severity tag beside it. */
+.rtype{font-size:10px; font-weight:600; padding:2px 8px; border-radius:5px;
+  white-space:nowrap; display:inline-block; background:var(--surface-3);
+  color:var(--ink-2); border:1px solid var(--line)}
+.sev{font-size:10px; font-weight:600; padding:2px 8px; border-radius:5px;
+  white-space:nowrap; display:inline-block; border:1px solid; cursor:help}
+.sev.red{background:var(--red-wash); color:var(--red-ink); border-color:var(--red-line)}
+.sev.amber{background:var(--amber-wash); color:var(--amber-ink); border-color:var(--amber-line)}
+.sev.neutral{background:var(--surface-3); color:var(--ink-2); border-color:var(--line)}
+/* Legend glyph matching the C/D markers on the timeline. */
+.mk-lg{width:15px; height:15px; border-radius:50%; background:var(--ink-3);
+  color:#fff; font-size:8.5px; font-weight:700; display:inline-grid;
+  place-items:center; font-style:normal}
+
+/* section 09's application timeline (report.js enquiryTimeline) */
+.timeline{position:relative; padding:26px 0 10px}
+.tl-axis{position:absolute; left:0; right:0; bottom:24px; height:2px; background:var(--line-2)}
+.tl-mo{position:absolute; bottom:8px; transform:translateX(-50%); font-family:var(--font-mono); font-size:8.5px; color:var(--ink-4)}
+.tl-mo.lead{color:var(--fh-blue-ink); font-weight:600}
+.tl-event{position:absolute; bottom:26px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; cursor:pointer}
+.tl-event .stem{width:2px; background:var(--line-2)}
+.tl-event .mk{border-radius:50%; border:2px solid #fff; box-shadow:0 2px 6px rgba(20,30,44,.25); display:grid; place-items:center; color:#fff; font-size:9px; font-weight:700}
+.tl-event .amt{font-family:var(--font-mono); font-size:9px; font-weight:600; margin-bottom:3px; white-space:nowrap}
+
+/* ========== 08 RECENT APPLICATIONS ==========
+   A split axis: the last 90 days occupy the right ~62% and everything older is
+   compressed into the left. Positions arrive as percentages from
+   derive/applications.py, so this is absolute placement and nothing here knows
+   what a day is.
+
+   The distortion is DRAWN, not just stated: the focus window carries a wash and
+   the boundary carries a dashed rule. An axis that is not linear but looks
+   linear is a lie, and the legend line under the chart says so in words too. */
+.enq-tl{position:relative; margin-top:2px}
+.enq-focus{position:absolute; top:0; right:0; bottom:24px; background:var(--fh-blue-wash); opacity:.5; border-radius:var(--r-sm) var(--r-sm) 0 0}
+.enq-split{position:absolute; top:0; bottom:24px; width:0; border-left:1px dashed var(--fh-blue-line)}
+/* Markers. Brand blue, never a risk colour: one application is a fact, and it
+   is the CLUSTER that an underwriter reads as a signal -- which the focus wash
+   already carries. Filled = Disbursed, hollow = Requested. Those are the only
+   two states AECB delivers here, so no phase vocabulary is invented. */
+.enq-tl .mk{width:18px; height:18px; background:#fff; border:2px solid var(--fh-blue-line); color:var(--fh-blue-ink); box-shadow:none}
+.enq-tl .mk.taken{background:var(--fh-blue); border-color:var(--fh-blue); color:#fff}
+.enq-tl .mk.focus{border-color:var(--fh-blue); box-shadow:0 1px 5px rgba(0,66,106,.28)}
+.enq-tl .amt{color:var(--ink-3); font-weight:500}
+.enq-key{display:flex; align-items:center; gap:14px; margin-top:9px; font-size:10.5px; color:var(--ink-3)}
+.ek{display:flex; align-items:center; gap:5px}
+.ek-mk{width:10px; height:10px; border-radius:50%; background:#fff; border:2px solid var(--fh-blue-line)}
+.ek-mk.taken{background:var(--fh-blue); border-color:var(--fh-blue)}
+.ek-note{margin-left:auto; font-style:italic; color:var(--ink-4)}
+
+/* ========== 05 WORST STATUSES ==========
+   Three panels, one per window. The count is the data: AECB delivers a
+   24-month status, a life-time count, and nothing at all for 36 months, so
+   this is repeat(3,1fr) for the same reason .fac-grid is repeat(4,1fr) and
+   gets no density step either.
+
+   Panels stretch to the tallest of the row (the default), which is what keeps
+   a one-line figure and a two-line empty state boxed to the same height. The
+   figure is the whole panel below the label, so .wsx-worst carries no bottom
+   margin -- there is nothing beneath it to separate it from. */
+.wsx{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+/* Flex column with `margin:auto 0` on the figure, so the figure sits centred in
+   whatever space is left under the label rather than pinned to the top of it.
+   The panels stretch to the tallest of the row, and today the tallest is the
+   pending one -- without this, a one-word status floats above ~90px of void and
+   the panel reads as broken rather than as short. */
+.wsx-panel{border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface-2);
+  padding:11px 13px; display:flex; flex-direction:column}
+.wsx-win{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); font-weight:500}
+.wsx-fig{margin:auto 0}
+.wsx-worst{font-family:var(--font-display); font-weight:800; font-size:26px; line-height:1.08; letter-spacing:-.02em}
+.wsx-worst.red{color:var(--red)}
+/* The magnitude under the grade. Laid out inline rather than
+   justify-content:space-between, which in a wide panel flings the label and
+   the value to opposite edges with a void between them -- the mistake the old
+   .wsx-row family made and needed a density rule to undo. */
+.wsx-sub{margin-top:9px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
+.wsx-sub .k{font-family:var(--font-mono); font-size:9px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500}
+.wsx-sub .v{font-size:12.5px; font-weight:600}
+.wsx-sub .v.red{color:var(--red)}
+/* The pending panel. Same dashed "stated absence" vocabulary as .rec-none and
+   .fac.empty, sized down to sit inside a panel rather than fill a card. It is
+   the tallest member of the row, so it alone sets §05's height -- compressing
+   the other two panels does nothing until this one comes down. */
+.wsx-panel .empty-state{margin:9px 0 0; padding:9px 10px; text-align:left}
+.wsx-panel .es-msg{font-size:12.5px; line-height:1.2}
+.wsx-panel .es-detail{font-size:10.5px; line-height:1.4; margin-top:3px}
+
+/* ========== 06 ACTIVE CREDIT FACILITIES ========== */
+.fac-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
+/* Compressed 7 Aug 2026: the card was 292px and 60 of them were row-gap alone.
+   The gap is now 5px because .fac-role carries its OWN 7px top padding and a
+   hairline -- the two were doing the same job twice, and a 19px trough before
+   every role heading is what made a card of seven short lines read as tall. */
+.fac{border:1px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; background:var(--surface-2); display:flex; flex-direction:column; gap:5px}
+.fac-h{display:flex; align-items:center; gap:7px}
+/* ONE brand colour for all four chips (7 Aug 2026, at the user's request). The
+   categorical --cat-i/c/n/s set survives because section 07's heatmap group
+   headers still use it, so the two no longer agree on a category's colour.
+   That is the instruction, not a slip -- do not "restore" it here. */
+.fac-cat{font-family:var(--font-mono); font-size:10px; font-weight:600; color:#fff;
+  background:var(--fh-blue); width:18px; height:18px; border-radius:5px;
+  display:grid; place-items:center; flex:none}
+.fac-name{font-size:12px; font-weight:600}
+/* The role split. Main holder and guarantor are different liabilities, so both
+   render on every card and neither is left to be inferred from silence. The
+   rule doubles as the divider between blocks, which is why it carries the
+   hairline rather than a separate element.
+
+   line-height:1 is deliberate. At 9px the default leading adds 4.5px of air
+   above and below a label that is already only a caption, and it bought two of
+   these per card. */
+.fac-block{display:flex; align-items:baseline; justify-content:space-between;
+  gap:8px; flex-wrap:wrap; padding-top:7px; margin-top:2px;
+  border-top:1px solid var(--line)}
+.fac-role{font-family:var(--font-mono); font-size:9px; line-height:1; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500; flex:none}
+.fac-nil{font-size:11.5px; line-height:1.35; color:var(--ink-2); text-align:right}
+.fac-big{font-family:var(--font-display); font-weight:700; font-size:19px; line-height:1}
+.fac-big.od{color:var(--red)}
+.fac-rows{display:flex; flex-direction:column; gap:4px}
+.fac-row{display:flex; justify-content:space-between; gap:10px; font-size:11.5px}
+.fac-row .k{color:var(--ink-2)}
+.fac-row .val{font-weight:600; text-align:right}
+.fac-row .val.od{color:var(--red)}
+
+/* The utilisation line, which replaced the donut. Modelled on the top bar's
+   .tv-meter -- a track with a fill -- and NOT on .ss-gauge, which is a zoned
+   scale with a marker rather than a fill. .tv-meter itself is untouched: the
+   top bar is locked. Below 100 the fill is green and proportional; at or above
+   100 it is full and red, so the figure beside the label is the only thing
+   that separates 101% from 300%. */
+/* The 0/100% scale row under the bar was DROPPED in the 7 Aug compression pass,
+   reversing the reasoning that put it there. It was justified as "a bar with no
+   reference point cannot be read" -- but the percentage is printed beside the
+   label, so a bar filled just over half next to the figure "57%" already
+   establishes that the track's full width is 100%. The scale restated it, and
+   cost a whole 13px row on the tallest card in the section. */
+.fac-util{display:flex; flex-direction:column; gap:4px}
+.fac-util-h{display:flex; align-items:baseline; gap:6px; line-height:1}
+.fac-util-h .k{font-family:var(--font-mono); font-size:9px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500}
+.fac-util-h .v{font-family:var(--font-display); font-weight:700; font-size:15px;
+  color:var(--green); margin-left:auto}
+.fac-util-h .v.over{color:var(--red)}
+.fac-util-bar{height:6px; border-radius:4px; background:var(--surface-3);
+  border:1px solid var(--line); overflow:hidden}
+.fac-util-fill{display:block; height:100%; border-radius:4px; background:var(--green)}
+.fac-util-fill.over{background:var(--red)}
+
+/* ========== 09 HEATMAP ========== */
+.hm-wrap{border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden}
+.hm-scroll{overflow-x:auto}
+/* Raised 920 -> 1000 when the label column went 250 -> 320. This number is not
+   free: the three conduct strips share a min-width of 16px per cell, so the 36
+   cells need 36*16 + 35*2 = 646px before they start overflowing their grid. Below that the row does not shrink --
+   it spills, and `.hm-scroll` scrolls it, which is the intended behaviour.
+   min-width = label 320 + row padding 24 + 646, rounded up. Change the label
+   width and this has to move with it. */
+.hm{min-width:1000px}
+.hm-axis{display:flex; align-items:flex-end; padding:5px 12px 4px; border-bottom:1px solid var(--line); background:var(--surface-2)}
+/* Empty, and sized anyway: it is the spacer that keeps the month labels over
+   their cells. The text it used to carry ("Facility · limit / OS · ...") was a
+   key for columns the rows already label themselves. */
+.hm-axis-lab{width:320px; flex:none}
+.hm-months{flex:1; display:grid; grid-template-columns:repeat(36,1fr); gap:2px}
+.hm-mo{font-family:var(--font-mono); font-size:7.5px; color:var(--ink-4); text-align:center; white-space:nowrap; height:11px}
+.hm-mo.tk{color:#D9E0E8}
+/* Two levels of heading. The BLOCK is the bucket a facility falls in (active,
+   closed recently, closed long ago, quiet services) and carries the fold; the
+   GROUP inside it is the AECB category. The block has to out-rank the group
+   visually or the four buckets read as eight categories in a row. */
+.hm-blockhead{padding:5px 12px; background:var(--fh-blue-wash); color:var(--fh-blue-ink);
+  font-family:var(--font-mono); font-size:9.5px; letter-spacing:.09em; text-transform:uppercase;
+  font-weight:700; display:flex; align-items:center; gap:7px;
+  border-bottom:1px solid var(--fh-blue-line); border-top:1px solid var(--fh-blue-line)}
+.hm-blockhead:first-child{border-top:none}
+.hm-blockhead.tog{cursor:pointer; user-select:none}
+.hm-blockhead.tog:hover{background:#DDE7EF}
+.hm-blockhead .sec-toggle{margin-left:auto; width:18px; height:18px; font-size:9px}
+.hm-blockhead.tog.closed .sec-toggle{transform:rotate(-90deg)}
+.hm-blockhead .gh-n{color:var(--fh-blue); opacity:.7; font-weight:600; text-transform:none; letter-spacing:0}
+.hm-grouphead{padding:4px 12px; background:var(--surface-3); font-family:var(--font-mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; color:var(--ink-2); display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--line)}
+.hm-gc{font-family:var(--font-mono); font-size:8.5px; font-weight:600; color:#fff; width:15px; height:15px; border-radius:4px; display:grid; place-items:center}
+.hm-gc.I{background:var(--cat-i)} .hm-gc.C{background:var(--cat-c)} .hm-gc.N{background:var(--cat-n)} .hm-gc.S{background:var(--cat-s)}
+.hm-gc.X{background:var(--cat-x)}
+.hm-grouphead .gh-n{color:var(--ink-4); font-weight:500; text-transform:none; letter-spacing:0}
+.hm-fold.closed{display:none}
+.hm-row{display:flex; align-items:center; padding:4px 12px; border-bottom:1px solid var(--surface-3)}
+.hm-rl{width:320px; flex:none; padding-right:12px; min-width:0}
+.hm-rl-t{display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600}
+.hm-rl-s{font-size:9.5px; color:var(--ink-3); margin-top:1px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.hm-rl-s .stat{white-space:nowrap}
+.hm-rl-s .stat b{color:var(--ink-2); font-weight:600}
+.hm-rl-s .stat.dpd b{color:var(--red)}
+/* The three strips share grid-template-columns AND gap. Change one, change all
+   three, or a month stops lining up with itself down the row. */
+.hm-cells{flex:1; display:grid; grid-template-columns:repeat(36,1fr); gap:2px}
+/* NO aspect-ratio. The three strips -- status, DPD, utilisation -- are three
+   separate `repeat(36,1fr)` grids stacked on top of each other, and the only
+   thing that keeps their columns in register is every cell filling its own
+   track. `aspect-ratio:1/1` did that until it was given a `max-height`: the
+   ratio then drove the WIDTH down to match the capped height (23px in a 27.55px
+   track) and every DPD block sat inset inside a column the strips above and
+   below still filled. Height is explicit here for that reason. Do not
+   reintroduce aspect-ratio: a square cell and a shared column cannot both be
+   satisfied at an arbitrary width, and the shared column is the one that
+   matters -- a month has to line up with itself across all three strips.
+
+   min-width is the floor the three strips share. It must be IDENTICAL on
+   .cell / .scell / .ucell, or they stop overflowing together at narrow widths
+   and the register breaks exactly where nobody looks. It is also the number
+   .hm{min-width} is derived from: 36*16 + 35*2 = 646. */
+.cell{height:20px; min-width:16px; border-radius:2px; position:relative; cursor:pointer; display:grid; place-items:center;
+  font-family:var(--font-mono); font-size:7px; font-weight:600; transition:transform .08s}
+.cell:hover{transform:scale(1.4); z-index:6; box-shadow:0 2px 8px rgba(20,30,44,.35)}
+.cell.d0{background:var(--dpd0)} .cell.d0::after{content:''; width:2.5px; height:2.5px; border-radius:50%; background:rgba(255,255,255,.5)}
+.cell.d1{background:var(--dpd1); color:#5c4708} .cell.d2{background:var(--dpd2); color:#fff}
+.cell.d3{background:var(--dpd3); color:#fff} .cell.d4{background:var(--dpd4); color:#fff}
+.cell.dn{background:var(--dpd-none); cursor:default}
+.cell.dc{background:var(--dpd-closed); cursor:default}
+.hm-row.isclosed{background:#FCFDFD}
+.hm-row.isclosed .hm-rl-t{color:var(--ink-3)}
+.hm-row.isclosed .hm-rl-t .prov-badge{opacity:.72}
+.closed-on{font-size:8.5px; font-weight:700; padding:0 5px; border-radius:3px; white-space:nowrap;
+  background:var(--surface-3); color:#4a5a6a; border:1px solid #D8E0E8}
+.final-st{font-size:8.5px; font-weight:700; padding:0 5px; border-radius:3px; white-space:nowrap; border:1px solid; cursor:help}
+.final-st.sn{background:var(--surface-3); color:var(--ink-3); border-color:var(--line)}
+.final-st.sa{background:var(--amber-wash); color:var(--amber-ink); border-color:var(--amber-line)}
+.final-st.ss{background:var(--red-wash); color:var(--red-ink); border-color:var(--red-line)}
+.prov-badge{font-family:var(--font-mono); font-size:8.5px; font-weight:600; padding:1px 5px; border-radius:4px; background:var(--surface-3); color:var(--ink-2); border:1px solid var(--line)}
+/* Provider codes are neutral by default: which bureau member reported a value
+   is provenance, not a risk signal, and colouring telecoms differently from
+   banks made the identity tiles read as a legend. The one distinction that does
+   change a decision -- a facility held with us rather than elsewhere -- keeps a
+   mark, in the brand blue. */
+.prov-badge.bank,.prov-badge.tel{background:var(--surface-3); color:var(--ink-2); border-color:var(--line)}
+.prov-badge.onus{background:var(--fh-blue-wash); color:var(--fh-blue-ink); border-color:var(--fh-blue-line)}
+.ovl{font-size:8.5px; font-weight:700; color:var(--red-ink); background:var(--red-wash); border:1px solid var(--red-line); padding:0 5px; border-radius:3px}
+.freq{font-size:8.5px; font-weight:700; padding:0 5px; border-radius:3px; white-space:nowrap; border:1px solid;
+  background:var(--surface-3); color:#3f566d; border-color:#DCE4EC; cursor:help}
+.role{font-size:8.5px; font-weight:700; padding:0 5px; border-radius:3px; white-space:nowrap; border:1px solid}
+.role.co{background:#EAF0F6; color:#3f566d; border-color:#D3DEE9}
+.role.gtr{background:var(--brass-wash); color:#6f5320; border-color:#E0D2AE}
+.hm-legend{display:flex; align-items:center; gap:13px; padding:9px 12px; border-top:1px solid var(--line); background:var(--surface-2); flex-wrap:wrap}
+.lg{display:flex; align-items:center; gap:5px; font-size:10px; color:var(--ink-2); font-weight:500}
+.lg i{width:11px; height:11px; border-radius:3px; flex:none}
+.hm-note{margin-left:auto; font-size:10px; color:var(--ink-4); font-style:italic}
+.st-legend{padding:10px 12px; border-top:1px solid var(--line); background:var(--surface-2)}
+.stl-head{display:flex; align-items:center; gap:13px; flex-wrap:wrap}
+.stl-t{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); font-weight:600}
+.stl{display:flex; align-items:center; gap:5px; font-size:10px; color:var(--ink-2); font-weight:500}
+.stl i{width:14px; height:14px; border-radius:3px; flex:none; display:grid; place-items:center;
+  font-family:var(--font-mono); font-size:8px; font-weight:700; font-style:normal}
+.stl i.sn{background:var(--surface-3); color:var(--ink-4)}
+.stl i.sa{background:var(--amber-wash); color:var(--amber-ink); box-shadow:inset 0 0 0 1px var(--amber-line)}
+.stl i.ss{background:var(--red-wash); color:var(--red-ink); box-shadow:inset 0 0 0 1px var(--red-line)}
+.stl-more{margin-left:auto; font-size:9.5px; font-weight:600; color:var(--fh-blue-ink); background:var(--fh-blue-wash);
+  border:1px solid var(--fh-blue-line); padding:2px 8px; border-radius:5px; cursor:pointer; white-space:nowrap}
+.stl-more:hover{background:var(--fh-blue); color:#fff}
+.stl-all{display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line-2)}
+.stl-all.show{display:block}
+.stl-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px 18px}
+.stl-note{font-size:9.5px; color:var(--ink-4); font-style:italic; margin-top:10px}
+.hm-rcells{flex:1; min-width:0; display:flex; flex-direction:column; gap:3px}
+.hm-rcells .hm-cells{flex:none; width:100%}
+.hm-sstrip{display:grid; grid-template-columns:repeat(36,1fr); gap:2px; width:100%}
+.scell{height:11px; min-width:16px; border-radius:2px; display:grid; place-items:center; cursor:pointer;
+  font-family:var(--font-mono); font-size:7px; font-weight:700; line-height:1; transition:transform .08s}
+.scell:hover{transform:scale(1.7); z-index:5; box-shadow:0 1px 6px rgba(20,30,44,.3)}
+.scell.sn{background:var(--surface-3); color:var(--ink-4)}
+.scell.sa{background:var(--amber-wash); color:var(--amber-ink); box-shadow:inset 0 0 0 1px var(--amber-line)}
+.scell.ss{background:var(--red-wash);   color:var(--red-ink); box-shadow:inset 0 0 0 1px var(--red-line)}
+.scell.sx{background:var(--dpd-none); cursor:default}
+.scell.sc{background:var(--dpd-closed); cursor:default}
+.hm-ustrip{display:grid; grid-template-columns:repeat(36,1fr); gap:2px; width:100%}
+.ucell{height:7px; min-width:16px; border-radius:2px; cursor:pointer; transition:transform .08s}
+.ucell:hover{transform:scaleY(1.8); z-index:4; box-shadow:0 1px 5px rgba(20,30,44,.3)}
+.ustrip-tag{font-family:var(--font-mono); font-size:7px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-4); margin-top:1px}
+
+/* empty positive states */
+.empty{display:flex; align-items:center; gap:11px; padding:13px 15px; border:1px dashed var(--line-2); border-radius:var(--r-sm); background:var(--surface-2)}
+.empty.good{border-color:var(--green-line); background:var(--green-wash)}
+.empty-ic{width:30px; height:30px; border-radius:8px; background:var(--surface); border:1px solid var(--green-line); display:grid; place-items:center; font-size:15px; color:var(--green); flex:none}
+.empty-txt b{display:block; font-weight:600; margin-bottom:1px} .empty-txt span{color:var(--ink-2)}
+
+/* ---------- LLM BRIEF RAIL ---------- */
+.rail{position:sticky; top:66px; max-height:calc(100vh - 82px); display:flex; flex-direction:column;
+  background:var(--surface); border:1px solid var(--line-2); border-radius:var(--r); box-shadow:var(--shadow-lg); overflow:hidden}
+.rail-head{padding:13px 15px; border-bottom:1px solid var(--line)}
+.rail-ht{display:flex; align-items:center; gap:9px}
+.ai-mark{width:24px; height:24px; border-radius:6px; background:linear-gradient(150deg,var(--fh-blue),var(--fh-blue-d)); display:grid; place-items:center; flex:none}
+.ai-mark svg{width:14px; height:14px}
+.rail-title{font-family:var(--font-display); font-weight:700; font-size:14px}
+.rail-sub{font-size:10px; color:var(--ink-3); margin-top:1px}
+.rail-x{margin-left:auto; width:24px; height:24px; border-radius:6px; border:1px solid var(--line); color:var(--ink-2); font-size:15px; display:grid; place-items:center}
+.rail-x:hover{background:var(--surface-2)}
+.rail-verdict{margin-top:11px; padding:9px 11px; background:var(--amber-wash); border:1px solid var(--amber-line); border-radius:var(--r-sm); font-size:11.5px; color:var(--amber-ink); line-height:1.4}
+.rail-verdict b{font-weight:700}
+.validator{display:flex; align-items:center; gap:7px; margin-top:9px; padding:7px 9px; background:var(--green-wash); border:1px solid var(--green-line); border-radius:var(--r-sm)}
+.validator svg{width:13px; height:13px; color:var(--green); flex:none}
+.validator-txt{font-size:10px; color:var(--green-ink); font-weight:500; line-height:1.35}
+.rail-body{overflow-y:auto; padding:2px 0}
+.bsec{padding:11px 15px; border-bottom:1px solid var(--surface-3)}
+.bsec:last-child{border-bottom:none}
+.bsec-h{display:flex; align-items:center; gap:7px; margin-bottom:6px}
+.bsec-n{font-family:var(--font-mono); font-size:8.5px; font-weight:600; color:var(--ink-4)}
+.bsec-t{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); font-weight:600}
+.bsec-t.flag{color:var(--amber)}
+.bsec-b{font-size:12px; line-height:1.55}
+.bsec-b p{margin-bottom:5px} .bsec-b p:last-child{margin-bottom:0}
+.cite{font-family:var(--font-mono); font-size:9px; font-weight:500; color:var(--fh-blue-ink); background:var(--fh-blue-wash);
+  border:1px solid var(--fh-blue-line); padding:0 4px; border-radius:4px; cursor:pointer; white-space:nowrap; display:inline-block; line-height:1.5}
+.cite:hover{background:var(--fh-blue); color:#fff}
+.probe{font-size:11.5px; color:var(--amber); display:flex; gap:6px}
+.probe::before{content:'▸'; flex:none}
+.rail-foot{border-top:1px solid var(--line); background:var(--surface-2); padding:9px 15px}
+.fb{display:flex; align-items:center; gap:8px}
+.fb-l{font-size:10px; color:var(--ink-2); font-weight:500}
+.fb-btns{display:flex; gap:6px; margin-left:auto}
+.fb-b{width:26px; height:26px; border-radius:6px; border:1px solid var(--line); background:var(--surface); font-size:12px; display:grid; place-items:center}
+.fb-b:hover{border-color:var(--fh-blue); background:var(--fh-blue-wash)}
+.rail-note{font-size:9.5px; color:var(--ink-4); line-height:1.4; margin-top:8px; padding-top:8px; border-top:1px solid var(--line)}
+
+
+/* collapsed / responsive */
+body.rail-off .wrap{grid-template-columns:var(--spine-w) minmax(0,1fr)}
+body.rail-off .rail{display:none}
+@media (max-width:1180px){
+  .wrap{grid-template-columns:var(--spine-w) minmax(0,1fr)}
+  .rail{position:static; max-height:none; grid-column:2}
+  .wsx{grid-template-columns:1fr; gap:18px}
+  /* Stacked: the divider becomes a rule between the two halves. */
+  .inc-split{grid-template-columns:1fr; gap:18px}
+  /* The row is now the whole card, so the chart goes back to a fixed width --
+     filling it would magnify a 8.5px axis label past 17px. See .inc-svg above. */
+  .inc-svg{max-width:560px}
+  .inc-detail{padding-right:0}
+  .inc-vis{padding-left:0; border-left:none; padding-top:18px;
+    border-top:1px solid var(--line)}
+  .score-strip{flex-wrap:wrap; gap:16px 22px}
+  .ss-gauge{order:3; flex-basis:100%}
+  .ss-hist{margin-left:0; order:2}
+  .id-name-ar{margin-left:0; width:100%}
+  .facts{grid-template-columns:repeat(2,1fr)}
+  .facts.id-grid{grid-template-columns:repeat(2,1fr)}
+  .fact.c2,.fact.c3{grid-column:span 1} .fact.c6{grid-column:span 2}
+}
+@media (max-width:820px){
+  .spine{display:none} .wrap{grid-template-columns:minmax(0,1fr); padding:16px}
+  /* Same trap from the other direction: body.rail-off .wrap is a two-column
+     rule with higher specificity than the .wrap above, so with the brief rail
+     closed it won on this breakpoint and put back a spine column the spine had
+     already left (display:none). The report was then the first in-flow item and
+     landed in that 52px column, squeezing the whole page to about 112px. It has
+     to be restated here, not loosened there -- a plain .wrap would still lose. */
+  body.rail-off .wrap{grid-template-columns:minmax(0,1fr)}
+  /* Reset the column the 1180px rule pinned the rail to -- with one
+     explicit column left, grid-column:2 creates an implicit second
+     column and collapses the report to zero width. */
+  .rail{grid-column:auto}
+  .fac-grid{grid-template-columns:repeat(2,1fr)}
+  /* The header label stays one row at every width; this narrow, the employer
+     and tenure clip rather than pushing the section title onto a second line. */
+  .inc-latest-s{max-width:150px}
+  .ss-gauge{display:none}
+  .ss-hist{padding-left:0; border-left:none}
+  .facts,.facts.id-grid{grid-template-columns:1fr}
+  .fact.c2,.fact.c3,.fact.c6{grid-column:span 1}
+}
+/* ---------- FOLDED SUB-SECTION (shared) ----------
+   Section 04's "Earlier" fold. This used to also carry section 06's "Card
+   utilisation" block, whose .card-behaviour / .cb-* family went with the
+   06 rebuild on 7 Aug 2026 -- but .sub-wrap itself is SHARED and must stay. */
+.sub-wrap{margin-top:16px; padding-top:14px; border-top:1px dashed var(--line-2)}
+.sub-bar{display:flex; align-items:center; gap:11px; cursor:pointer; user-select:none}
+.sub-bar-t{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); font-weight:600}
+.sub-bar .sec-toggle{margin-left:auto}
+.sub-wrap.sub-closed > *:not(.sub-bar){display:none}
+/* ---------- 08 RECENT APPLICATIONS: mockup leftovers ----------
+   The .ret-stats counter tiles, the .enq-tbl record table, the .phase pill
+   vocabulary and the .mk phase variants all went with the 7 Aug 2026 rewrite:
+   the section is one chart now, and AECB's two phases are encoded as a filled
+   and a hollow marker rather than pilled. .phantom-callout / .pc-* below are
+   PRE-EXISTING orphans from the mockup -- rendered by nothing today, and left
+   alone rather than removed as part of an unrelated change. */
+.phantom-callout{display:flex; gap:12px; align-items:flex-start; margin:16px 0 4px; padding:13px 15px; border-radius:var(--r-sm); background:var(--red-wash); border:1px solid var(--red-line)}
+.pc-ic{width:30px; height:30px; border-radius:8px; background:#fff; border:1px solid var(--red-line); display:grid; place-items:center; font-size:15px; color:var(--red); flex:none}
+.pc-body{font-size:12px; line-height:1.5}
+.pc-body b{color:var(--red-ink); font-weight:700; display:block; margin-bottom:2px}
+.pc-body span{color:var(--ink-2)}
+.verify-link{font-size:10.5px; font-weight:600; color:var(--fh-blue-ink); white-space:nowrap; cursor:pointer}
+.verify-link:hover{text-decoration:underline}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto}}
+
+/* ========== EMPTY STATES ==========
+   Used when a section has nothing to render. The message distinguishes
+   "reported, and there is nothing" from "not returned by the bureau" -- to an
+   underwriter those mean opposite things, so they must not look alike. */
+.empty-state{border:1px dashed var(--line-2); border-radius:var(--r-sm); background:var(--surface-2);
+  padding:18px 20px; text-align:center}
+.es-msg{font-size:12.5px; font-weight:600; color:var(--ink-2)}
+.es-detail{font-size:11px; color:var(--ink-3); margin-top:4px; line-height:1.45}
+
+
+/* ---- not-reported markers ----
+   A field the bureau did not return must look different from one it returned
+   as empty. Muted italic, never a dash that could pass for a value. */
+.na{color:var(--ink-4); font-weight:500; font-style:italic; font-size:12px}
+.mono.na{font-style:normal}
+.prov-more{font-family:var(--font-mono); font-size:8.5px; font-weight:600; color:var(--ink-3);
+  background:var(--surface-3); border:1px solid var(--line); border-radius:3px; padding:0 3px;
+  margin-left:3px; cursor:help}
+.histflag.exp{background:var(--red-wash); color:var(--red-ink); border-color:var(--red-line)}
+
+/* ---- provenance marks (section 06) ----
+   A bureau-delivered figure and one we computed must be distinguishable. The
+   36-month worst status is derived; the 24-month one is not. */
+.prov-mark{font-family:var(--font-mono); font-size:8px; font-weight:600; letter-spacing:.04em;
+  text-transform:uppercase; padding:1px 5px; border-radius:3px; border:1px solid; cursor:help;
+  margin-left:6px; vertical-align:1px}
+.prov-mark.delivered{background:var(--fh-blue-wash); color:var(--fh-blue-ink); border-color:var(--fh-blue-line)}
+.prov-mark.derived{background:var(--surface-3); color:var(--ink-3); border-color:var(--line)}
+.wsx-worst.green{color:var(--green)}
+.wsx-worst.amber{color:var(--amber)}
+
+/* ---- step 2 additions ---- */
+.tb-valid.expired{background:var(--red-wash); border-color:var(--red-line); color:var(--red-ink)}
+.tb-valid.expired .pd{background:var(--red)}
+.tb-valid.unknown{background:var(--surface-3); border-color:var(--line); color:var(--ink-2)}
+.tb-valid.unknown .pd{background:var(--ink-3)}
+
+/* empty category card keeps the grid rhythm rather than collapsing */
+.fac.empty{justify-content:flex-start}
+.fac.empty .empty-state{padding:12px 10px; background:transparent; border-style:dashed}
+.fac.empty .es-msg{font-size:11.5px}
+.fac.empty .es-detail{font-size:10px}
+
+/* per-row coverage on the heatmap */
+.hm-rl-s .stat.cov b{color:var(--ink-2)}
+.hm-rl-s .stat.cov.thin b{color:var(--amber-ink)}
+.hm-rl-s .stat.cov{cursor:help}
+
+/* section 04/09 notes */
+.inc-note{margin-top:14px; padding-top:12px; border-top:1px dashed var(--line-2);
+  font-size:11.5px; color:var(--ink-2); line-height:1.5}
+.inc-note b{color:var(--ink)}
+/* Other-income rows share the record-tile treatment. */
+.oi-line{display:flex; justify-content:space-between; align-items:baseline;
+  font-size:11.5px; background:var(--surface-2); border:1px solid var(--line);
+  border-radius:var(--r-sm); padding:8px 12px}
+.oi-line + .oi-line{margin-top:7px}
+
+/* brief rail, no model available */
+.rail-empty{padding:18px 16px}
+.re-title{font-family:var(--font-display); font-weight:700; font-size:14px; margin-bottom:8px}
+.re-body p{font-size:12px; color:var(--ink-2); line-height:1.55; margin-bottom:10px}
+
+/* ========== TOP-BAR VALIDITY STRIP ==========
+   Section 01 used to spend a whole card on one status and two dates. It now
+   reads left to right as a single sentence: is the report valid, when was it
+   pulled, how far through the window is it, when does it lapse.
+   Everything is sized to sit inside the 52px bar without crowding it. */
+.tb-valid-strip{display:flex; align-items:center; gap:14px; min-width:0; flex:1}
+
+.tv-field{display:flex; align-items:baseline; gap:5px; white-space:nowrap}
+.tv-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500}
+.tv-v{font-size:12px; font-weight:600; color:var(--ink)}
+.tv-rel{font-size:11px; color:var(--ink-3)}
+.tv-v.lapsed{color:var(--red-ink)}
+.tv-note{font-size:11px; color:var(--ink-3); font-style:italic}
+
+/* The meter is the one piece of visualisation the bar carries, so it gets the
+   flexible space and stays legible down to ~120px. */
+.tv-meter{position:relative; flex:1; min-width:130px; max-width:300px;
+  height:12px; cursor:help}
+.tv-track{position:absolute; top:3px; left:0; right:0; height:6px; border-radius:4px;
+  background:linear-gradient(90deg,var(--green-wash) 0%,var(--green-wash) 70%,
+    var(--amber-wash) 70%,var(--amber-wash) 90%,var(--red-wash) 90%,var(--red-wash) 100%)}
+.tv-fill{position:absolute; top:3px; left:0; height:6px; border-radius:4px;
+  background:var(--green); opacity:.85}
+.tv-fill.over{background:var(--red); opacity:.8}
+.tv-dot{position:absolute; top:0; width:12px; height:12px; border-radius:50%;
+  transform:translateX(-50%); background:#fff; border:3px solid var(--green);
+  box-shadow:0 1px 4px rgba(20,30,44,.28)}
+.tv-dot.over{border-color:var(--red)}
+
+/* Narrow windows: shed the dates before the meter, then the meter before the
+   pill. The pill is the part that must never disappear.
+
+   Measured: the full strip needs ~872px with the FH monogram. A supplied
+   wordmark logo can add ~145px, and the 19px wordmark added ~55px on top of
+   that, so the first breakpoint moved 1040px -> 1100px -- still past any normal
+   laptop, and the dates now shed at the width they actually start to crowd. */
+@media (max-width:1100px){
+  .tv-field{display:none}
+  .tv-meter{max-width:220px}
+}
+@media (max-width:800px){
+  .tv-meter{display:none}
+}
+
+/* ==========================================================================
+   FLUID SCALE -- SECTIONS 01 AND 02 ONLY
+   ==========================================================================
+
+   The brief rail loads closed, so the report column is 1454px at the 1560
+   design viewport and 1062px once the rail is opened. Everything above this
+   line is fixed px, so that 392px swing used to land as blank space inside
+   tiles rather than as anything legible. This block spends it.
+
+   HOW THE WIDTH IS KNOWN. It is derived, not measured -- .wrap is a fixed
+   grid with a cap, so the report column follows from the viewport and the
+   rail state alone:
+
+     .wrap = spine 52 + gap 20 + report + gap 20 + rail 372, inside
+             padding 26 + 8, all capped at max-width 1572.
+
+       rail OPEN    min(100vw,1572px) - 498px    (52 + 372 + 40 + 34)
+       rail CLOSED  min(100vw,1572px) - 106px    (52 + 20 + 34)
+
+   Verified against headless Chrome at ten widths in both states: the formula
+   equals .report's measured width exactly, every time.
+
+   WHY NO CONTAINER QUERIES. They are the textbook tool and they are Chrome
+   105. This page's existing floor is about Chrome 88 (aspect-ratio, flex
+   gap), and the standalone download gets filed against a credit application
+   and reopened years later on a machine nobody has specified. clamp() is
+   Chrome 79 -- below the floor we already require, so it costs nothing.
+
+   WHY --f IS PINNED ON body AND ONLY COMPUTED ON body.rail-off. The rail-open
+   state is the design as it stands today, and it must stay pixel-identical.
+   Pinning it to 0px means that state never evaluates the ramp at all, so its
+   exactness is a property of the code rather than of arithmetic that an OS
+   scrollbar setting could perturb. It also removes a real discontinuity: with
+   the rail open, the column jumps 683px -> 1074px as the viewport crosses
+   1180 and the rail stops being a grid track. Pinned, no type can step there.
+
+   THE RANGE IS THE RAIL. 1074px is the widest the column can ever be with the
+   rail open; 1466px is the widest it can ever be. The 392px between them is
+   exactly the rail plus its gap, which is what makes the constant audit
+   itself -- change the rail width in .wrap and 392 is visibly wrong.
+
+   Note --f reaches 0.9694, not 1, at the 1560 design viewport; full gain
+   needs 1572. That is deliberate: 392 is the number that carries the meaning.
+
+   --colw drives TYPE and SPACING only. It is never a grid track, a width, a
+   max-width or a flex-basis, so nothing can overflow because of it. That is
+   also why 100vw including the scrollbar gutter is acceptable here: the worst
+   case is ~15px of 392, which is 0.31px on the largest figure on the page.
+
+   The whole block is additive -- every declaration restates a rule that
+   already exists above with its current value as the BASE term. Deleting from
+   here to the end of the file restores the px design exactly. */
+
+@supports (font-size:clamp(1px,1px,1px)) and (width:min(1px,1px)){
+
+  body{--colw:calc(min(100vw,1572px) - 498px); --f:0px}
+  body.rail-off{--colw:calc(min(100vw,1572px) - 106px);
+    --f:clamp(0px,(var(--colw) - 1074px)/392,1px)}
+
+  /* Below 1181 the rail is no longer a track -- it goes static and sits under
+     the report -- so both states share the two-column geometry. Below 821 the
+     spine is gone and the padding drops to 16 each side. Restated on BOTH
+     selectors because body.rail-off outranks body; this is the same
+     specificity trap already documented at the 820px .wrap rule above.
+     --f clamps to 0 on both sides of both queries either way, so these keep
+     --colw honest rather than change behaviour. */
+  @media (max-width:1180px){body,body.rail-off{--colw:calc(min(100vw,1572px) - 106px)}}
+  @media (max-width:820px){body,body.rail-off{--colw:calc(100vw - 32px)}}
+
+  /* --- 02 SCORE: the surplus is spent on SIZE ---
+     The strip has no repeating unit to add a column of, and its gauge is
+     already flex:1 with no cap, so it absorbs width by construction. What is
+     left to gain is the prominence of the two figures.
+
+     .ss-val and .ss-hv are a declared pair (see the comment on .ss-hv above),
+     so they take one declaration and cannot drift apart: 38px -> 46px, which
+     renders 45.755px at the 1560 design viewport. */
+  .ss-val,.ss-hv{font-size:calc(38px + 8 * var(--f,0px))}
+
+  /* The chips and the vintage tile annotate those figures, so they grow with
+     them -- by much less, or they stop reading as annotation.
+     .ss-band's BASE tracks the 15px base rule above; if that moves, move this
+     too, or this declaration silently wins (it is later, at equal specificity)
+     and the base change appears to do nothing. */
+  .ss-band{font-size:calc(15px + 1 * var(--f,0px))}
+  .ss-band em{font-size:calc(10.5px + .5 * var(--f,0px))}
+  .ss-vint{font-size:calc(14px + 1.5 * var(--f,0px))}
+  .ss-hs{font-size:calc(11.5px + .5 * var(--f,0px))}
+
+  /* --- 01 IDENTITY: the name line only ---
+     The tiles below it spend the surplus on a COLUMN instead, so their type
+     is deliberately absent from this block. See the density note further
+     down for why the two cannot both be taken. */
+  .id-name-lg{font-size:calc(24px + 3 * var(--f,0px))}
+  .id-name-ar{font-size:calc(17px + 2 * var(--f,0px))}
+
+  /* --- 05 WORST STATUSES ---
+     The figure IS the panel: an underwriter reads the status and moves on.
+     Nothing below it gets narrowed by a density step (there is none here --
+     see the note in the density query), so it can take the size outright. */
+  .wsx-worst{font-size:calc(26px + 4 * var(--f,0px))}
+
+  /* --- 06 ACTIVE CREDIT FACILITIES ---
+     No density move exists here and none should be invented: .fac-grid is
+     repeat(4,1fr) because AECB has exactly four contract categories, so the
+     column count is the data, not a layout choice. The cards go 245px -> 343px
+     instead, and what fills that is the figures.
+
+     The utilisation bar takes no gain. It is a percentage of its own width, so
+     it grows with the card for free and has no type to scale -- only the
+     figure above it does. */
+  .fac-big{font-size:calc(19px + 4 * var(--f,0px))}
+  .fac-name{font-size:calc(12px + 1 * var(--f,0px))}
+  .fac-row{font-size:calc(11.5px + .5 * var(--f,0px))}
+  .fac-util-h .v{font-size:calc(15px + 2 * var(--f,0px))}
+
+  /* --- 07 FACILITIES DETAIL: the heatmap ---
+     The cells USED to grow on their own, because .cell was aspect-ratio:1/1
+     inside repeat(36,1fr) -- 18.7px to 29.6px across the range -- while the
+     type inside them stayed pinned at 7px, which is why the wide heatmap once
+     read as a grid of empty squares. Growing the glyph fixed that, and the
+     glyph gain below is what remains of it.
+
+     The ratio itself is gone (see .cell above): it cost the three strips their
+     shared column. Cell height is now stated outright, three lines down.
+
+     The glyph cannot overflow its cell: at the narrow end it is 7 of 20px
+     (35%) and at the wide end 9.4 of 24px (39%) -- comfortably inside a block
+     that is always at least 16px wide.
+
+     Font growth alone moves no geometry -- the cell is sized by the grid
+     track and its aspect ratio, not by its contents. The two strips are
+     sized by an explicit height, so they are grown explicitly.
+
+     .hm-mo (the month axis) is deliberately NOT grown: it is nowrap inside a
+     single track, "Oct '23" already measures ~30px at 7.5px against a 29.6px
+     track, and 9px would push it into its neighbour. .hm-rl is likewise left
+     at 250px -- widening the label column would take the space straight back
+     off the cells, which are the point of the section. */
+  .cell{font-size:calc(7px + 2.5 * var(--f,0px))}
+  .scell{font-size:calc(7px + 2 * var(--f,0px)); height:calc(11px + 2 * var(--f,0px))}
+  /* The DPD band used to grow on its own, because aspect-ratio tied its height
+     to a track that widens. It no longer has one, so the gain is stated -- and
+     stated here it is bounded, which the ratio never was: it reached 29.5px. */
+  .cell{height:calc(20px + 4 * var(--f,0px))}
+  .ucell{height:calc(7px + 2 * var(--f,0px))}
+  .hm-gc{width:calc(17px + 2 * var(--f,0px)); height:calc(17px + 2 * var(--f,0px));
+    font-size:calc(9px + 1 * var(--f,0px))}
+  .hm-rl-t{font-size:calc(12px + .5 * var(--f,0px))}
+
+  /* --- 08 RECENT APPLICATIONS ---
+     Nothing to scale, and that is by construction. The timeline positions every
+     marker as a PERCENTAGE of the axis, so the chart already fills whatever
+     column it is given at every width without a gain -- which is exactly why it
+     is percentage-positioned HTML rather than an SVG viewBox, whose 8.5px axis
+     labels would have been magnified along with it.
+
+     The marker (18px), its provider label (9px) and the tick labels (8.5px)
+     stay fixed for the same reason micro mono labels do everywhere else:
+     growing them would crowd an axis whose whole job is to keep 15 events
+     legible side by side. */
+
+  /* --- 03 INCOME + 04 RETURNS ---
+     These two are one unit: they share the .inc-split frame and the .rec
+     record-tile vocabulary, so they cannot be converted separately.
+
+     No density move, and that is not an omission -- .inc-split IS their
+     density answer, and it was already paid for: the two halves split the
+     card and the SVG timeline fills its half. What is left is the figures.
+
+     !! THIS BLOCK MOVES PYTHON CONSTANTS !!
+     .rec-t, .rec-meta and .ret-amt determine the rendered HEIGHT of the
+     record tiles, and s05_returns._TILE_BASE / _TILE_ENTRY mirror that height
+     in order to size section 04's timeline to the tiles beside it. Both were
+     re-measured at 1560 with the rail closed after this block landed. Change
+     a size here and they must be re-measured again -- there is no automated
+     guard, only the witness printed by the probe harness. */
+  .inc-latest-v{font-size:calc(18px + 3 * var(--f,0px))}
+  .emp-name{font-size:calc(13px + 1 * var(--f,0px))}
+  .oi-line{font-size:calc(11.5px + .5 * var(--f,0px))}
+  .ret-amt{font-size:calc(14px + 3 * var(--f,0px))}
+  .ret-date{font-size:calc(11.5px + 1 * var(--f,0px))}
+  .rec-t{font-size:calc(11.5px + 1 * var(--f,0px))}
+  .rec-meta{font-size:calc(11px + .5 * var(--f,0px))}
+}
+
+/* ---------- 01 IDENTITY: DENSITY STEP ----------
+   The rail gives back 392px. Section 01 spends it on a fourth column rather
+   than on slack inside the existing three: row one carries Emirates ID,
+   passport, mobile AND e-mail, and the address -- the one long value -- takes
+   the row beneath at full width, which is the shape .c6 already produces on a
+   payload with no e-mail at all.
+
+   TWELVE TRACKS, NOT SIX. A span of 2k-of-12 is exactly a span of k-of-6 at
+   the same gap: with gap g and content width W, span2-of-6 = 2(W-5g)/6 + g =
+   W/3 - 2g/3, and span4-of-12 = 4(W-11g)/12 + 3g = W/3 - 2g/3. Identical. So
+   the re-map only makes halves of the existing columns addressable; it cannot
+   move an edge it should not move. The narrow state keeps its six tracks
+   untouched regardless -- fr rounding distributes differently across 12
+   tracks than 6, and there is no reason to disturb a tuned layout.
+
+   auto-fit/minmax() is the wrong tool here and is deliberately not used: an
+   unnameable track count against an explicit `span 3` produces orphan holes
+   at some widths, and c2/c3/c6 encode MEANING ("a third of a row", "half a
+   row"), which auto-fit cannot express -- it only says "as many as fit".
+
+   1510 IS DERIVED, NOT CHOSEN. A span-3-of-12 tile is W/4 - 6 wide. The tuned
+   three-up tile measures 334px at the 1560 design viewport with the rail
+   open. W/4 - 6 >= 334 gives a grid width of 1360, a report column of 1404,
+   and a viewport of 1510 with the rail closed. So the fourth column appears
+   only once it is at least as wide as the tile the layout is already tuned
+   around. ONE step is all there is: .wrap caps at 1572, so the column can
+   never exceed 1466 and a five-up row would need 1697.
+
+   r2-1 / r2-2 says how many tiles the second row was built from -- Python
+   knows, CSS cannot ask without :has(), which is Chrome 105 like container
+   queries. Without it the no-e-mail payload would leave row one at 9 of 12
+   tracks: a hole that does not exist today. With it, that payload spans row
+   one 4-wide and stays full.
+
+   minmax(0,1fr) rather than 1fr: 1fr is minmax(auto,1fr), and the unbreakable
+   mono Emirates ID can force a track past its share. .fact .v .mono already
+   carries overflow-wrap:anywhere, but the dense tiles are 118px narrower. */
+@media (min-width:1510px){
+  body.rail-off .facts.id-grid{grid-template-columns:repeat(12,minmax(0,1fr))}
+  /* Two tiles on row two: the four row-one tiles take a quarter each. The
+     :not(.v-wide) is load-bearing -- without it this rule also matches the
+     address (which is .c3 too) and wins on specificity over the span-12 rule
+     below, leaving the address a quarter wide with three empty tracks beside
+     it. Excluding it here is better than inflating the other rule's
+     specificity to outrank a selector it should never have competed with. */
+  body.rail-off .facts.id-grid.r2-2 > .fact.c2,
+  body.rail-off .facts.id-grid.r2-2 > .fact.c3:not(.v-wide){grid-column:span 3}
+  /* One tile on row two: row one keeps three tiles, a third each, and stays
+     full at 12 tracks rather than leaving the fourth quarter empty. */
+  body.rail-off .facts.id-grid.r2-1 > .fact.c2{grid-column:span 4}
+  /* The long value always takes the row to itself. */
+  body.rail-off .facts.id-grid > .fact.v-wide{grid-column:span 12}
+  /* Full width, so the address carries the same size as every other value
+     instead of the reduced step it needs when sharing a row. */
+  body.rail-off .facts.id-grid > .fact.v-wide .v-addr{font-size:13px}
+
+  /* --- 05 WORST STATUSES has no density move, by the page-wide rule ---
+     Its column count is the data (three delivered windows), exactly like
+     .fac-grid's four categories, so there is nothing here to re-column. The
+     key/value rows that used to go two-up are gone with the redesign; each
+     panel is now a label and a figure. Do not invent a step for it. */
+
+  /* --- 07: the status-code legend goes four-up ---
+     A flat list of AECB codes with no reading order to preserve, so unlike
+     the .wsx rows it can simply take more columns and less height. */
+  body.rail-off .stl-grid{grid-template-columns:repeat(4,1fr)}
+}
+
+/* The two long values sit a step below their tile's own size. These were
+   inline styles in s02_identity.py; they live here so section 01's type is
+   all in one file and the density rule above can override the address. */
+.fact .v .mono.v-mail{font-size:11.5px}
+.fact .v .v-addr{font-size:12.5px}

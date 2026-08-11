@@ -1,0 +1,14 @@
+{
+  "_comment": [
+    "Income reading rules. None of this is in the AECB payload -- employment",
+    "rows carry a bare GrossAnnualIncome with no currency, no monthly/annual",
+    "flag and no quality marker, so the three judgements below are policy and",
+    "live here rather than as literals in the renderer."
+  ],
+
+  "currency": "AED",
+  "_currency_comment": "Assumed. The payload carries no currency field; every figure is rendered in this unit and the section says so.",
+
+  "placeholder_floor": 1200,
+  "_placeholder_floor_comment": "A GrossAnnualIncome above zero but below this is a provider placeholder, not an income -- the reference payload carries 1 on two rows. Such a figure is still shown, flagged, but is kept out of the chart scale where it would flatten every real point onto the axis. Exactly zero is NOT a placeholder: a reported zero is a delivered fact and is plotted."
+}

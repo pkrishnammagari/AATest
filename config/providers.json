@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "AECB provider-code registry. The payload carries codes only (B01, T05, ...)",
+    "-- never provider names -- so every provider name shown on the report comes",
+    "from this file.",
+    "",
+    "STUB: the codes below are the ones present in the reference payload, with",
+    "names left as the code itself. Fill in `name` as the real registry becomes",
+    "available. Unknown codes degrade gracefully: ReportContext.provider() falls",
+    "back to the raw code and infers `kind` from the prefix (T## telecom,",
+    "otherwise bank), so nothing blanks out.",
+    "",
+    "kind drives the badge style: 'bank' | 'tel' | 'onus'.",
+    "Set kind='onus' for Finance House's own code so our facilities are marked."
+  ],
+  "providers": {
+    "B01": {"name": "B01", "kind": "bank"},
+    "B02": {"name": "B02", "kind": "bank"},
+    "B04": {"name": "B04", "kind": "bank"},
+    "B07": {"name": "B07", "kind": "bank"},
+    "B08": {"name": "B08", "kind": "bank"},
+    "B09": {"name": "B09", "kind": "bank"},
+    "B10": {"name": "B10", "kind": "bank"},
+    "B12": {"name": "B12", "kind": "bank"},
+    "T03": {"name": "T03", "kind": "tel"},
+    "T05": {"name": "T05", "kind": "tel"}
+  },
+  "onus_code": null
+}

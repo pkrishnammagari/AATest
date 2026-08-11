@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "AECB Contract Status Type. Codes, display wording and severity ranking are",
+    "all bureau-supplied -- this file mirrors what AECB publishes, it does not",
+    "invent cut-offs. Rank drives the heatmap colour band:",
+    "  rank <= 60   severe   (class 'ss')",
+    "  rank 65-95   adverse  (class 'sa')",
+    "  rank 100     normal   (class 'sn')",
+    "The payload delivers status as display text ('Active Payments'), not the",
+    "letter code, so ReportContext.status() also matches on label."
+  ],
+  "codes": {
+    "D": {"label": "Deceased", "rank": 10},
+    "L": {"label": "Left country", "rank": 20},
+    "B": {"label": "Bankrupt", "rank": 30},
+    "W": {"label": "Write-off", "rank": 40},
+    "P": {"label": "Court enforcement", "rank": 45},
+    "X": {"label": "Service disconnected", "rank": 48},
+    "F": {"label": "Default", "rank": 50},
+    "S": {"label": "Suspended", "rank": 50},
+    "N": {"label": "NDDSF", "rank": 60},
+    "G": {"label": "Guarantor paying", "rank": 65},
+    "T": {"label": "Dewan settlement", "rank": 70},
+    "C": {"label": "Settlement", "rank": 80},
+    "A": {"label": "Arrangement", "rank": 90},
+    "E": {"label": "Extended individual loan", "rank": 95},
+    "U": {"label": "Active Payments", "rank": 100},
+    "M": {"label": "Prepaid service suspended", "rank": 100},
+    "O": {"label": "Prepaid service disconnected", "rank": 100}
+  },
+  "roles": {
+    "A": {"label": "Main holder", "css": "main"},
+    "C": {"label": "Co-holder", "css": "co"},
+    "G": {"label": "Guarantor", "css": "gtr"}
+  },
+  "role_labels": {
+    "Main Contract Holder": "A",
+    "Co-Contract Holder": "C",
+    "Guarantor": "G"
+  },
+  "frequency": {
+    "_comment": "AECB Frequency of Payment Type. Delivered for Installments only. The payload carries the long description; short is for the row label.",
+    "W": {"short": "Weekly", "long": "weekly instalments - 7 days"},
+    "F": {"short": "Fortnightly", "long": "fortnight instalments-15 days"},
+    "M": {"short": "Monthly", "long": "monthly instalments-30 days"},
+    "B": {"short": "Bi-monthly", "long": "bimonthly instalments-60 days"},
+    "Q": {"short": "Quarterly", "long": "quarterly instalments-90 days"},
+    "T": {"short": "Four-monthly", "long": "Trimester four-monthly instalments-120 days"},
+    "C": {"short": "Five-monthly", "long": "installments every five months-150 days"},
+    "S": {"short": "Half-yearly", "long": "installments every six months-180 days"},
+    "Y": {"short": "Yearly", "long": "Yearly instalments-360 days"},
+    "I": {"short": "Irregular", "long": "irregular instalments"},
+    "L": {"short": "Bullet", "long": "Bullet Payment"}
+  },
+  "dpd_buckets": [
+    {"max": 0, "class": "d0", "label": "current (0 DPD)"},
+    {"max": 29, "class": "d1", "label": "1-29 DPD"},
+    {"max": 59, "class": "d2", "label": "30-59 DPD"},
+    {"max": 89, "class": "d3", "label": "60-89 DPD"},
+    {"max": null, "class": "d4", "label": "90+ DPD"}
+  ]
+}

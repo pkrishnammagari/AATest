@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "Score and vintage bands. None of this is in the AECB payload -- the payload",
+    "delivers score.DataIndex (the number), score.DataRange (an AECB band letter)",
+    "and score.FHScoreBand (the FH band code). The cut-offs and the letter->label",
+    "mapping are policy configuration and live here.",
+    "",
+    "The screen renders the delivered band; it does not recompute it. The scale",
+    "geometry below exists only to position the gauge marker."
+  ],
+  "scale": {"min": 300, "max": 900},
+  "fh_bands": [
+    {"code": "HR",  "label": "High risk",     "from": 300, "to": 619, "tone": "red"},
+    {"code": "MR",  "label": "Medium risk",   "from": 620, "to": 678, "tone": "amber"},
+    {"code": "LR",  "label": "Low risk",      "from": 679, "to": 729, "tone": "green-mid"},
+    {"code": "VLR", "label": "Very low risk", "from": 730, "to": 900, "tone": "green"}
+  ],
+  "aecb_ranges": {
+    "_comment": "score.DataRange letter -> AECB descriptive band. Confirm against the AECB scorecard spec before relying on these labels.",
+    "A": "Very poor",
+    "B": "Poor",
+    "C": "Poor",
+    "D": "Below average",
+    "E": "Below average",
+    "F": "Average",
+    "G": "Average",
+    "H": "Good",
+    "I": "Good",
+    "J": "Good",
+    "K": "Very good",
+    "L": "Excellent"
+  },
+  "vintage_bands": {
+    "_comment": "Bureau history length in months -> AECB vintage band B1-B4. A configured policy mapping; the screen renders the band, it does not derive the cut-offs.",
+    "bands": [
+      {"code": "B1", "from_months": 0,  "to_months": 11},
+      {"code": "B2", "from_months": 12, "to_months": 47},
+      {"code": "B3", "from_months": 48, "to_months": 95},
+      {"code": "B4", "from_months": 96, "to_months": null}
+    ]
+  },
+  "validity_days": 30,
+  "_validity_comment": "Report look-back window in days, used by section 01."
+}

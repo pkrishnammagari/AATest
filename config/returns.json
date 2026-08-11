@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "How to read paymentOrder rows. The payload delivers Type and Severity as",
+    "display text with no accompanying vocabulary, so the known values and",
+    "their screen treatment are policy and live here."
+  ],
+
+  "window_months": 6,
+  "_window_months_comment": "RRM review window: returns inside the last N months before the report date are listed open and the timeline band highlights them; older returns fold away. This window is OURS -- AECB delivers events, not a window -- so everything derived from it is presentation, never data.",
+
+  "types": {
+    "cheque": "Bounced Cheques",
+    "dd": "Unpaid Direct Debits"
+  },
+  "_types_comment": "Delivered Type text -> instrument kind, matched after trimming (the payload carries trailing spaces). A Type matching neither is shown verbatim with a neutral marker -- never guessed into one of the two.",
+
+  "severity_tones": {
+    "Single": "amber",
+    "Multiple": "red",
+    "Reported": "neutral"
+  },
+  "_severity_tones_comment": "Delivered Severity text -> display tone. Single/Multiple/Reported is the full vocabulary per RRM (Aug 2026). 'Reported' is rendered neutral pending a business definition of what it grades; unknown values also render neutral rather than being guessed into a risk colour."
+}

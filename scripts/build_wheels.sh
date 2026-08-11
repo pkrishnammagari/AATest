@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#
+# Build the offline wheel bundle for the air-gapped Linux server.
+#
+# Run this on a CONNECTED machine (macOS is fine -- this cross-downloads for
+# Linux; nothing is compiled locally). It produces wheels/ and wheels.tgz, which
+# you upload to the server alongside the source.
+#
+#   bash scripts/build_wheels.sh
+#
+# Target: CPython 3.9, x86_64 Linux, manylinux.
+# Override with e.g.  PLAT_ARCH=aarch64 bash scripts/build_wheels.sh
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+PY_VERSION="${PY_VERSION:-3.9}"
+ABI="${ABI:-cp39}"
+PLAT_ARCH="${PLAT_ARCH:-x86_64}"
+OUT="${OUT:-wheels}"
+
+# Resolve pip via the interpreter rather than the `pip` shim -- under pyenv and
+# similar version managers a bare `pip` is often not on PATH at all.
+PIP="${PIP:-}"
+if [ -z "${PIP}" ]; then
+  for candidate in "./.venv/bin/python" "$(command -v python3 || true)"; do
+    if [ -n "${candidate}" ] && [ -x "${candidate}" ] \
+       && "${candidate}" -m pip --version >/dev/null 2>&1; then
+      PIP="${candidate} -m pip"
+      break
+    fi
+  done
+fi
+if [ -z "${PIP}" ]; then
+  echo "ERROR: no working pip found. Set PIP='/path/to/python -m pip' and retry."
+  exit 1
+fi
+
+echo "==> Target: CPython ${PY_VERSION} / ${ABI} / linux ${PLAT_ARCH}"
+echo "==> Using:  ${PIP}"
+rm -rf "${OUT}"
+mkdir -p "${OUT}"
+
+# --only-binary=:all: is the point of the exercise: a source archive in the
+# bundle would try to compile on a server with no toolchain and no internet.
+#
+# Multiple --platform tags are needed because the dependency tree mixes
+# manylinux generations, and --platform any picks up the pure-Python wheels
+# (py3-none-any) that make up most of streamlit's tree.
+${PIP} download -r requirements.txt -d "${OUT}" \
+  --only-binary=:all: \
+  --python-version "${PY_VERSION}" \
+  --implementation cp \
+  --abi "${ABI}" --abi abi3 --abi none \
+  --platform "manylinux_2_17_${PLAT_ARCH}" \
+  --platform "manylinux2014_${PLAT_ARCH}" \
+  --platform "manylinux_2_5_${PLAT_ARCH}" \
+  --platform any
+
+echo
+echo "==> Verifying bundle"
+
+fail=0
+
+# A .tar.gz here means pip could not find a wheel and fell back to source.
+if compgen -G "${OUT}/*.tar.gz" > /dev/null || compgen -G "${OUT}/*.zip" > /dev/null; then
+  echo "  FAIL: source archives present -- these cannot install offline:"
+  ls -1 "${OUT}"/*.tar.gz "${OUT}"/*.zip 2>/dev/null | sed 's/^/    /'
+  fail=1
+else
+  echo "  ok: no source archives"
+fi
+
+# The packages that actually ship compiled extensions. If any of these resolved
+# to a pure-Python or wrong-arch wheel, the server import will fail at runtime,
+# long after the install appeared to succeed.
+for pkg in pyarrow numpy pandas pillow protobuf tornado; do
+  match=$(ls -1 "${OUT}" 2>/dev/null | grep -i "^${pkg}-" || true)
+  if [ -z "${match}" ]; then
+    echo "  note: ${pkg} not in tree (fine if streamlit dropped it)"
+  elif echo "${match}" | grep -q "${ABI}.*${PLAT_ARCH}"; then
+    echo "  ok: ${match}"
+  else
+    echo "  FAIL: ${pkg} did not resolve to ${ABI}/${PLAT_ARCH}: ${match}"
+    fail=1
+  fi
+done
+
+if [ "${fail}" -ne 0 ]; then
+  echo
+  echo "Bundle is NOT safe to deploy. Fix the above before uploading."
+  exit 1
+fi
+
+tar czf wheels.tgz "${OUT}"
+
+echo
+echo "==> Done"
+echo "    $(ls -1 "${OUT}" | wc -l | tr -d ' ') wheels, $(du -sh "${OUT}" | cut -f1) in ${OUT}/"
+echo "    packaged as wheels.tgz"
+echo
+echo "Next: copy wheels.tgz and the source tree to the server, then run"
+echo "      bash scripts/install_offline.sh"
