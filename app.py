@@ -13,8 +13,9 @@ Runs on Python 3.9 with streamlit==1.50.0 (the last release supporting 3.9).
 
 from __future__ import annotations
 
+import logging
 import os
-import traceback
+import re
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -25,6 +26,8 @@ from aecb.render.page import clear_cache, render_page
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAYLOAD_DIR = os.path.join(HERE, "ReferenceJSON")
+
+_LOG = logging.getLogger("aecb.app")
 
 st.set_page_config(
     page_title="AECB Analyzer",
@@ -57,6 +60,36 @@ st.markdown(
       .stApp{overflow:hidden}
       iframe[title="st.iframe"]{height:100vh !important; width:100% !important;
                                 border:none !important; display:block}
+
+      /* Streamlit renders the open-sidebar control INSIDE stHeader, which the
+         rule above hides -- so with the sidebar collapsed there was no way to
+         reopen it, and the payload picker, uploader and download button were
+         unreachable. Lift just that one button back out: visibility is
+         re-assertable on a descendant of a hidden ancestor, and position:fixed
+         frees it from the zero-height header box. Streamlit only renders it
+         while the sidebar is collapsed, so it vanishes once the sidebar opens.
+
+         Bottom-left, not Streamlit's default top-left: the report's own top bar
+         starts with the FH logo at x~20, and the button landed on top of it --
+         present, but reading as a smudge against the brand mark rather than as
+         a control. The left gutter below the spine rail is the only region of
+         the report that is empty at every scroll position.
+
+         It is styled as a solid chip rather than left as Streamlit's bare
+         fadedText60 chevron, which was almost invisible on the report's white
+         top bar. This is the one affordance for reaching the payload controls;
+         it has to look clickable.
+      */
+      header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"]{
+        visibility:visible; position:fixed; z-index:1000;
+        top:auto; bottom:1rem; left:1rem; width:2.25rem; height:2.25rem;
+        background:#fff; border:1px solid #D7DEE6; border-radius:8px;
+        box-shadow:0 2px 10px rgba(20,30,44,.16)}
+      header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"]:hover{
+        background:#F1F5F9; border-color:#00426A}
+      /* fh-blue, so it reads as part of the product rather than browser chrome. */
+      header[data-testid="stHeader"] [data-testid="stExpandSidebarButton"] span{
+        color:#00426A !important}
     </style>
     """,
     unsafe_allow_html=True,
@@ -69,19 +102,55 @@ def list_payloads():
     return sorted(f for f in os.listdir(PAYLOAD_DIR) if f.lower().endswith(".json"))
 
 
+def parse_upload(uploaded):
+    """Validate an uploaded payload and build a session-scoped ReportContext.
+
+    Returns a ReportContext, or None if the file was rejected. Nothing is
+    written to disk: an upload renders only in the session that supplied it,
+    so one user's bureau file is never listed for, or readable by, any other
+    session. The picker below lists only the committed, anonymized fixtures
+    in ReferenceJSON/. This is also the seam the planned AECB API integration
+    will use -- context.from_bytes() renders a payload wherever the bytes
+    came from, so replacing the uploader with an API call changes only this
+    function.
+    """
+    name = os.path.basename(uploaded.name or "").strip() or "upload.json"
+    try:
+        ctx = context.from_bytes(uploaded.getvalue(), source_name=name)
+    except Exception as exc:
+        st.sidebar.error("Could not read that payload: %s" % exc)
+        return None
+
+    # loader.normalise() guarantees every array exists, so well-formed JSON that
+    # is not an AECB payload parses cleanly into an empty report. Insist on at
+    # least one of the arrays that identify the subject.
+    if not any(ctx.rows(key) for key in ("customerInfo", "summary", "score")):
+        st.sidebar.error(
+            "That JSON parsed, but carries no customerInfo, summary or score "
+            "-- it does not look like an AECB payload."
+        )
+        return None
+    return ctx
+
+
 def load_context():
     """Resolve the ReportContext from the sidebar controls. None if unavailable."""
-    files = list_payloads()
-
     uploaded = st.sidebar.file_uploader("Upload an AECB payload", type=["json"])
-    if uploaded is not None:
-        return context.from_bytes(uploaded.getvalue(), source_name=uploaded.name)
 
+    # An upload renders in this session only -- never archived, never listed
+    # for other sessions. Clearing the uploader (or refreshing the page) falls
+    # back to the committed fixtures below.
+    if uploaded is not None:
+        ctx = parse_upload(uploaded)
+        if ctx is not None:
+            st.sidebar.caption("Rendering the uploaded file (this session only).")
+            return ctx
+
+    files = list_payloads()
     if not files:
         st.sidebar.warning("No JSON payloads found in ReferenceJSON/.")
         return None
-
-    chosen = st.sidebar.selectbox("Payload", files, index=0)
+    chosen = st.sidebar.selectbox("Payload", files)
     return context.from_file(os.path.join(PAYLOAD_DIR, chosen))
 
 
@@ -89,7 +158,15 @@ with st.sidebar:
     st.markdown("### AECB Analyzer")
     st.caption("AECB bureau report renderer")
 
-    ctx = load_context()
+    try:
+        ctx = load_context()
+    except Exception:
+        # A missing config file raises on purpose (see aecb.context) -- but
+        # the traceback belongs in the server log, not the browser.
+        _LOG.exception("Failed to load the payload or configuration")
+        st.error("Failed to load the payload or configuration; details are "
+                 "in the server log.")
+        ctx = None
 
     st.divider()
     if st.button("Reload CSS / JS", help="Re-read report.css and report.js from "
@@ -103,8 +180,13 @@ if ctx is None:
 try:
     html = render_page(ctx)
 except Exception:
-    st.error("Failed to render the report.")
-    st.code(traceback.format_exc())
+    # Full traceback to the server log only -- paths and code lines must not
+    # reach the browser (CWE-209).
+    _LOG.exception("Failed to render payload %r", ctx.source_name)
+    st.error(
+        "Failed to render the report for `%s`. The payload may be malformed; "
+        "details are in the server log." % ctx.source_name
+    )
     st.stop()
 
 with st.sidebar:
@@ -113,10 +195,18 @@ with st.sidebar:
     st.caption("Subject `%s`" % ctx.subject_id)
     st.caption("Report date `%s`" % (ctx.report_date or "unresolved"))
     st.caption("Source `%s`" % ctx.source_name)
+    if ctx.unknown_arrays:
+        st.warning(
+            "The payload carries %d section(s) this renderer does not know "
+            "and does not draw: %s"
+            % (len(ctx.unknown_arrays), ", ".join(ctx.unknown_arrays))
+        )
+    # The subject id is payload data -- keep it out of filesystem semantics.
+    safe_subject = re.sub(r"[^A-Za-z0-9_-]", "_", ctx.subject_id)[:40] or "report"
     st.download_button(
         "Download standalone HTML",
         data=html.encode("utf-8"),
-        file_name="aecb_%s.html" % ctx.subject_id,
+        file_name="aecb_%s.html" % safe_subject,
         mime="text/html",
         use_container_width=True,
         help="A self-contained file with fonts embedded -- opens offline, "

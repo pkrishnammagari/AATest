@@ -50,7 +50,7 @@ SECTIONS = {
            ".tl-event", ".tl-event .mk", ".tl-event .amt", ".tl-event .stem",
            ".enq-key", ".ek", ".ek-mk", ".ek-note"],
     # Shared frame -- belongs to 03 and 04 jointly, and carries the Python
-    # mirrors in s05_returns (_TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W).
+    # mirrors in sections/returns.py (_TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W).
     "shared34": [".inc-split", ".inc-detail", ".inc-vis", ".inc-svg",
                  ".rec", ".rec-h", ".rec-meta", ".rec-list", ".rec-item",
                  ".rec-none", ".trend-head", ".trend-title", ".prov-mark",
@@ -62,7 +62,7 @@ SECTIONS = {
     # Never changes: the top bar is locked, and the rail is chrome.
     "locked": [".topbar", ".brand-t", ".brand-mark", ".tb-valid", ".tv-k",
                ".tv-v", ".tv-meter", ".brief-btn", ".rail", ".rail-title",
-               ".rail-sub", ".bsec-t", ".bsec-b", ".re-title", ".re-body p",
+               ".rail-sub", ".re-title", ".re-body p",
                ".sec", ".sec-title", ".sec-purpose", ".sec-no", ".sec-toggle",
                ".tag", ".hint", ".na", ".histflag", ".chevron", ".spine-dot",
                ".report", ".wrap", ".empty-state", ".es-msg", ".es-detail"],
@@ -75,9 +75,3 @@ for _k in ("s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "shared34", "locked")
             ALL.append(_s)
 
 
-def allowed(done):
-    """Selectors permitted to move, given the sections converted so far."""
-    out = set()
-    for key in done:
-        out.update(SECTIONS.get(key, []))
-    return out

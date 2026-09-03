@@ -9,6 +9,7 @@ can be filed against the credit application.
 from __future__ import annotations
 
 from . import branding, css, js, shell
+from .components import esc
 from .sections import render_all
 
 _DOC = """<!DOCTYPE html>
@@ -26,7 +27,7 @@ _DOC = """<!DOCTYPE html>
      the AI reading is opt-in, and on a payload with no model behind it the rail
      would otherwise open on its own "no brief generated" placeholder. The
      AI Analysis button in the top bar toggles it back. Anything calibrated to
-     the width of a card's right-hand column -- s05_returns._COL_W -- is
+     the width of a card's right-hand column -- sections/returns.py _COL_W -- is
      calibrated to THIS state, because it is the one the page loads in. -->
 <body class="rail-off">
 {topbar}
@@ -50,8 +51,11 @@ def render_page(ctx, title: str = "") -> str:
     if not title:
         title = "AECB Analyzer — %s" % (ctx.subject_id or "report")
     return _DOC.format(
-        title=title,
-        favicon=branding.favicon_data_uri(),
+        # The subject id inside the title is payload data -- the ONE payload
+        # string that does not pass through a section renderer's esc(), so it
+        # is escaped here. Same for the favicon URI, defensively.
+        title=esc(title),
+        favicon=esc(branding.favicon_data_uri()),
         styles=css.stylesheet(),
         topbar=shell.topbar(ctx),
         spine=shell.spine(ctx),

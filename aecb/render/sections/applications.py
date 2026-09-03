@@ -1,4 +1,4 @@
-"""08 Recent applications -- credit sought elsewhere, on a split time axis.
+"""Recent applications -- credit sought elsewhere, on a split time axis.
 
 Sources: applications, contractsTotalSummary.Applications90D.
 
@@ -10,10 +10,9 @@ weeks compare to the years behind them -- was not on the screen at all.
 The axis maths lives in derive/applications.py, beside the payload decisions it
 depends on. This module only lays out what that returns.
 
-The phase pills that used to block this section are settled. AECB delivers two
-states here, Requested and Disbursed, and they are encoded as a hollow and a
-filled marker. The mockup's not-taken-up / approved / rejected states are not in
-the payload and are not invented -- there is nothing left to remap.
+AECB delivers two states here, Requested and Disbursed, and they are encoded as
+a hollow and a filled marker. No other state is invented: a not-taken-up /
+approved / rejected vocabulary is not in the payload, so it is not on the page.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ META = {
 
 def render(ctx, meta) -> str:
     rows = ctx.rows("applications")
-    delivered_90d = ctx.totals.get("Applications90D")
+    delivered_90d = _as_count(ctx.totals.get("Applications90D"))
 
     if not rows:
         return c.section_card(
@@ -61,15 +60,32 @@ def _chart(chart) -> str:
     from, so the two cannot drift.
     """
     height = chart["height"]
+    # split 0 means every application sits inside the focus window and the
+    # axis has no compressed zone -- the note must not describe a break that
+    # is not on screen.
+    if chart["split"] > 0:
+        note = ('Last %d days expanded; everything earlier is compressed '
+                'into the left of the break.' % chart["focusDays"])
+    else:
+        note = 'All applications fall inside the last %d days.' % chart["focusDays"]
     return (
         '<div class="enq-tl" id="enqTimeline" style="height:%dpx"></div>'
         '<div class="enq-key">'
         '<span class="ek"><i class="ek-mk taken"></i>Disbursed</span>'
         '<span class="ek"><i class="ek-mk"></i>Requested</span>'
-        '<span class="ek-note">Last %d days expanded; everything earlier is '
-        'compressed into the left of the break.</span>'
-        '</div>' % (height, chart["focusDays"])
+        '<span class="ek-note">%s</span>'
+        '</div>' % (height, note)
     )
+
+
+def _as_count(value):
+    """Applications90D as an int, or None. The field is untrusted payload data
+    and is compared and formatted below -- a string here must not grade (or
+    crash) the pill. s06 applies the same guard to its delivered numbers."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _aside(ctx, rows, delivered_90d):
@@ -87,8 +103,8 @@ def _aside(ctx, rows, delivered_90d):
     tone = "bad" if delivered_90d >= 4 else ("warn" if delivered_90d >= 2 else "good")
     tag = c.tag("%d in %d days %s"
                 % (delivered_90d, applications.FOCUS_DAYS,
-                   '<span class="prov-mark delivered" data-info="Delivered by '
-                   'AECB in contractsTotalSummary.Applications90D.">delivered</span>'),
+                   c.delivered_mark("Delivered by AECB in "
+                                    "contractsTotalSummary.Applications90D.")),
                 tone)
 
     # The delivered counter and the rows delivered beside it should agree. When

@@ -1,4 +1,4 @@
-"""04 Income & employment.
+"""Income & employment.
 
 Sources: employment, incomes.
 
@@ -87,33 +87,65 @@ def _latest_label(model) -> str:
                 % ("No usable figure" if placeholder else "Not reported"))
 
     rec = latest["record"]
-    if latest["dated"]:
+    if latest["basis"] == "current":
+        # Named for the employer, not the figure: this header answers "who do
+        # they work for and on what" and the employer half is the part that is
+        # always known here.
+        key = "Current salary" if rec.income_usable else "Current employer"
+        basis = ("The most recent start date among the employers AECB has not "
+                 "marked finished. Employment carries no current/prior flag, "
+                 "so the newest start is the only evidence of which job is "
+                 "the live one.")
+        if rec.stale:
+            basis += (" Last updated %s, outside the confirmation window in "
+                      "config/income.json -- still the current employer on the "
+                      "payload's own evidence, but nobody has refreshed it "
+                      "since." % dates.fmt_month_year(rec.updated))
+    elif latest["basis"] == "newest":
         key = "Latest salary"
-        basis = ("Dated by the bureau."
-                 if rec.point_basis == "updated"
-                 else "AECB dated no figure, so this one is placed at its hire "
-                      "date.")
+        basis = ("No employer qualifies as current -- each is marked prior or "
+                 "carries an end date -- so this is the newest figure the "
+                 "bureau dated.")
     else:
         key = "Salary on file"
-        basis = ("AECB dated no figure on any row, so this is the current "
-                 "employer's rather than the most recent.")
+        basis = ("AECB dated no figure on any row, so this is an employer's "
+                 "figure rather than a current one.")
+
+    # The current employer's own figure or nothing: filling the slot from a
+    # different employer's row would state a salary for this one that the
+    # payload never reported.
+    if rec.income_usable:
+        value = "%s<small>/yr</small>" % c.aed(rec.income)
+    elif rec.placeholder:
+        value = '<span class="na">No usable figure</span>'
+    else:
+        value = '<span class="na">Salary not reported</span>'
 
     # Tenure answers "since when" better than the figure's own date does, and is
     # what an underwriter reads the header for. Where no hire date arrived, the
     # figure's date stands in and says which it is.
     bits = [c.esc(_short(rec.name, 30))]
-    if rec.started:
+    if rec.started and rec.ended:
+        # "since 2020" on a job the bureau says ended in 2024 reads as ongoing.
+        # A closed job gets both ends or it gets misread.
+        bits.append("%s to %s" % (dates.fmt_month_year(rec.started),
+                                  dates.fmt_month_year(rec.ended)))
+    elif rec.started:
         bits.append("since %s" % dates.fmt_month_year(rec.started))
+    elif rec.ended:
+        bits.append("ended %s" % dates.fmt_month_year(rec.ended))
     elif rec.point_date:
         bits.append("as at %s" % dates.fmt_month_year(rec.point_date))
+    if rec.stale:
+        bits.append("last confirmed %s" % dates.fmt_month_year(rec.updated))
 
     providers = ", ".join(rec.providers) or "provider not named"
     return ('<div class="inc-latest" data-info="%s">'
             '<span class="inc-latest-k">%s</span>'
-            '<span class="inc-latest-v">%s<small>/yr</small></span>'
+            '<span class="inc-latest-v">%s</span>'
             '<span class="inc-latest-s">%s</span></div>'
             % (c.attr("%s, reported by %s. %s" % (rec.name, providers, basis)),
-               key, c.aed(rec.income), " · ".join(bits)))
+               key, value, " · ".join(bits)))
 
 
 def _short(text, limit):
@@ -141,17 +173,16 @@ def _provenance(model) -> str:
         # badge over an empty state would vouch for a chart that is not there.
         return ""
     if model["chart"] == "spans":
-        return ('<span class="prov-mark delivered" data-info="Employment dates '
-                'as delivered in employment.DateOfEmployment and '
-                'DateOfTermination.">delivered</span>')
+        return c.delivered_mark("Employment dates as delivered in "
+                                "employment.DateOfEmployment and "
+                                "DateOfTermination.")
     if model["inferred"]:
         return ('<span class="prov-mark derived" data-info="Where AECB leaves '
                 'DateOfLastUpdate null, a figure is positioned at the hire date '
                 'instead. The amount is the bureau\'s; its position on the axis '
                 'is ours, and those points are drawn hollow.">derived</span>')
-    return ('<span class="prov-mark delivered" data-info="Every figure is '
-            'positioned at the DateOfLastUpdate the bureau delivered with '
-            'it.">delivered</span>')
+    return c.delivered_mark("Every figure is positioned at the "
+                            "DateOfLastUpdate the bureau delivered with it.")
 
 
 def _svg(ctx, model) -> str:
@@ -242,18 +273,35 @@ def _lane(ctx, model, rec, sx, top) -> str:
         tail = ""
         note = "%s to %s" % (dates.fmt_month_year(rec.started),
                              dates.fmt_month_year(rec.ended))
-    elif rec.historical:
-        # Prior employer, no leaving date: the extent is unknown, so the bar
-        # fades rather than stopping somewhere or running to the edge.
+    elif rec.historical or rec.stale:
+        # Two ways to arrive at "the extent is unknown", drawn the same because
+        # they claim the same thing -- the bar fades rather than stopping
+        # somewhere or running to the edge:
+        #
+        #   historical  the bureau marked the employer prior but gave no
+        #               leaving date.
+        #   stale       no leaving date either, but the provider last touched
+        #               this row so long before the report that running the bar
+        #               to the report date would assert years nobody vouched
+        #               for. Absence of an update date is NOT this case.
         width = max(3.0, (_W - _PAD_R) - x_start)
         fill = "url(#incFade)"
         opacity = ""
+        caption = "end not reported" if rec.historical else "not refreshed since"
         tail = ('<text x="%.1f" y="%.1f" font-family="IBM Plex Mono" '
-                'font-size="8" fill="%s">end not reported</text>'
+                'font-size="8" fill="%s">%s</text>'
                 % (min(x_start + width * 0.45, _W - _PAD_R - 80),
-                   bar_y + _BAR_H - 2, tokens.token("ink-3")))
-        note = ("From %s. DateOfTermination is null, so how long this ran is "
-                "not reported." % dates.fmt_month_year(rec.started))
+                   bar_y + _BAR_H - 2, tokens.token("ink-3"), caption))
+        if rec.historical:
+            note = ("From %s. DateOfTermination is null, so how long this ran "
+                    "is not reported." % dates.fmt_month_year(rec.started))
+        else:
+            note = ("Since %s, with no leaving date -- but last updated %s, "
+                    "outside the confirmation window in config/income.json. "
+                    "The bar fades rather than asserting employment nobody has "
+                    "refreshed since."
+                    % (dates.fmt_month_year(rec.started),
+                       dates.fmt_month_year(rec.updated)))
     else:
         width = max(3.0, (_W - _PAD_R) - x_start - 8)
         fill = tokens.token("fh-blue")
@@ -376,7 +424,7 @@ def _no_chart(model) -> str:
 def _income_reason(model) -> str:
     if any(r.placeholder for r in model["records"]):
         return ("Every figure is missing or below the usable floor of %s %s a "
-                "year" % (model["currency"], c.format_number(model["floor"])))
+                "year" % (c.esc(model["currency"]), c.format_number(model["floor"])))
     return "No employment row carries a GrossAnnualIncome"
 
 
@@ -397,7 +445,7 @@ def _undated(model) -> str:
             why = "no date to place it"
         chips.append('<span class="inc-chip">%s <b>%s %s</b>'
                      '<span class="inc-why">%s</span></span>'
-                     % (c.esc(_short(rec.name, 24)), model["currency"],
+                     % (c.esc(_short(rec.name, 24)), c.esc(model["currency"]),
                         c.format_number(rec.income), why))
     return ('<div class="inc-tray"><span class="inc-tray-k">Not on the chart</span>'
             '<div class="inc-chips">%s</div></div>' % "".join(chips))
@@ -407,16 +455,27 @@ def _undated(model) -> str:
 
 def _records(model) -> str:
     head = ('<div class="trend-head"><span class="trend-title">Employers</span>'
-            '<span class="prov-mark delivered" data-info="Every value below is '
-            'as AECB delivered it, collapsed only where providers repeated the '
-            'same employer.">delivered</span></div>')
+            '%s</div>'
+            % c.delivered_mark("Every value below is as AECB delivered it, "
+                               "collapsed only where providers repeated the "
+                               "same employer."))
     return ('%s<div class="rec-list">%s</div>'
             % (head, "".join(_employer(model, r) for r in model["records"])))
 
 
 def _employer(model, rec) -> str:
-    flag = ('<span class="histflag">Prior</span>' if rec.historical
-            else '<span class="emp-cur">Current</span>')
+    # Exactly one row can be Current -- the newest start among the unfinished
+    # jobs. Previously every row without a '(Historical)' name claimed it, which
+    # put "Current" on employers whose own DateOfTermination was printed beside
+    # it. An ongoing job that simply is not the newest gets NO badge: the bureau
+    # reported no end date, so calling it prior would be an inference, and it is
+    # not the current one either. Neither claim is made.
+    if rec is model["current"]:
+        flag = '<span class="emp-cur">Current</span>'
+    elif rec.historical or rec.ended:
+        flag = '<span class="histflag">Prior</span>'
+    else:
+        flag = ""
 
     meta = [_dates_cell(rec), _income_cell(model, rec)]
     if rec.emp_type:
@@ -427,32 +486,35 @@ def _employer(model, rec) -> str:
 
     return ('<div class="rec"><div class="rec-h"><span class="emp-name">%s</span>'
             '%s%s</div><div class="rec-meta">%s</div></div>'
-            % (c.esc(rec.name), flag, _dispute(rec),
+            % (c.esc(rec.name), flag, c.dispute_tag(rec.disputed),
                "".join("<span>%s</span>" % m for m in meta)))
-
-
-def _dispute(rec) -> str:
-    """Only rendered when the bureau actually reported the flag.
-
-    Unexercised by the reference payload -- FlagOpenDispute is null on every row
-    there -- so silence must not be read as 'no dispute'; it is rendered only
-    when there is something to render.
-    """
-    if rec.disputed is None:
-        return ""
-    if rec.disputed:
-        return c.tag("Open dispute", "bad")
-    return c.tag("No dispute")
 
 
 def _dates_cell(rec) -> str:
     if not rec.started:
+        # A termination with no hire date still places the job in time, and is
+        # the only date the row has -- saying "not reported" would discard it.
+        if rec.ended:
+            return ('<span class="na">Start not reported</span> · ended '
+                    '<b>%s</b>' % dates.fmt_month_year(rec.ended))
         return '<span class="na">Dates not reported</span>'
+
     since = dates.fmt_month_year(rec.started)
+    if rec.contradictory:
+        # Both dates stay on screen -- they are what the bureau sent -- but the
+        # row is marked so the pair is not read as a short job.
+        return ('<b>%s</b> to <b>%s</b> <span class="attn" data-info="The '
+                'termination date precedes the hire date, so this pair cannot '
+                'both be right. Delivered by the bureau as-is and shown '
+                'unchanged, but no employment span is drawn from it.">!</span>'
+                % (since, dates.fmt_month_year(rec.ended)))
     if rec.ended:
         return "<b>%s</b> to <b>%s</b>" % (since, dates.fmt_month_year(rec.ended))
     if rec.historical:
         return 'From <b>%s</b> · <span class="na">end not reported</span>' % since
+    if rec.stale:
+        return ('Since <b>%s</b> · <span class="na">last confirmed %s</span>'
+                % (since, dates.fmt_month_year(rec.updated)))
     return "Since <b>%s</b>" % since
 
 
@@ -467,11 +529,11 @@ def _income_cell(model, rec) -> str:
                 'data-info="Not a usable figure: below the floor of %s %s a '
                 'year set in config/income.json. Delivered by the bureau as-is '
                 'and shown unchanged, but kept out of the chart scale.">!</span>'
-                % (model["currency"], c.format_number(rec.income),
-                   model["currency"], c.format_number(model["floor"])))
+                % (c.esc(model["currency"]), c.format_number(rec.income),
+                   c.esc(model["currency"]), c.format_number(model["floor"])))
     if not float(rec.income):
         return ('<b>%s 0</b>/yr <span class="histflag">reported as zero</span>'
-                % model["currency"])
+                % c.esc(model["currency"]))
     return "<b>%s</b>/yr" % c.aed(rec.income)
 
 
@@ -490,5 +552,5 @@ def _other_income(ctx) -> str:
                 % (c.esc(row.get("ProviderNo")), when)) if when else "",
                ("%s/yr" % c.aed(amount)) if amount
                else '<span class="na">Amount not reported</span>'))
-    return ('<div class="other-inc"><div class="trend-title" '
-            'style="margin-bottom:9px">Other income</div>%s</div>' % "".join(items))
+    return ('<div class="other-inc"><div class="trend-title">Other income</div>'
+            '%s</div>' % "".join(items))

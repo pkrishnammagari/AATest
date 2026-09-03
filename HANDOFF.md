@@ -7,19 +7,37 @@ the last context ended. Then **stop and wait for direction** — the *Next task*
 section at the end says what is next and what is deliberately still undecided
 about it.
 
-Last updated: **7 August 2026**, after §08 was rebuilt as **Recent
-Applications** — one split-axis timeline, **234 / 234** — which also closed the
-last open blocker on the page. Before that the same day: §07 restructured into
-four buckets, compressed, and its three conduct strips put back into pixel
-register (**574 / 571**). Before that the same day: a compression pass took §06 to
-**275 / 283** and §05 to **186 / 201**. Before that the same day: §06 rebuilt as
+> **Note (18 August 2026) — the design mockup has been removed.** `Mockup/` and
+> every reference to it are gone: the report is now its own reference. Two
+> consequences for reading the dated entries below. First, **`check_no_mock.py`
+> is now `scripts/check_report.py`** — historical entries still name the old
+> file, and mean this one. Second, its forbidden-literal scan (names, providers
+> and figures that only ever existed in the mockup) was **dropped** along with
+> the mockup; every other assertion it makes — payload values reaching the page,
+> delivered figures shown verbatim, no external references — is unchanged and
+> still runs after every change.
+
+Last updated: **2 September 2026**, after a documentation-drift audit and the
+fix batch that followed it: uploads made session-scoped again (nothing written
+to disk), the 36-month history window enforced at derivation, an ungraded
+*unknown* tone for statuses the config cannot rank, escaping tightened, a
+dead-code sweep, the section modules renamed to plain names, and scan-readiness
+files added — see *Recently landed*. Before that, **19 August**: the income
+confirmation model, the page-width cap removal (`--page-max:none`), and a
+synthetic delinquent fixture with its generator. Before that, **7 August
+2026**: §08 rebuilt as **Recent Applications** — one split-axis timeline,
+**234 / 234** — which also closed the last open blocker on the page; §07
+restructured into four buckets, compressed, and its three conduct strips put
+back into pixel register (**574 / 571**); a compression pass took §06 to
+**275 / 283** and §05 to **186 / 201**; §06 rebuilt as
 **Active Credit Facilities — Overview** (role split, utilisation line, donut and
-counts gone) and §05 gained its max-payment-delay line. Earlier still: §05 rebuilt as
-**Worst Statuses**, a prominence pass on §01's passport tile and §02's score
-strip, and the geometry harness committed to `scripts/measure/`. On 6 August: a
-documentation staleness pass, the fluid type + density scale rolled out to **all
-eight sections**, the teal → FH blue token pass, the §03/§04 chart-width fix,
-the §02 gauge fix, and the brief rail made closed-on-load.
+counts gone) and §05 gained its max-payment-delay line; and earlier still §05
+rebuilt as **Worst Statuses**, a prominence pass on §01's passport tile and
+§02's score strip, and the geometry harness committed to `scripts/measure/`.
+On 6 August: a documentation staleness pass, the fluid type + density scale
+rolled out to **all eight sections**, the teal → FH blue token pass, the
+§03/§04 chart-width fix, the §02 gauge fix, and the brief rail made
+closed-on-load.
 
 **Every section is now designed and wired.** The one piece of deliberately
 unbuilt work left on the page is **§05's 36-month worst status**, which says
@@ -29,7 +47,7 @@ unanswered.
 
 Read `README.md` first — it documents architecture, config, payload traps and
 known gaps. Then skim `aecb/render/tokens.py` and one section module
-(`aecb/render/sections/s04_income.py`) to absorb the house style.
+(`aecb/render/sections/income.py`) to absorb the house style.
 
 ---
 
@@ -57,9 +75,9 @@ single scrolling context.
 NO FABRICATED VALUE EVER REACHES THE SCREEN. Where the payload has nothing, show
 an explicit empty state distinguishing "reported as zero" from "not reported" —
 for a credit screen those mean opposite things. Computed figures are tagged
-`derived`, bureau figures `delivered`. Enforced by `scripts/check_no_mock.py`,
-which fails if any mockup literal reappears, a payload value goes missing, or an
-external reference creeps in. RUN IT AFTER EVERY CHANGE.
+`derived`, bureau figures `delivered`. Enforced by `scripts/check_report.py`,
+which fails if a payload value goes missing, a delivered figure stops being
+shown verbatim, or an external reference creeps in. RUN IT AFTER EVERY CHANGE.
 
 A second rule earned the hard way: **no sentence on screen may describe only
 this payload.** "DateOfLastUpdate is null on 3 of 5 rows" describes one file and
@@ -73,11 +91,13 @@ this reason — do not reintroduce them.
   four derived shades. `report.css` uses `var(--*)` throughout.
 - RED/AMBER/GREEN are reserved for RISK. Facts that aren't risk signals (e.g.
   residency, vintage band) use brand blue.
-- **The mockup's teal is gone** (done 6 Aug 2026). There is no `--teal*` token
-  any more, so a rule cannot reach for one. Everything it used to dress — the
-  `.sec-toggle` / `.hint` / `.fb-b` hovers, `.cite`, `.ai-mark`, `.stl-more`,
-  `.sec.flash`, `.mk.own`, `.phase.own`, `.verify-link` and the `delivered`
-  provenance mark — resolves through the fh-blue five. The reason to record:
+- **There is no teal in the palette** (settled 6 Aug 2026). No `--teal*` token
+  any more, so a rule cannot reach for one. Everything it used to dress that
+  still exists — the `.sec-toggle` / `.hint` hovers, `.ai-mark`, `.stl-more`
+  and the `delivered` provenance mark — resolves through the fh-blue five (the
+  rest of the old list — `.cite`, `.fb-b`, `.sec.flash`, `.mk.own`,
+  `.phase.own`, `.verify-link` — has since been deleted, in the §08 rewrite
+  and the 2 Sep 2026 dead-code sweep). The reason to record:
   a second brand colour beside Finance House blue reads as a distinction the
   page is not drawing, and on `.prov-mark.delivered` it actively competed with
   the amber/red severity tags beside it. **Do not reintroduce a teal token.**
@@ -116,8 +136,11 @@ this reason — do not reintroduce them.
   with the `delivered` badge stranded over it, which reads as a rendering
   fault rather than a layout choice. It now fills the column above 1180px, and
   the 560px cap moved into the stacked query where the reason for it actually
-  holds. The magnification this costs is bounded by `.wrap`'s 1572px max-width
-  to about 1.37×; stacked it would be twice that, which is why the cap stays.
+  holds. The magnification this costs was bounded to about 1.37× by `.wrap`'s
+  1572px max-width; since the page cap came off (`--page-max:none`, 19 Aug
+  2026) it is bounded only by the viewport — re-cap `--page-max` to bound it
+  again. Stacked it would be twice the side-by-side figure even at 1572, which
+  is why the stacked cap stays.
 - **Whatever is elastic in a row has to absorb everything the row gains.**
   §02's `.ss-gauge` was capped at 660px while `.ss-hist` is pushed right by
   `margin-left:auto`, so every pixel past the cap opened as a hole between the
@@ -135,8 +158,12 @@ this reason — do not reintroduce them.
   calibrated to the rail-closed measurement.
 - **The page has a FLUID SCALE, and it is anchored** (added 6 Aug 2026; **all
   eight sections are on it**). `--colw` on `body` carries the report column width,
-  derived not measured, because `.wrap` is a fixed grid with a cap:
-  `min(100vw,1572px)` minus 498 (rail open) or 106 (rail closed). `--f` is a
+  derived not measured, because `.wrap` is a fixed grid: `100vw` minus 498
+  (rail open) or 106 (rail closed). The old 1572px page cap is gone —
+  `.wrap`'s max-width is now `:root{--page-max}`, set to `none` with auto
+  margins (19 Aug 2026: on a 1728px 16" MacBook the capped page stacked all
+  its surplus on the right). Re-cap `--page-max` and these formulas need their
+  `min(100vw, cap)` back, or the ramp overstates the column. `--f` is a
   0px→1px progress value along that range, and sizes are written
   `calc(BASE + GAIN * var(--f,0px))` so the current value stays visible as
   `BASE`. The block lives at the END of `report.css` inside an `@supports`
@@ -148,7 +175,8 @@ this reason — do not reintroduce them.
     1180 where the rail stops being a grid track and the column jumps 683→1074.
   - **The range IS the rail**: 1074→1466px, and 392 = 372 rail + its 20px gap.
     Change the rail width in `.wrap` and 392 is visibly wrong. `--f` reaches
-    0.9694 at 1560, not 1; full gain needs a 1572px viewport.
+    0.9694 at 1560, not 1; full gain needs a viewport of 1572px or wider — the
+    ramp clamps there even though the page itself no longer stops.
   - **NO CONTAINER QUERIES, and no `:has()`.** Both are Chrome 105. The
     existing floor is ~Chrome 88 (`aspect-ratio`, flex `gap`) and the download
     gets filed and reopened years later on an unspecified machine. `clamp()` is
@@ -162,10 +190,10 @@ this reason — do not reintroduce them.
     `.histflag` / `.prov-badge`. Those are the frame, not the content; growing
     them would scale the page rather than fill it.
   - **`.rec*` gains move Python.** `.rec-t`, `.rec-meta` and `.ret-amt` set the
-    rendered height of §04's record tiles, and `s05_returns._TILE_BASE` /
-    `_TILE_ENTRY` mirror it. They were re-measured (37/57 → 39/62) when those
-    sizes went fluid. **Nothing enforces this** — re-measure by hand after any
-    change to those rules.
+    rendered height of §04's record tiles, and `sections/returns.py`'s
+    `_TILE_BASE` / `_TILE_ENTRY` mirror it. They were re-measured (37/57 →
+    39/62) when those sizes went fluid. **Nothing enforces this** — re-measure
+    by hand after any change to those rules.
 - **An ELEMENT spends its surplus on size or density, never both.** The
   constraint is per element, not per section: §01's tile type gains nothing
   because those tiles get *narrower* at the density step (464→346px), and a
@@ -208,9 +236,12 @@ this reason — do not reintroduce them.
     where the prominence actually comes from; 15px is what the ~13px of slack
     bought, and 16px would have eaten all of it. Red/amber/green is right here
     despite the risk-only rule — a score band *is* a risk grade.
-  - `_WASH` / `_INK` are gone from `s03_score.py`; `_FILL` / `_LINE` replace
-    them. Both still only map `red` and `amber`, with green as the fallback,
-    matching `scoring.fh_band()`, which defaults an unknown code to green.
+  - `_WASH` / `_INK` are gone from `score.py`; `_FILL` / `_LINE` replace
+    them. Both still only map `red` and `amber`, with green as the fallback
+    for the green tones. `scoring.fh_band()` no longer defaults an unknown
+    band code to green — since 2 Sep 2026 it returns a neutral tone and the
+    chip renders uncoloured, because an unrecognised risk band has earned no
+    colour.
   - **§02 ended up 6px shorter, not merely not-taller** (168→162 / 160→156).
     `.ss-bands` is now the tallest member at 70, so it — not `.ss-hist` — sets
     the strip height. The zero-slack fact above has moved with it.
@@ -232,13 +263,14 @@ this reason — do not reintroduce them.
     letter code (`U`) where `contractsTotalSummary` carries display text
     (`Active Payments`) — so the fallback made the panel show a different kind
     of value depending on the payload.
-  - **`_known_status()` exists because `ctx.status()` must not be graded off.**
-    `ctx.status()` returns rank 100 with the first letter as a code for
-    anything it cannot match — right for the heatmap, where a cell must still
-    draw, and wrong here, because **rank 100 is the clean rank** and an
-    unrecognised status would be painted green. It resolves strictly on code or
-    label and returns None otherwise; ungraded renders uncoloured with a
-    *Partly reported* pill. Do not "simplify" this back to `ctx.status()`.
+  - **`_known_status()` resolves strictly on code or label and returns None
+    otherwise**; ungraded renders uncoloured with a *Partly reported* pill.
+    When this entry was written, `ctx.status()` returned rank 100 — the clean
+    rank — with an invented first-letter code for anything it could not match,
+    and grading off it would have painted an unrecognised status green. Since
+    2 Sep 2026 `ctx.status()` refuses too (unknown comes back as code `?` with
+    rank `None`, drawn as the `.su` unknown tone), but this panel wants the
+    config row itself and a plain None, so the strict resolver stays.
   - The life-time figure is a **count**, so non-zero is amber, not red. A count
     says how many, never how deep; depth is §07's.
   - The pending panel takes **no provenance mark** — neither `delivered` nor
@@ -296,8 +328,8 @@ this reason — do not reintroduce them.
   - Deleted as orphans: `.ret-stats` / `.rs*` (and `components.kpi()`),
     `.enq-tbl*`, `.er-date`, `.enq-divider`, `.inc-conflict`, the whole
     `.phase.*` vocabulary and the `.mk.ntu/.appr/.rej/.own` variants.
-    `.phantom-callout` / `.pc-*` are PRE-EXISTING mockup orphans in the same
-    block, left alone rather than swept up in an unrelated change.
+    `.phantom-callout` / `.pc-*` were pre-existing orphans in the same block;
+    left alone at the time, and deleted on 18 Aug 2026.
   - §08 went **310 / 323 → 234 / 234**.
 - **§07 is four buckets, not one list** (7 Aug 2026, at the user's request).
   Every facility lands in exactly one of: **Active facilities** (open),
@@ -436,20 +468,28 @@ this reason — do not reintroduce them.
 
 Displayed numbers, heights at a 1560 viewport as **rail closed / rail open** —
 closed is the state the page loads in. The two differ because the whole page is
-now on a fluid scale; **the rail-open column is byte-identical to the pre-fluid
-design and is the anchor that proves nothing regressed**.
+now on a fluid scale. The rail-open column was byte-identical to the pre-fluid
+design when the fluid pass landed (6 Aug), and was the anchor proving nothing
+regressed — but the 19 Aug and 2 Sep batches changed §03's markup and swept
+dead CSS since, so **treat the heights below as indicative and re-measure with
+`scripts/measure/` before relying on them** (§03's especially: its header
+gained the confirmation states after these numbers were captured).
 
 | § | module | state |
 |---|---|---|
 | top bar | `shell.py` | brand, validity strip, AI Analysis button — **LOCKED, don't change** |
-| 01 Identity & demographics | `s02_identity` | done · 305 / 301 · size + **density** (4-up row) |
-| 02 Score & Bureau History | `s03_score` | done · 162 / 156 · size |
-| 03 Income & employment | `s04_income` | done · 560 / 502 open (loads collapsed) · size |
-| 04 Cheque & direct-debit returns | `s05_returns` | done · 357 / 344 · size |
-| 05 Worst Statuses | `s06_worst_status` | **rebuilt 7 Aug** · 186 / 201 · size · two panels delivered, the 36-month one says *To be built* ← next |
-| 06 Active Credit Facilities — overview | `s07_facilities` | **rebuilt 7 Aug** · 275 / 283 · size · role split, utilisation line, no counts |
-| 07 Credit facilities — detail | `s08_detail` | **restructured 7 Aug** · 571 / 564 · four buckets, grouped by category · size + **density** (legend 4-up) |
-| 08 Recent Applications | `s09_enquiries` | **rebuilt 7 Aug** · 234 / 234 · one split-axis timeline · no gain by construction |
+| 01 Identity & demographics | `identity.py` | done · 305 / 301 · size + **density** (4-up row) |
+| 02 Score & Bureau History | `score.py` | done · 162 / 156 · size |
+| 03 Income & employment | `income.py` | done · 560 / 502 open (loads collapsed) · size · heights predate the confirmation model — re-measure |
+| 04 Cheque & direct-debit returns | `returns.py` | done · 357 / 344 · size |
+| 05 Worst Statuses | `worst_status.py` | **rebuilt 7 Aug** · 186 / 201 · size · two panels delivered, the 36-month one says *To be built* ← next |
+| 06 Active Credit Facilities — overview | `facilities.py` | **rebuilt 7 Aug** · 275 / 283 · size · role split, utilisation line, no counts |
+| 07 Credit facilities — detail | `detail.py` | **restructured 7 Aug** · 571 / 564 · four buckets, grouped by category · size + **density** (legend 4-up) |
+| 08 Recent Applications | `applications.py` | **rebuilt 7 Aug** · 234 / 234 · one split-axis timeline · no gain by construction |
+
+(The modules were renamed 2 Sep 2026 — numbers stripped, `s09_enquiries` →
+`applications.py`. Positions in `sections/__init__.py` still assign the
+displayed numbers; a numbered filename could only drift from them.)
 
 **Every section is on the fluid scale** — that pass is finished, and the
 "not yet in the tile language" question is now closed too. **No section adopted
@@ -469,8 +509,9 @@ keeps its six tracks untouched.
 
 `1510` is derived: a span-3-of-12 tile is `W/4 − 6`, the tuned three-up tile is
 334px, so the fourth column only appears once it is at least as wide as the tile
-the layout was tuned around. There is no second step — `.wrap`'s 1572px cap puts
-five-up out of reach forever.
+the layout was tuned around. There is no second step — the density query is the
+only re-map, so on the now-uncapped page extra width goes to the four tiles,
+never a fifth column.
 
 Two markers come from Python because CSS cannot ask without `:has()`:
 `v-wide` (the address always takes the whole row) and `r2-N` (how many tiles row
@@ -495,8 +536,25 @@ positioned by `DateOfLastUpdate`, falling back to the hire date — those points
 are drawn **hollow** and the badge flips to `derived`, because placing a salary
 at the hire date asserts it was the salary at hire. Incomes below
 `placeholder_floor` are shown, flagged with an amber `!`, and kept out of the
-chart scale. The header carries the latest salary the payload supports on one
-line, since the section loads collapsed.
+chart scale; negative figures are never plotted.
+
+**Which employer is CURRENT is settled by the newest start date** among the
+jobs the bureau has not marked finished (19 Aug 2026) — employment carries no
+current/prior flag, and `DateOfLastUpdate` describes the *record*, not the
+*job*, so it may qualify the claim but never decide it (otherwise any bank
+re-touching a 2019 row would promote it over a 2025 job). The header follows
+that employer — *Current salary* / *Current employer* — falling back to
+*Latest salary* (the newest dated figure) and then *Salary on file* only when
+nothing qualifies as current, and it never borrows another employer's figure.
+`confirmation_window_months` in `config/income.json` (12) decides whether an
+open-ended employment claim still counts as confirmed: a row whose update date
+falls outside the window is **stale** and its timeline bar fades like an
+undated prior employer's, because running it to the report date would assert
+years nobody vouched for. A row with no update date at all is unknown, not
+stale — inventing doubt is as wrong as inventing confidence. Since 2 Sep 2026
+the window maths uses `dates.months_between` (day back-off; None on
+unparseable input) — income's private `_months_before` was deleted, a small
+intentional behaviour change.
 
 ### §04 Cheque & direct-debit returns — how it works
 
@@ -511,7 +569,7 @@ events on a timeline, marker letter = instrument, marker colour = severity tone.
 The chart's height mirrors the tile block and is driven by the window count
 only, so opening "Earlier" never resizes it.
 
-`_COL_W = 706.0` in `s05_returns.py` is the width that mirroring is calibrated
+`_COL_W = 706.0` in `sections/returns.py` is the width that mirroring is calibrated
 to — the right half at 1560 **with the brief rail closed**, which is how the
 page loads. It was `503.0` while the rail loaded open, and **it has to move
 whenever that default moves**; get the new number by measuring `.inc-vis`'s
@@ -599,8 +657,11 @@ documented exception to "rail open is byte-identical".
 renders visibly when the app runs: a cheque and a direct debit inside the
 6-month window (15 Aug 2023 / 30 Sep 2023) and one of each outside it (12 Sep
 2021 / 5 Nov 2022). They carry this file's own subject id and archive date.
-Everything else in the file is genuine bureau data. If a real adverse payload
-arrives, prefer it and drop these.
+Everything else in the file follows the genuine AECB payload structure, with
+the subject **fully anonymized** (confirmed 2 Sep 2026) — names, identifiers
+and contact details do not belong to a real person, so the file is safe to
+commit as a fixture. If a real (anonymized) adverse payload arrives, prefer it
+and drop these.
 
 Note the file's `summary` counters still read `Amount_checks_returned_3mon: 0`,
 which now disagrees with the injected September return. Nothing on screen
@@ -616,8 +677,8 @@ elsewhere without resolving it.
    building it. They are restated in full in *Next task* at the end of this
    file. Do not pick answers unilaterally: each one changes the number.
 1. `config/bands.json` cut-offs put 732 in VLR but AECB delivers LR. Delivered
-   band wins (comment in `s03_score.py` explains why) — reconcile against the FH
-   scorecard.
+   band wins (comment in `sections/score.py` explains why) — reconcile against
+   the FH scorecard.
 2. `config/providers.json` is a STUB — the sections that name a reporting
    provider show its code instead: §01, §03, §04 and §07's heatmap (B08, T05,
    C04). §05, §06 and §08 carry no provider codes at all. Also: what is
@@ -633,16 +694,20 @@ elsewhere without resolving it.
    `Disbursed`, and they are now a hollow and a filled marker. The mockup's
    NTU / Approved / Rejected states are not in the payload and are not
    invented.
-6. An adverse sample payload is still the best next test. The reference customer
-   is entirely clean (0 DPD everywhere), so every adverse path — the DPD ramp,
-   worst-status colours, `FlagOpenDispute` — is built but has only ever been
-   exercised synthetically. §05's red/amber/ungraded paths now have named cases
-   in `synthetic.py`; the rest of the page mostly does not.
+6. A REAL adverse sample payload is still wanted. The reference customer is
+   entirely clean (0 DPD everywhere). Since 19 Aug 2026 the committed fixture
+   `ReferenceJSON/1_SyntheticJSONPayload_Delinquent_MultiFacility.json`
+   (generated by `scripts/make_synthetic_payload.py` — seeded, rollups computed
+   from its own contract rows) exercises the adverse paths in the app itself:
+   every heatmap band and all five DPD buckets on one page, not just harness
+   cases. It is still synthetic — prefer a real (anonymized) adverse payload
+   when one arrives. §05's red/amber/ungraded paths also have named cases in
+   `synthetic.py`.
 
 ## How to verify (do this after every change)
 
 ```bash
-.venv/bin/python scripts/check_no_mock.py
+.venv/bin/python scripts/check_report.py
 node --check aecb/render/report.js
 .venv/bin/python -c "
 import ast,pathlib
@@ -658,7 +723,8 @@ Plus headless Chrome for geometry — measure, don't eyeball. Test at
 the brief rail open AND closed (toggle `body.rail-off`).
 
 Those widths are not arbitrary and a shorter list will step straight over a
-boundary: 1572 is `.wrap`'s cap and the only place `--f` reaches 1; 1560 is the
+boundary: 1572 is where `--f` first reaches 1 (the page itself is uncapped
+since 19 Aug 2026 — wider viewports add width, not type); 1560 is the
 design viewport; **1510/1509 straddles the density step**; 1181/1180 straddles
 the point where the rail stops being a grid track and the column jumps 683→1074;
 820 is where the spine disappears. That is two axes, not one, and the rail axis
@@ -687,11 +753,14 @@ assert which selectors still carry the old value. Remove `.closed` from
 
 **Classes the reference payload never renders can still be verified** — append
 a `<div>` carrying the classes, read its computed style, and you have exercised
-a rule the payload cannot reach. `.cite`, `.verify-link`, `.phase.own`,
-`.mk.own` and `.fb-b` are all in that category: they belong to the LLM brief
-rail, which falls back to `.rail-empty` with no model. (§08's `.phase.*` and
-`.mk.*` pill vocabulary used to be in this category and is now DELETED — the
-section encodes its two delivered states as a filled and a hollow marker.)
+a rule the payload cannot reach. The old examples are all gone, though: the
+LLM brief rail's scaffolding (`.cite`, `.verify-link`, `.fb-*`,
+`.rail-verdict`, `.bsec*`) went in the 2 Sep 2026 dead-code sweep — the rail
+falls back to `.rail-empty` with no model, and that is now the only rail rule
+there is — and §08's `.phase.*` / `.mk.*` pill vocabulary was deleted with the
+7 Aug rewrite (the section encodes its two delivered states as a filled and a
+hollow marker). The technique still applies to whatever unreachable class
+comes next.
 
 **The geometry harness is committed at `scripts/measure/` — use it, do not
 rebuild one.** It used to live in a session scratchpad and be rewritten from
@@ -714,10 +783,12 @@ cases when those sections are next touched: income (trend / single / spans /
 none / empty) and returns (window / four / quiet / single / mixed / odd /
 empty).
 
-**Take a backup before touching shared CSS. There is no VCS in this tree** — a
-bad edit to a 900-line stylesheet is not revertible. The command and the
-`wheels.tgz` trap are in the harness README; extract the archive and `diff -r`
-it against the live tree afterwards, because an unverified backup is not one.
+**Commit before touching shared CSS.** The tree has been a git repository
+since 19 Aug 2026, so a bad edit to a 900-line stylesheet is one checkout away
+from gone — but the harness's before-capture still needs a **second tree**,
+not a stash: `harness.py before` must execute the pre-change code via
+`AECB_ROOT`, and Python caches the first `aecb` package it imports. Put the
+baseline in a `git worktree`; the harness README carries the commands.
 
 ## Where things live
 
@@ -725,17 +796,132 @@ it against the live tree afterwards, because an unverified backup is not one.
 aecb/loader.py        strip strings, canonicalise categories
 aecb/dates.py         the three date formats
 aecb/context.py       ReportContext: arrays + report date + 5 configs
-aecb/derive/          identity · scoring · facilities · income · returns
+aecb/derive/          identity · scoring · facilities · income · returns ·
+                      applications
 aecb/render/page.py   render_page(ctx) -> one standalone HTML string
     css.py  shell.py  components.py  svgtime.py  tokens.py  js.py
-    sections/s02..s09
+    sections/         identity · score · income · returns · worst_status ·
+                      facilities · detail · applications (numbered by position)
 config/               providers · status_codes · bands · income · returns
+scripts/              check_report · make_synthetic_payload · fetch_fonts ·
+                      build_wheels (writes requirements.lock) ·
+                      install_offline · measure/
 docs/BRD.docx         business requirements, written in RRM's voice
+sonar-project.properties    Sonar scan exclusions
+assets/fonts/OFL.txt        font licence and attribution
 ```
 
 ## Recently landed
 
 Nothing in flight.
+
+**2 September 2026 — the documentation-drift audit fix batch.** An external
+audit read all four documents against the code; the findings were fixed, code
+first, documents after. What landed:
+
+- **Uploads are session-scoped again.** The 19 Aug upload flow archived
+  uploaded bureau files into `ReferenceJSON/`; it was reworked so **nothing is
+  written to disk** — `context.from_bytes()` (no longer dead code) renders an
+  upload only in the session that supplied it, no other session can see or
+  list it, and the picker offers only the committed anonymized fixtures. This
+  is deliberately the seam the future AECB API integration will plug into
+  (`from_bytes()` renders a payload wherever the bytes came from); the picker
+  and uploader stay until that exists. Render failures now log server-side and
+  the browser gets a generic error, not a traceback; the download filename is
+  sanitized.
+- **The 36-month window is enforced at derivation.**
+  `facilities.history_by_contract()` drops rows at/after month 36, so
+  `months_reported` / `max_dpd` honour the window instead of counting whatever
+  the payload carried.
+- **Unknown statuses are ungraded, everywhere.** `ctx.status()` returns code
+  `?` / rank `None` for anything the config cannot rank — no more invented
+  first-letter codes (`Closed` → `C` collided with Settlement's glyph) — and
+  the heatmap paints a new `.su` tone (dashed ring), never green.
+  `scoring.fh_band()` likewise returns a neutral tone for an unknown band
+  code. `Facility.final_status` returns None when the closing month has no
+  history row — the lifetime `WorstStatus` is no longer a stand-in — and the
+  heatmap chip says *Final · not reported*.
+- **Deleted at the user's decision:** `facilities.worst_in_window()` (git
+  history preserves it; its two rules are restated under *Next task*) and the
+  uncalled `Facility.worst_status` property.
+- **`_load_config()` raises on a missing config file** instead of silently
+  loading `{}`. `dates.months_between` returns None for unparseable input (0
+  is reserved for a real sub-month span); `scoring.history_months` and
+  `identity.age_at` follow, and income's private `_months_before` went — the
+  confirmation window now uses `dates.months_between` with its day back-off, a
+  small intentional behaviour change.
+- **Type guards:** `DaysPaymentDelay` is coerced to int at derivation;
+  `Applications90D`, application amounts and installment counts are
+  type-guarded; negative incomes are not plotted. The application timeline
+  emits `split: 0` when everything sits inside 90 days, so no compressed zone
+  is drawn with nothing in it.
+- **Escaping:** the page `<title>` and favicon are escaped; DPD and other
+  numerics are escaped in `report.js`; the currency is escaped consistently in
+  the income section.
+- **Dead-code sweep:** `report.js` lost `genU()`, `utilCurrent`, the
+  contact/dash checks and `citations()`; `report.css` lost the rail
+  scaffolding (`.rail-verdict`, `.validator`, `.bsec*`, `.cite`, `.probe`,
+  `.fb*`), `.sec.flash`, `.timeline`, `.fact.w2`, `.fact .v .age`,
+  `.histflag.exp`, `.ustrip-tag` and the `.empty` family (`.fac.empty` now
+  carries its own dashed treatment); the duplicate `.fact .v .mono` rules were
+  merged. `window.__AECB.tokens` now ships exactly three tokens (`red`,
+  `green-mid`, `ink`). `components.mono()` / `stat()`,
+  `branding.favicon_bytes` / `clear_cache` and `measure/watch.allowed` went
+  too. New `components.delivered_mark(info)` and
+  `components.dispute_tag(disputed)` replace eight inline `delivered` chips
+  and a duplicated `_dispute()`.
+- **Section modules renamed** — numbers stripped: `sections/identity.py`,
+  `score.py`, `income.py`, `returns.py`, `worst_status.py`, `facilities.py`,
+  `detail.py`, `applications.py` (was `s02..s09`; `s09_enquiries` →
+  `applications.py`). Displayed numbers stay positional in
+  `sections/__init__.py`; a numbered filename could only drift from the
+  position the registry assigns it — which is exactly what had happened to
+  the documentation.
+- **Config:** `providers.json` lost the unused `onus_code` key (`kind:"onus"`
+  remains the mechanism); `bands.json`'s `fh_bands` no longer carry `to`
+  (a zone's end derives from the next band's `from` — the `_comment` says so)
+  and its `_validity_comment` points at the top bar rather than "section 01".
+- **Measure harness:** `synthetic.py`'s guarantor-roles assertion was
+  misindented and ran once instead of per card — fixed, it now runs per card
+  via `_assert_frames`; `compare.py`'s main was decomposed; `io.open` →
+  `open`; Chrome subprocess calls now check return codes.
+  `make_synthetic_payload.py`'s output path is `__file__`-derived and its
+  module-level body is wrapped in `main()`.
+- **Scan-readiness files:** `sonar-project.properties` (Sonar exclusions),
+  `assets/fonts/OFL.txt` (font licence and attribution), and
+  `build_wheels.sh` now writes a `requirements.lock` manifest of the wheel
+  bundle on each build.
+- **Documentation governance:** all four Markdown documents are enrolled in
+  the keep-current rule — see README's *Keeping the documentation current*.
+- The user confirmed `ReferenceJSON/aecb_payload_archive_170623.json` is
+  **fully anonymized** — genuine AECB structure, no real person's data.
+
+**19 August 2026 — the income confirmation model, and the page cap came off.**
+
+- `config/income.json` gained `confirmation_window_months: 12`.
+  `derive/income.py` now resolves which employer is CURRENT by the newest
+  start date among jobs not marked finished — `DateOfLastUpdate` may qualify
+  that claim (a row last touched outside the window is *stale*, and its
+  timeline bar fades like an undated prior employer's) but never decide it.
+  Records gained `confirmed` / `stale` / `contradictory` (ends-before-starts
+  rows are excluded from the chart outright, both dates left visible). The
+  §03 header follows the current employer — *Current salary* / *Current
+  employer* — falling back to *Latest salary* and *Salary on file*, and never
+  borrows another employer's figure. See the §03 design entry above.
+- `.wrap`'s 1572px max-width became `:root{--page-max:none}` with auto
+  margins: on anything wider than the old cap (a 16" MacBook is 1728 CSS px)
+  the whole surplus stacked on the right while the full-bleed top bar spanned
+  the window. The fluid formulas dropped their `min(100vw,1572px)`; `--f`
+  still clamps at 1, so past 1572 the page gains width but no further type.
+  Re-cap `--page-max` and the formulas need the `min()` back.
+- `ReferenceJSON/1_SyntheticJSONPayload_Delinquent_MultiFacility.json` was
+  committed, generated by the new `scripts/make_synthetic_payload.py` — a
+  seeded, severely adverse subject whose rollups are computed from its own
+  contract rows, so every heatmap band and all five DPD buckets render in the
+  app itself.
+- The tree became a git repository (initial commit, 19 Aug).
+- This batch also archived uploads into `ReferenceJSON/`; that flow was
+  reworked on 2 Sep — see above.
 
 **7 August 2026 — §08 rebuilt as "Recent Applications"** (310 / 323 → 234 / 234).
 Every decision is in the design entry above. Alongside it:
@@ -836,8 +1022,9 @@ itself:
   green. The probe reports the tone **class**, not a computed colour; a class
   states the intent directly, where an rgb only states it if you already know
   which value the green token resolves to.
-- `worst_in_window()` in `derive/facilities.py` is now **uncalled and kept**,
-  with the reason at its docstring.
+- `worst_in_window()` in `derive/facilities.py` was at this point **uncalled
+  and kept**, with the reason at its docstring. *(Deleted outright on 2 Sep
+  2026 at the user's decision — git history preserves it.)*
 - Measured before/after across 10 widths × 2 rail states from a verified backup
   tree. §05: 246 / 292 → **234 / 234**. Every other section is byte-identical in
   both rail states at every width. The comparator's only flags were
@@ -897,11 +1084,11 @@ the panel would show.
    ambiguous: a real month-25-to-36 event, or just our aggregation differing
    from theirs. Recommended: derive both, keep the delivered one as a
    reconciliation, never drop it silently.
-2. **Scope.** `worst_in_window()` walks *every* contract — including **closed**
-   ones and ones where the customer is only **Guarantor** or **Co-holder**
-   (`Role` is on each contract). A 90 DPD on a guaranteed facility is a
-   materially different fact. Whole book, main-holder only, or whole book with
-   the role flagged?
+2. **Scope.** The deleted `worst_in_window()` (2 Sep 2026, in git history)
+   walked *every* contract — including **closed** ones and ones where the
+   customer is only **Guarantor** or **Co-holder** (`Role` is on each
+   contract). A 90 DPD on a guaranteed facility is a materially different
+   fact. Whole book, main-holder only, or whole book with the role flagged?
 3. **Coverage.** `contractsHistory` is sparse. In the reference payload:
    **69 facility-months across 13 contracts** inside 24 months, **95 across 15**
    inside 36, report date 2023-10-26 (`score.DataPullDate`). A clean window over
@@ -946,7 +1133,9 @@ Every section is designed, wired and measured. What remains is not layout work:
    show a provider CODE where a name should be. §08 made this more prominent,
    not less — the codes are the story on that chart, since four different
    lenders in ninety days is exactly what an underwriter reads.
-3. **An adverse sample payload** (open item 6). The reference customer is
-   entirely clean, so every adverse path on the page is exercised only
-   synthetically.
-4. `.phantom-callout` / `.pc-*` are mockup orphans left in `report.css`.
+3. **A real adverse sample payload** (open item 6). The reference customer is
+   entirely clean; the committed synthetic delinquent fixture now renders the
+   adverse paths in the app itself, but a real (anonymized) adverse report is
+   still the better test.
+4. *(closed 18 Aug 2026)* The `.phantom-callout` / `.pc-*` orphans have been
+   deleted from `report.css`.

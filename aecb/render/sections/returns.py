@@ -1,4 +1,4 @@
-"""05 Cheque & direct-debit returns -- a first-order UAE adverse signal.
+"""Cheque & direct-debit returns -- a first-order UAE adverse signal.
 
 Source: paymentOrder only. Each row is one returned instrument. The summary
 block's three-month counters are deliberately not read -- their window cannot
@@ -6,7 +6,7 @@ describe a list that reaches back years, and whether their figure is an amount
 or a count is unverified. RRM decision, Aug 2026: the section is built from
 the returns themselves.
 
-Two halves over one card, the same grammar as section 04: the returns as
+Two halves over one card, the same grammar as section 03: the returns as
 delivered on the left, the same events on a timeline on the right. Severity
 arrives as display text (Single / Multiple / Reported per RRM); its screen
 tone is a config mapping, and unknown values render neutral rather than being
@@ -173,10 +173,10 @@ def _records(model) -> str:
     fold, only instruments with records appear: "none earlier" is not a
     finding, and a placeholder tile behind a fold is clutter nobody asked for.
     """
-    badge = ('<span class="prov-mark delivered" data-info="Each entry is one '
-             'returned instrument as AECB delivered it in paymentOrder. '
-             'Nothing is aggregated, and the window grouping is ours, '
-             'anchored to the report date.">delivered</span>')
+    badge = c.delivered_mark("Each entry is one returned instrument as AECB "
+                             "delivered it in paymentOrder. Nothing is "
+                             "aggregated, and the window grouping is ours, "
+                             "anchored to the report date.")
 
     # No resolvable window: one flat section, no split claimed.
     if model["window_start"] is None:
@@ -251,7 +251,7 @@ def _entry(rec, show_type=False) -> str:
     if show_type:
         head.insert(0, '<span class="rtype">%s</span>'
                        % c.esc(rec.type_text or "Type not reported"))
-    dispute = _dispute(rec)
+    dispute = c.dispute_tag(rec.disputed)
     if dispute:
         head.append(dispute)
 
@@ -300,19 +300,6 @@ def _severity_tag(rec) -> str:
             % (rec.severity_tone, c.esc(rec.severity)))
 
 
-def _dispute(rec) -> str:
-    """Only rendered when the bureau actually reported the flag.
-
-    Unexercised by the reference payload -- FlagOpenDispute is null on every
-    row seen so far -- so silence must not be read as 'no dispute'.
-    """
-    if rec.disputed is None:
-        return ""
-    if rec.disputed:
-        return c.tag("Open dispute", "bad")
-    return c.tag("No dispute")
-
-
 def _reason_cell(rec) -> str:
     if not rec.reason:
         return '<span class="na">Reason not reported</span>'
@@ -359,9 +346,9 @@ def _chart_block(ctx, model) -> str:
 def _provenance(model) -> str:
     if model["chart"] == "none":
         return ""
-    return ('<span class="prov-mark delivered" data-info="Every event sits at '
-            'the ReturnDate AECB delivered with it; amounts and severities '
-            'are the bureau\'s own.">delivered</span>')
+    return c.delivered_mark("Every event sits at the ReturnDate AECB "
+                            "delivered with it; amounts and severities are "
+                            "the bureau's own.")
 
 
 def _svg(ctx, model) -> str:
@@ -447,7 +434,10 @@ def _lanes(model, sx):
     for i, rec in enumerate(sorted(model["recent"], key=lambda r: r.date)):
         lanes[id(rec)] = i
 
-    placed = []
+    # The in-window markers are obstacles too: an older return just outside
+    # the window boundary must not land on top of the oldest recent one, which
+    # also sits in lane 0.
+    placed = [(sx(rec.date), lanes[id(rec)]) for rec in model["recent"]]
     for rec in sorted(model["older"], key=lambda r: r.date):
         x = sx(rec.date)
         lane = 0

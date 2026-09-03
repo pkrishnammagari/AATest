@@ -1,6 +1,7 @@
-"""One-off: vendor the mockup's webfonts for offline use.
+"""One-off: vendor the report's webfonts for offline use.
 
-The mockup pulls Archivo / IBM Plex Sans / IBM Plex Mono from fonts.googleapis.com.
+The report is set in Archivo / IBM Plex Sans / IBM Plex Mono, which would otherwise
+come from fonts.googleapis.com.
 The target server has no internet, so this script must be run ONCE on a connected
 machine. It downloads the woff2 files and writes a single self-contained
 stylesheet, assets/fonts/fonts_inline.css, with every font embedded as a base64
@@ -9,6 +10,12 @@ data: URI.
 That file is then read verbatim by aecb.render.css at render time -- no network,
 no filesystem lookups from the browser, and the downloaded standalone HTML stays
 byte-for-byte self-contained.
+
+Licensing: every family fetched here (Archivo, IBM Plex Sans/Mono/Arabic) is
+SIL OFL 1.1. assets/fonts/OFL.txt carries the license text and attribution --
+OFL redistribution expects it to accompany the vendored files, and a license
+scanner reports the woff2 blobs as unknown-license without it. If a family is
+ever added or swapped here, update OFL.txt in the same change.
 
 Run:  python3 scripts/fetch_fonts.py
 """

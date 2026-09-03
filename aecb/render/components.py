@@ -93,7 +93,7 @@ def hint(text) -> str:
 
 
 def fact(key, value, extra="", css="") -> str:
-    """A labelled cell in the .facts grid (section 02).
+    """A labelled cell in the .facts grid (section 01, identity).
 
     extra is appended inside the cell, after the value -- used for the
     in-cell history expanders.
@@ -133,7 +133,7 @@ def prov_badges(codes) -> str:
     set rather than a single source. Naming them all inline would bury the
     value; the count carries that they exist and the hover names them.
 
-    Shared by sections 02 and 04 so a provider set looks the same wherever it
+    Shared by sections 01 and 03 so a provider set looks the same wherever it
     appears. Empty when nothing was reported -- the caller decides what to show
     in its place, since 'no provider' is not the same fact everywhere.
     """
@@ -171,13 +171,25 @@ def format_number(value, decimals=0) -> str:
     return "{:,.{d}f}".format(number, d=decimals)
 
 
-def mono(text) -> str:
-    return '<span class="mono">%s</span>' % text
+def delivered_mark(info) -> str:
+    """The 'delivered' provenance chip, shared by every section that shows one.
+
+    `info` states exactly WHAT was delivered -- the claim is only as good as
+    its scope, so every call site writes its own wording.
+    """
+    return ('<span class="prov-mark delivered" data-info="%s">delivered</span>'
+            % attr(info))
 
 
-def stat(label, value) -> str:
-    """A 'Limit 40,000' style inline stat on a heatmap row."""
-    return '<span class="stat">%s <b>%s</b></span>' % (label, value)
+def dispute_tag(disputed) -> str:
+    """FlagOpenDispute as a tag; '' when the bureau did not report the flag.
+
+    Silence must not be read as 'no dispute' -- the tag renders only when
+    there is something to render. `disputed` is True / False / None.
+    """
+    if disputed is None:
+        return ""
+    return tag("Open dispute", "bad") if disputed else tag("No dispute")
 
 
 def empty_state(message, detail="") -> str:

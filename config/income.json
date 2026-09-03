@@ -10,5 +10,8 @@
   "_currency_comment": "Assumed. The payload carries no currency field; every figure is rendered in this unit and the section says so.",
 
   "placeholder_floor": 1200,
-  "_placeholder_floor_comment": "A GrossAnnualIncome above zero but below this is a provider placeholder, not an income -- the reference payload carries 1 on two rows. Such a figure is still shown, flagged, but is kept out of the chart scale where it would flatten every real point onto the axis. Exactly zero is NOT a placeholder: a reported zero is a delivered fact and is plotted."
+  "_placeholder_floor_comment": "A GrossAnnualIncome above zero but below this is a provider placeholder, not an income -- the reference payload carries 1 on two rows. Such a figure is still shown, flagged, but is kept out of the chart scale where it would flatten every real point onto the axis. Exactly zero is NOT a placeholder: a reported zero is a delivered fact and is plotted.",
+
+  "confirmation_window_months": 12,
+  "_confirmation_window_months_comment": "How recently a provider must have touched an employment row for the screen to treat 'still employed there' as a confirmed claim rather than an unrefreshed one. AECB delivers no such window -- it delivers DateOfLastUpdate and nothing else -- so the cut-off is OURS and everything derived from it is presentation, never data. An employment row with no end date asserts nothing about when it ended; the chart nonetheless draws its bar to the report date, and this is what decides whether that assertion is qualified. A row with no DateOfLastUpdate at all is UNKNOWN, not stale: nothing is annotated, because inventing doubt is as wrong as inventing confidence."
 }

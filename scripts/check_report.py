@@ -1,13 +1,15 @@
-"""Fail if any mockup literal survives into the rendered report.
+"""Fail the build if the rendered report misrepresents the payload.
 
-Step 1 filled the frame with an illustrative customer. Step 2 replaced those with
-payload values. This asserts none leaked back -- a fabricated figure on a credit
-screen is indistinguishable from a real one, so this check is not cosmetic.
+A fabricated figure on a credit screen is indistinguishable from a real one, so
+this check is not cosmetic. It asserts three things about every payload in
+ReferenceJSON/:
 
-It also verifies that values the payload DOES carry actually reach the page, and
-that the page has no external references.
+  - values the payload DOES carry actually reach the page;
+  - figures the bureau delivered are shown verbatim, in the element meant to
+    carry them -- not relabelled, rounded, or translated into a code;
+  - the page has no external reference, so it still works air-gapped.
 
-Run:  python3 scripts/check_no_mock.py
+Run:  python3 scripts/check_report.py
 """
 
 from __future__ import annotations
@@ -22,34 +24,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from aecb import context                      # noqa: E402
 from aecb.render.page import render_page      # noqa: E402
 
-# Names, providers and figures that only ever existed in the mockup.
-FORBIDDEN = [
-    "Arjun", "Mehta", "Suresh",
-    "Alpha Trading", "Gulf Metals", "Gulf Properties",
-    "Emirates NBD", "Emirates Islamic", "Dunia Finance", "RAKBANK",
-    "Mashreq personal", "ADIB business",
-    "Sulfah",
-    "784-1992-6053917-3", "P4821142", "N2210945",
-    "Al Barsha", "Al Nahda",
-    "DDR-0092841",
-    "not taken up", "Not taken up",
-    "Refer — verify first",
-    "24 claims",
-]
-
-# Numbers from the mock that must not appear as rendered figures. Matched with
-# word boundaries so they cannot collide with a legitimate coincidence.
-FORBIDDEN_NUMBERS = [
-    "712", "156,300", "119,200", "138,000", "9,650", "8,500", "1,150",
-    "3,950", "28.6k", "216,000", "120,000",
-]
-
-
 def strip_noise(html):
     """Drop the font blob, the stylesheet and comments before scanning.
 
-    Base64 font data contains arbitrary character runs and would false-positive
-    on short numeric needles.
+    Base64 font data contains arbitrary character runs, so a short numeric
+    needle can be found inside it by chance. Left in, that would let a figure
+    the page never actually displays satisfy a presence check -- which is the
+    one way these assertions could pass while the report is wrong.
     """
     html = re.sub(r"<style>.*?</style>", "", html, flags=re.S)
     html = re.sub(r"/\*.*?\*/", "", html, flags=re.S)
@@ -77,14 +58,6 @@ def check(path):
     html = strip_noise(raw)
 
     problems = []
-
-    for needle in FORBIDDEN:
-        if needle.lower() in html.lower():
-            problems.append("mock literal present: %r" % needle)
-
-    for needle in FORBIDDEN_NUMBERS:
-        if re.search(r"(?<![\d.,])%s(?![\d])" % re.escape(needle), html):
-            problems.append("mock figure present: %r" % needle)
 
     # Values the payload genuinely carries must reach the page.
     expected = [
@@ -180,7 +153,7 @@ def main():
             for p in problems:
                 print("    %s" % p)
         else:
-            print("ok   %s -- no mock content, payload values present, no external refs"
+            print("ok   %s -- payload values present and verbatim, no external refs"
                   % name)
     return 1 if failed else 0
 

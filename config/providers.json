@@ -24,6 +24,5 @@
     "B12": {"name": "B12", "kind": "bank"},
     "T03": {"name": "T03", "kind": "tel"},
     "T05": {"name": "T05", "kind": "tel"}
-  },
-  "onus_code": null
+  }
 }

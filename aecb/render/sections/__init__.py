@@ -2,7 +2,9 @@
 
 Position in SECTIONS determines both the anchor id and the displayed number, so
 adding, removing or reordering a section renumbers the report and the spine nav
-together. Nothing carries a hard-coded '03'.
+together. Nothing carries a hard-coded '03' -- which is also why the module
+files carry NAMES, not numbers: a numbered filename can only drift from the
+position this tuple assigns it.
 
 Each module supplies META (title, purpose) and a render(ctx, meta) that passes
 meta straight through to components.section_card.
@@ -11,27 +13,27 @@ meta straight through to components.section_card.
 from __future__ import annotations
 
 from . import (
-    s02_identity,
-    s03_score,
-    s04_income,
-    s05_returns,
-    s06_worst_status,
-    s07_facilities,
-    s08_detail,
-    s09_enquiries,
+    applications,
+    detail,
+    facilities,
+    identity,
+    income,
+    returns,
+    score,
+    worst_status,
 )
 
 # Report validity is not here: it lives in the top bar, where a single pill and
 # two dates say everything a full section card was spending a card on.
 SECTIONS = (
-    s02_identity,
-    s03_score,
-    s04_income,
-    s05_returns,
-    s06_worst_status,
-    s07_facilities,
-    s08_detail,
-    s09_enquiries,
+    identity,
+    score,
+    income,
+    returns,
+    worst_status,
+    facilities,
+    detail,
+    applications,
 )
 
 

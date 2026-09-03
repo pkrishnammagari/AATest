@@ -8,5 +8,8 @@
 # excluded upstream. Check `python3 -V` on the server before deploying.
 #
 # The application itself has no other direct dependency; everything else in the
-# wheel bundle is pulled in transitively by streamlit.
+# wheel bundle is pulled in transitively by streamlit. The transitive tree that
+# actually ships is recorded in requirements.lock, written by
+# scripts/build_wheels.sh on every bundle build -- commit it alongside any
+# deployed bundle so dependency scanners can see what the server really runs.
 streamlit==1.50.0

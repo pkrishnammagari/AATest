@@ -88,15 +88,17 @@ def fmt_month_year(value, dash: str = "—") -> str:
     return d.strftime("%b %Y") if d else dash
 
 
-def months_between(start, end) -> int:
-    """Whole calendar months from start to end. 0 if either is unparseable.
+def months_between(start, end):
+    """Whole calendar months from start to end. None if either is unparseable.
 
     Counts month boundaries crossed, then backs off one if the day-of-month has
     not yet come round -- so 25 Jul 2016 to 24 Jul 2017 is 11 months, not 12.
+    A genuine sub-month span returns 0; None is reserved for "cannot be
+    computed", so callers can tell a brand-new file from an unreadable date.
     """
     a, b = parse_any(start), parse_any(end)
     if not a or not b:
-        return 0
+        return None
     months = (b.year - a.year) * 12 + (b.month - a.month)
     if b.day < a.day:
         months -= 1

@@ -1,4 +1,4 @@
-"""08 Credit facilities -- detail & 36-month conduct heatmap.
+"""Credit facilities -- detail & 36-month conduct heatmap.
 
 Sources: contracts joined to contractsHistory (see derive/facilities.py).
 
@@ -55,7 +55,7 @@ def render(ctx, meta) -> str:
           <div class="stl-head" id="stlHead"></div>
           <div class="stl-all" id="stlAll">
             <div class="stl-grid" id="stlGrid"></div>
-            <div class="stl-note">Codes, wording and severity ranking are supplied by AECB. Colour follows the bureau ranking — red at 60 or below, amber 65–95, grey 100.</div>
+            <div class="stl-note">Codes, wording and severity ranking are supplied by AECB. Colour follows the bureau ranking — red at 60 or below, amber above 60 and below 100, grey at 100. A code missing from the table is ringed: its severity is unknown, never assumed clean.</div>
           </div>
         </div>
       </div>

@@ -28,10 +28,10 @@ HEIGHT = 8
 
 SECTION_NAME = {"s1": "01 identity", "s2": "02 score", "s3": "03 income",
                 "s4": "04 returns", "s5": "05 worst status",
-                "s6": "06 facilities", "s7": "07 detail", "s8": "08 enquiries"}
+                "s6": "06 facilities", "s7": "07 detail", "s8": "08 applications"}
 
 # Witnesses for the one place CSS is mirrored by Python constants:
-# s05_returns._TILE_BASE / _TILE_ENTRY / _TILE_GAP / _COL_W track these boxes.
+# sections/returns.py _TILE_BASE / _TILE_ENTRY / _TILE_GAP / _COL_W track these boxes.
 # Scoped to #s4 because the bare selectors resolve to section 03's, which
 # loads collapsed and therefore measures zero.
 MIRRORS = ("#s4 .rec", "#s4 .rec-item", "#s4 .rec-list", "#s4 .rec-t",
@@ -66,6 +66,69 @@ def differs(before, after, ignore_height=False):
     return moved
 
 
+def _compare_run(state, width, before, after, changed, fails, moved_props):
+    """All assertions for one (rail state, width) capture pair.
+
+    Returns how many elements were compared. A pure extraction from main() --
+    same checks, same order.
+    """
+    compared = 0
+
+    # --- section heights ---------------------------------------------------
+    hb = before["meta"].get("sections", {})
+    ha = after["meta"].get("sections", {})
+    for sid in sorted(set(hb) | set(ha)):
+        if sid in changed:
+            continue
+        if hb.get(sid) != ha.get(sid):
+            fails.append("HEIGHT %s@%d: %s %s -> %s but is not listed as changed"
+                         % (state, width, sid, hb.get(sid), ha.get(sid)))
+
+    # --- containment, per section ------------------------------------------
+    gb, ga = by_section(before), by_section(after)
+    for sid in sorted(set(gb) | set(ga)):
+        if sid in changed:
+            for rb, ra in zip(gb.get(sid, []), ga.get(sid, [])):
+                for i in differs(rb, ra, ignore_height=True):
+                    moved_props.setdefault(sid, set()).add(FIELDS[i])
+            continue
+        rows_b, rows_a = gb.get(sid, []), ga.get(sid, [])
+        if len(rows_b) != len(rows_a):
+            fails.append("SCOPE %s@%d: %s element count %d -> %d"
+                         % (state, width, sid, len(rows_b), len(rows_a)))
+            continue
+        for rb, ra in zip(rows_b, rows_a):
+            if rb[2] != ra[2] or rb[3] != ra[3]:
+                fails.append("SCOPE %s@%d: %s markup diverged at <%s>"
+                             % (state, width, sid, rb[2].lower()))
+                break
+            moved = differs(rb, ra, ignore_height=True)
+            if moved:
+                fails.append("SCOPE %s@%d: %s <%s class=%r> %s"
+                             % (state, width, sid, rb[2].lower(), rb[3][:28],
+                                ", ".join("%s %s->%s" % (FIELDS[i], rb[i], ra[i])
+                                          for i in moved)))
+            compared += 1
+
+    # --- nothing may clip or overflow WORSE than before ---------------------
+    # Several elements legitimately overflow their box via absolutely
+    # positioned ::after tooltips (.hint, .spine-dot, .ss-marker,
+    # .tv-meter) and always did. Only a regression is a finding.
+    if after["meta"]["overflowX"] and not before["meta"]["overflowX"]:
+        fails.append("OVERFLOW %s@%d: the page now scrolls horizontally"
+                     % (state, width))
+    for sel, ra in after["watch"].items():
+        rb = before["watch"].get(sel)
+        if not ra or not rb:
+            continue
+        over_a = ra["scrollW"] - ra["clientW"]
+        over_b = rb["scrollW"] - rb["clientW"]
+        if over_a > 1 and over_a > over_b:
+            fails.append("CLIP %s@%d: %s overflows by %d (was %d)"
+                         % (state, width, sel, over_a, over_b))
+    return compared
+
+
 def main() -> int:
     if len(sys.argv) < 3:
         print(__doc__)
@@ -79,59 +142,8 @@ def main() -> int:
     for state in paths.STATES:
         for width in paths.WIDTHS:
             before, after = load(before_dir, state, width), load(after_dir, state, width)
-
-            # --- section heights -------------------------------------------
-            hb = before["meta"].get("sections", {})
-            ha = after["meta"].get("sections", {})
-            for sid in sorted(set(hb) | set(ha)):
-                if sid in changed:
-                    continue
-                if hb.get(sid) != ha.get(sid):
-                    fails.append("HEIGHT %s@%d: %s %s -> %s but is not listed as changed"
-                                 % (state, width, sid, hb.get(sid), ha.get(sid)))
-
-            # --- containment, per section ----------------------------------
-            gb, ga = by_section(before), by_section(after)
-            for sid in sorted(set(gb) | set(ga)):
-                if sid in changed:
-                    for rb, ra in zip(gb.get(sid, []), ga.get(sid, [])):
-                        for i in differs(rb, ra, ignore_height=True):
-                            moved_props.setdefault(sid, set()).add(FIELDS[i])
-                    continue
-                rows_b, rows_a = gb.get(sid, []), ga.get(sid, [])
-                if len(rows_b) != len(rows_a):
-                    fails.append("SCOPE %s@%d: %s element count %d -> %d"
-                                 % (state, width, sid, len(rows_b), len(rows_a)))
-                    continue
-                for rb, ra in zip(rows_b, rows_a):
-                    if rb[2] != ra[2] or rb[3] != ra[3]:
-                        fails.append("SCOPE %s@%d: %s markup diverged at <%s>"
-                                     % (state, width, sid, rb[2].lower()))
-                        break
-                    moved = differs(rb, ra, ignore_height=True)
-                    if moved:
-                        fails.append("SCOPE %s@%d: %s <%s class=%r> %s"
-                                     % (state, width, sid, rb[2].lower(), rb[3][:28],
-                                        ", ".join("%s %s->%s" % (FIELDS[i], rb[i], ra[i])
-                                                  for i in moved)))
-                    compared += 1
-
-            # --- nothing may clip or overflow WORSE than before ------------
-            # Several elements legitimately overflow their box via absolutely
-            # positioned ::after tooltips (.hint, .spine-dot, .ss-marker,
-            # .tv-meter) and always did. Only a regression is a finding.
-            if after["meta"]["overflowX"] and not before["meta"]["overflowX"]:
-                fails.append("OVERFLOW %s@%d: the page now scrolls horizontally"
-                             % (state, width))
-            for sel, ra in after["watch"].items():
-                rb = before["watch"].get(sel)
-                if not ra or not rb:
-                    continue
-                over_a = ra["scrollW"] - ra["clientW"]
-                over_b = rb["scrollW"] - rb["clientW"]
-                if over_a > 1 and over_a > over_b:
-                    fails.append("CLIP %s@%d: %s overflows by %d (was %d)"
-                                 % (state, width, sel, over_a, over_b))
+            compared += _compare_run(state, width, before, after,
+                                     changed, fails, moved_props)
 
     # --- report ---------------------------------------------------------
     print("=" * 72)
@@ -149,7 +161,7 @@ def main() -> int:
               % (SECTION_NAME.get(sid, sid), ao.get(sid), an.get(sid), arrow, mark))
 
     print("\nSection 04 mirror witnesses at 1560, rail closed")
-    print("   (s05_returns._TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W track these):")
+    print("   (sections/returns.py _TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W track these):")
     for sel in MIRRORS:
         rb, ra = b1560["watch"].get(sel), a1560["watch"].get(sel)
         if not rb or not ra:

@@ -18,14 +18,22 @@ CONFIG_DIR = os.path.join(os.path.dirname(_HERE), "config")
 
 
 def _load_config(name: str) -> dict:
+    """Parsed config/<name>. A missing or unreadable file RAISES.
+
+    Degrading to {} here once made a deleted status_codes.json render every
+    status as clean -- the report stayed plausible while all its severity
+    vocabulary was gone. Config absence is a deployment fault and must be loud.
+    """
     path = os.path.join(CONFIG_DIR, name)
     if not os.path.exists(path):
-        return {}
+        raise FileNotFoundError(
+            "Missing config file %s -- the report cannot be rendered "
+            "trustworthily without it." % path)
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
-class ReportContext(object):
+class ReportContext:
     """Everything a section needs to render itself."""
 
     def __init__(self, data: dict, source_name: str = ""):
@@ -35,8 +43,8 @@ class ReportContext(object):
         self.providers = _load_config("providers.json")
         self.status_codes = _load_config("status_codes.json")
         self.bands = _load_config("bands.json")
-        # How to read GrossAnnualIncome: currency, the placeholder floor and the
-        # provider-disagreement ratio. All three are policy, not payload.
+        # How to read GrossAnnualIncome: currency, the placeholder floor and
+        # the confirmation window. All three are policy, not payload.
         self.income_cfg = _load_config("income.json")
         # paymentOrder vocabularies: Type text -> instrument kind, Severity
         # text -> display tone. Policy, since AECB delivers bare display text.
@@ -94,6 +102,15 @@ class ReportContext(object):
         return None
 
     @property
+    def unknown_arrays(self) -> list:
+        """Top-level payload sections the loader does not recognise.
+
+        Computed by loader.normalise(); surfaced so a new AECB section is a
+        visible warning in the app rather than silently unrendered data.
+        """
+        return self.data.get("_unknownArrays") or []
+
+    @property
     def subject_id(self) -> str:
         return str(
             self.customer.get("CBSubjectId")
@@ -129,11 +146,16 @@ class ReportContext(object):
         """Resolve a contract status, given either a letter code or display text.
 
         Returns {'code', 'label', 'rank'}. Rank drives the colour band:
-        <=60 severe, 65-95 adverse, 100 normal.
+        <=60 severe, 65-95 adverse, 100 normal. Rank None means the config
+        does not know this status -- new AECB vocabulary, or nothing delivered
+        at all -- and the renderer paints it as UNKNOWN, never as clean. The
+        code for an unknown status is always '?': inventing a letter from the
+        text used to collide with real codes ('Closed' -> 'C', which is
+        Settlement's glyph).
         """
         codes = self.status_codes.get("codes") or {}
         if not value:
-            return {"code": "?", "label": "Not reported", "rank": 100}
+            return {"code": "?", "label": "Not reported", "rank": None}
         text = str(value).strip()
 
         if text in codes:
@@ -147,7 +169,7 @@ class ReportContext(object):
             return {"code": code, "label": meta.get("label", text),
                     "rank": meta.get("rank", 100)}
 
-        return {"code": text[:1].upper() or "?", "label": text, "rank": 100}
+        return {"code": "?", "label": text, "rank": None}
 
 
 def from_file(path: str) -> ReportContext:

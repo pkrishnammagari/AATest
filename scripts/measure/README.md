@@ -23,15 +23,16 @@ Nothing writes inside the repo: the work area defaults to a temp directory
 ## The workflow
 
 ```bash
-# 0. Back up first. There is no VCS in this tree.
-cd .. && tar --exclude=.venv --exclude=wheels --exclude=wheels.tgz \
-    -czf ../AECBAnalyzerV2_V1_code_$(date +%Y%m%d-%H%M%S).tar.gz AECBAnalyzerV2_V1
-#    Extract it somewhere and `diff -r` against the live tree. An unverified
-#    backup is not a backup.
+# 0. Commit, then put the BASELINE in a second tree. The tree is a git repo,
+#    but a stash is not enough: harness.py must execute the pre-change code in
+#    its own tree via AECB_ROOT (Python caches the first `aecb` package it
+#    imports — see the traps below), so the baseline needs its own checkout.
+git add -A && git commit -m "pre-measure baseline"
+git worktree add ../AECB_baseline HEAD
 
-# 1. Capture BEFORE — from the backup tree, so both captures run through
+# 1. Capture BEFORE — from the baseline worktree, so both captures run through
 #    identical probe code even after you edit the harness itself.
-AECB_ROOT=/path/to/extracted/AECBAnalyzerV2_V1 \
+AECB_ROOT=../AECB_baseline \
     .venv/bin/python scripts/measure/harness.py before
 
 # 2. Make the change.
@@ -48,13 +49,16 @@ AECB_ROOT=/path/to/extracted/AECBAnalyzerV2_V1 \
 
 # 6. Look at it. Computed styles can be right while the page looks wrong.
 .venv/bin/python scripts/measure/shots.py s1 s2
+
+# 7. When done, drop the baseline tree.
+git worktree remove ../AECB_baseline
 ```
 
 ## The files
 
 | file | does |
 |---|---|
-| `paths.py` | Root/work/Chrome discovery, render, rail variants, the probe and screenshot primitives. Everything derived or overridable — these scripts must run against a backup tree as well as the live one. |
+| `paths.py` | Root/work/Chrome discovery, render, rail variants, the probe and screenshot primitives. Everything derived or overridable — these scripts must run against a baseline worktree as well as the live tree. |
 | `watch.py` | Which selectors belong to which section. **Add to this when a section gains a class family**, or the comparator stops watching the thing you just changed. |
 | `harness.py` | Captures every width × both rail states to JSON. |
 | `compare.py` | Asserts containment, height, and no new clipping; prints the §04 mirror witnesses. |
@@ -83,6 +87,11 @@ comments say so at the point they matter.
   nothing.** `synthetic.py` asserts each case produced the shape it intended.
   Contacts key off `ContactType` (with a trailing space, `"E-mail "`), not
   `Type`; addresses are their own array keyed on `Address`.
+- **An assertion indented into the wrong loop runs once and proves nothing
+  about the rest.** The guarantor-roles check sat one level too deep and ran
+  for a single card; it now runs per card via `_assert_frames` (2 Sep 2026).
+  Same family as the trap above: a green run is only evidence if the check
+  demonstrably ran everywhere it claims to.
 - **Do not render two trees in one process.** Python caches the first `aecb`
   package it imports, so the second render silently comes from the first tree.
   Use `AECB_ROOT` and separate processes.

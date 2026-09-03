@@ -13,8 +13,15 @@ Two payload behaviours drive everything here:
      five. Deduping by value collapses those into one entry that remembers which
      providers reported it.
 
-Addresses and employment carry neither marker, so "current" there is decided by
-the latest DateOfLastUpdate.
+Addresses carry neither marker, so "current" there is decided by the latest
+DateOfLastUpdate.
+
+Employment does NOT work that way, despite arriving in the same shape. Its rows
+carry DateOfEmployment and DateOfTermination, which describe the JOB, where
+DateOfLastUpdate only describes the RECORD -- so which employer is current is
+settled by the newest start date, and the update date is allowed to qualify that
+claim but never to decide it. derive/income.py owns that reading; the extras
+merged here are deliberately left raw for it to resolve.
 """
 
 from __future__ import annotations
@@ -22,6 +29,14 @@ from __future__ import annotations
 from .. import dates
 
 HISTORICAL_MARKER = "(historical)"
+
+# Sort anchor for undated entries: they sort last (the tuple's first element
+# already guarantees that) while keeping payload order among themselves.
+_UNDATED = dates.parse_any("1900-01-01")
+
+
+def _newest_first_key(entry):
+    return (entry.updated is not None, entry.updated or _UNDATED)
 
 
 def is_historical(value) -> bool:
@@ -39,7 +54,7 @@ def base_type(value) -> str:
     return text.strip()
 
 
-class Entry(object):
+class Entry:
     """One distinct value, with every provider that reported it."""
 
     def __init__(self, value, historical=False):
@@ -93,19 +108,14 @@ def dedupe(rows, type_key, value_key, provider_key, updated_key, extra_keys=()):
         )
 
     def newest_first(entries):
-        # Entries with no date sort last but keep payload order among themselves.
-        return sorted(
-            entries,
-            key=lambda e: (e.updated is not None, e.updated or dates.parse_any("1900-01-01")),
-            reverse=True,
-        )
+        return sorted(entries, key=_newest_first_key, reverse=True)
 
     current = newest_first([e for e in order if not e.historical])
     historical = newest_first([e for e in order if e.historical])
     return current, historical
 
 
-# --- section 02 accessors ---------------------------------------------------
+# --- section 01 accessors ----------------------------------------------------
 
 def identifiers(ctx, info_type: str):
     """Deduped identification rows for one base type ('EmiratesId', 'Passport')."""
@@ -144,11 +154,7 @@ def addresses(ctx):
             order.append(entry)
         entry.add(row.get("ProviderNo"), row.get("DateOfLastUpdate"))
 
-    ranked = sorted(
-        order,
-        key=lambda e: (e.updated is not None, e.updated or dates.parse_any("1900-01-01")),
-        reverse=True,
-    )
+    ranked = sorted(order, key=_newest_first_key, reverse=True)
     return (ranked[:1], ranked[1:]) if ranked else ([], [])
 
 
@@ -204,8 +210,10 @@ def arabic_name(customer):
 
 
 def age_at(dob, on_date):
-    """Whole years between dob and on_date. None if either is unparseable."""
+    """Whole years between dob and on_date. None if either is unparseable.
+
+    A DOB less than a year before on_date yields 0, not None -- None is
+    reserved for dates that could not be read at all.
+    """
     months = dates.months_between(dob, on_date)
-    if not months:
-        return None
-    return months // 12
+    return None if months is None else months // 12

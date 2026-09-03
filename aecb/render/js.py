@@ -9,7 +9,7 @@ omitted or set to null, and report.js returns early rather than inventing a
 series -- section 08 emits no `applications` key when no application row
 carries a usable date.
 
-The section 04 and 05 timelines are not here: they are inline SVG built in
+The section 03 and 04 timelines are not here: they are inline SVG built in
 their section modules, because whether a timeline can be drawn at all depends
 on which dates the payload carries and that decision belongs beside the data.
 """
@@ -29,10 +29,10 @@ REPORT_JS = os.path.join(_HERE, "report.js")
 
 _cache = {}
 
-_CHART_TOKENS = (
-    "red", "green", "green-mid", "amber",
-    "ink-2", "ink-3", "ink-4", "line-2", "dpd-none", "red-line",
-)
+# Exactly the tokens report.js reads (utilisation colours and the tooltip
+# ground). Shipping the whole palette here just rots: add a name only when
+# report.js gains a reader for it.
+_CHART_TOKENS = ("red", "green-mid", "ink")
 
 _CATEGORY_ORDER = ("I", "C", "N", "S")
 
@@ -58,6 +58,14 @@ def _money(value):
         return None
     try:
         return "{:,.0f}".format(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(value):
+    """Payload integer, or None -- installment counts arrive untyped."""
+    try:
+        return int(float(value))
     except (TypeError, ValueError):
         return None
 
@@ -100,7 +108,8 @@ def _facility_row(ctx, facility) -> dict:
         "os": _money(facility.balance),
         "payment": _money(facility.raw.get("PaymentAmount")),
         "util": facility.utilisation,
-        "maxdpd": facility.max_dpd or 0,
+        # None stays None: "nothing reported" must not become "0 days late".
+        "maxdpd": facility.max_dpd,
         "status": status,
         "delays": delays,
         "reported": reported,
@@ -112,8 +121,8 @@ def _facility_row(ctx, facility) -> dict:
         if facility.utilisation is not None and facility.utilisation > 100:
             row["overLimit"] = True
 
-    installments = facility.raw.get("NoOfInstallments")
-    remaining = facility.raw.get("NoOfRemainingInstallments")
+    installments = _as_int(facility.raw.get("NoOfInstallments"))
+    remaining = _as_int(facility.raw.get("NoOfRemainingInstallments"))
     if installments:
         paid = (installments - remaining) if remaining is not None else None
         row["tenor"] = ("%d / %d" % (paid, installments)) if paid is not None \
@@ -147,8 +156,14 @@ def _in_arrears(facility) -> bool:
         return True
     if facility.raw.get("Current_DaysPaymentDelay"):
         return True
-    status = facility.ctx.status(facility.raw.get("Current_ContractStatus"))
-    return bool(status) and status["rank"] < 100
+    value = facility.raw.get("Current_ContractStatus")
+    if not value:
+        return False
+    # A delivered status the config cannot rank (rank None) counts as adverse
+    # for this split: filing an unreadable status under "no arrears" is the
+    # failure that matters. A status that was never delivered is no signal.
+    rank = facility.ctx.status(value)["rank"]
+    return rank is None or rank < 100
 
 
 def _closed_recently(ctx, facility) -> bool:

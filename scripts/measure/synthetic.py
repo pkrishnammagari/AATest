@@ -23,7 +23,6 @@ Python 3.9 compatible.
 from __future__ import annotations
 
 import copy
-import io
 import json
 import os
 import sys
@@ -259,7 +258,7 @@ def build_cases(base):
     # --- section 05: every tone, and both absences ---------------------------
     # The reference customer is entirely clean, so the only path it renders is
     # the green one. Nothing below is a judgement about this customer; each
-    # case exists to drive one branch of s06_worst_status._grade().
+    # case exists to drive one branch of sections/worst_status.py _grade().
     d = copy.deepcopy(base)
     for r in d["contractsTotalSummary"]:
         r["WorstStatus24M"] = "Write-off"              # rank 40 -> severe, red
@@ -526,8 +525,90 @@ def _fac(got) -> str:
     return "%s · %d nil / %d rows%s" % (util, nils, rows, od)
 
 
+def _assert_frames(name, width, got, fails):
+    """Every structural assertion for one probed width.
+
+    A pure extraction from main(): the same checks in the same order, moved
+    out so main() reads as case -> render -> probe -> assert.
+    """
+    # Section 05's frame: three panels, always, whatever the payload carries.
+    # A missing figure becomes a stated absence in its panel; it never removes
+    # the panel, because a window that vanishes reads as a window with nothing
+    # adverse in it.
+    if len(got["wsx"]) != 3:
+        fails.append("%s@%d: section 05 rendered %d panels, not 3"
+                     % (name, width, len(got["wsx"])))
+    for panel in got["wsx"]:
+        if panel["clip"]:
+            fails.append("%s@%d: a worst-status panel clips" % (name, width))
+
+    # Section 06's frame: four category cards, always, and every one of
+    # them either empty or carrying BOTH role blocks. A card that shows
+    # only the main holder would leave a reader to infer the guarantor
+    # position from silence, which is the thing the split exists to stop.
+    if len(got["fac"]) != 4:
+        fails.append("%s@%d: section 06 rendered %d cards, not 4"
+                     % (name, width, len(got["fac"])))
+    chips = set(f["chipBg"] for f in got["fac"] if f["chipBg"])
+    if len(chips) > 1:
+        fails.append("%s@%d: category chips are not one colour (%s)"
+                     % (name, width, ", ".join(sorted(chips))))
+    for card in got["fac"]:
+        if card["clip"]:
+            fails.append("%s@%d: facility card %s clips"
+                         % (name, width, card["cat"]))
+        # Every non-empty card carries BOTH role blocks -- see the frame note
+        # above. This must run per card, for every case: it once sat under the
+        # strip-misalignment branch below, reading this loop's leftover
+        # variable, and asserted nothing.
+        if not card["empty"] and card["roles"] != ["Main holder", "Guarantor"]:
+            fails.append("%s@%d: card %s has roles %r, not both"
+                         % (name, width, card["cat"], card["roles"]))
+
+    # Section 07: every facility reaches exactly one bucket. A row that
+    # falls out of all four would simply vanish from the report, which
+    # is the one failure mode this restructure could introduce.
+    if got["hm"]["rows"] != 15:
+        fails.append("%s@%d: section 07 lists %d facilities, not 15"
+                     % (name, width, got["hm"]["rows"]))
+    if got["hm"]["clip"]:
+        fails.append("%s@%d: section 07 clips" % (name, width))
+    # Section 08: every dated application reaches the axis. A marker
+    # that falls off it vanishes from the report entirely.
+    if not got["apps"]["empty"] and got["apps"]["events"] != 15:
+        fails.append("%s@%d: section 08 plotted %d applications, not 15"
+                     % (name, width, got["apps"]["events"]))
+    if got["apps"]["clip"]:
+        fails.append("%s@%d: section 08 clips" % (name, width))
+    # The lane cap is what keeps this bounded. Without it the chart's
+    # height is a function of how many applications share a date.
+    if got["apps"]["h"] > 200:
+        fails.append("%s@%d: section 08's chart is %dpx tall -- the lane "
+                     "cap is not holding" % (name, width, got["apps"]["h"]))
+
+    if got["hm"]["misaligned"]:
+        fails.append("%s@%d: section 07's strips are out of register in "
+                     "%d cell(s) -- a month does not line up with itself "
+                     "across status / DPD / utilisation"
+                     % (name, width, got["hm"]["misaligned"]))
+
+    for row in got["rows"]:
+        if row["clip"]:
+            fails.append("%s@%d: a tile clips" % (name, width))
+        if row["fill"] < 97.0:
+            fails.append("%s@%d: row only %.1f%% full -- hole in the grid"
+                         % (name, width, row["fill"]))
+        if not row["equal"]:
+            fails.append("%s@%d: tiles in a row are unequal heights"
+                         % (name, width))
+    if got["ppClip"]:
+        fails.append("%s@%d: the passport value line clips" % (name, width))
+    if got["overflow"]:
+        fails.append("%s@%d: horizontal overflow" % (name, width))
+
+
 def main() -> int:
-    base = json.load(io.open(paths.PAYLOAD, encoding="utf-8"))
+    base = json.load(open(paths.PAYLOAD, encoding="utf-8"))
     cases = build_cases(base)
     tmp = paths.work("_synthetic_payload.json")
     fails = []
@@ -536,8 +617,9 @@ def main() -> int:
           % ("case", "s1/s2", "grid", "rows (tiles, fill%)", "vintage",
              "05 panels", "06 util / guarantor"))
     for name, data in cases.items():
-        io.open(tmp, "w", encoding="utf-8").write(json.dumps(data))
+        open(tmp, "w", encoding="utf-8").write(json.dumps(data))
         html = paths.render(tmp)
+        got = None
         for width in (1560, 1509):
             got = paths.probe(html, JS, width, sentinel="Y")
             if width == 1560:
@@ -546,77 +628,10 @@ def main() -> int:
                       % (name, "%d/%d" % (got["s1"], got["s2"]),
                          "%dtr" % got["tracks"], rows,
                          got["vintage"] or "(none)", _wsx(got), _fac(got)))
+            _assert_frames(name, width, got, fails)
 
-            # Section 05's frame: three panels, always, whatever the payload
-            # carries. A missing figure becomes a stated absence in its panel;
-            # it never removes the panel, because a window that vanishes reads
-            # as a window with nothing adverse in it.
-            if len(got["wsx"]) != 3:
-                fails.append("%s@%d: section 05 rendered %d panels, not 3"
-                             % (name, width, len(got["wsx"])))
-            for panel in got["wsx"]:
-                if panel["clip"]:
-                    fails.append("%s@%d: a worst-status panel clips" % (name, width))
-
-            # Section 06's frame: four category cards, always, and every one of
-            # them either empty or carrying BOTH role blocks. A card that shows
-            # only the main holder would leave a reader to infer the guarantor
-            # position from silence, which is the thing the split exists to stop.
-            if len(got["fac"]) != 4:
-                fails.append("%s@%d: section 06 rendered %d cards, not 4"
-                             % (name, width, len(got["fac"])))
-            chips = set(f["chipBg"] for f in got["fac"] if f["chipBg"])
-            if len(chips) > 1:
-                fails.append("%s@%d: category chips are not one colour (%s)"
-                             % (name, width, ", ".join(sorted(chips))))
-            for card in got["fac"]:
-                if card["clip"]:
-                    fails.append("%s@%d: facility card %s clips"
-                                 % (name, width, card["cat"]))
-
-            # Section 07: every facility reaches exactly one bucket. A row that
-            # falls out of all four would simply vanish from the report, which
-            # is the one failure mode this restructure could introduce.
-            if got["hm"]["rows"] != 15:
-                fails.append("%s@%d: section 07 lists %d facilities, not 15"
-                             % (name, width, got["hm"]["rows"]))
-            if got["hm"]["clip"]:
-                fails.append("%s@%d: section 07 clips" % (name, width))
-            # Section 08: every dated application reaches the axis. A marker
-            # that falls off it vanishes from the report entirely.
-            if not got["apps"]["empty"] and got["apps"]["events"] != 15:
-                fails.append("%s@%d: section 08 plotted %d applications, not 15"
-                             % (name, width, got["apps"]["events"]))
-            if got["apps"]["clip"]:
-                fails.append("%s@%d: section 08 clips" % (name, width))
-            # The lane cap is what keeps this bounded. Without it the chart's
-            # height is a function of how many applications share a date.
-            if got["apps"]["h"] > 200:
-                fails.append("%s@%d: section 08's chart is %dpx tall -- the lane "
-                             "cap is not holding" % (name, width, got["apps"]["h"]))
-
-            if got["hm"]["misaligned"]:
-                fails.append("%s@%d: section 07's strips are out of register in "
-                             "%d cell(s) -- a month does not line up with itself "
-                             "across status / DPD / utilisation"
-                             % (name, width, got["hm"]["misaligned"]))
-                if not card["empty"] and card["roles"] != ["Main holder", "Guarantor"]:
-                    fails.append("%s@%d: card %s has roles %r, not both"
-                                 % (name, width, card["cat"], card["roles"]))
-
-            for row in got["rows"]:
-                if row["clip"]:
-                    fails.append("%s@%d: a tile clips" % (name, width))
-                if row["fill"] < 97.0:
-                    fails.append("%s@%d: row only %.1f%% full -- hole in the grid"
-                                 % (name, width, row["fill"]))
-                if not row["equal"]:
-                    fails.append("%s@%d: tiles in a row are unequal heights"
-                                 % (name, width))
-            if got["ppClip"]:
-                fails.append("%s@%d: the passport value line clips" % (name, width))
-            if got["overflow"]:
-                fails.append("%s@%d: horizontal overflow" % (name, width))
+        # A mutation is a payload fact, not a width fact, so it is verified
+        # once -- against the LAST width probed (1509).
         check = EXPECT.get(name)
         if check and not check(got):
             fails.append("%s: the mutation did not take -- this case proved nothing"

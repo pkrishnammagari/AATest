@@ -1,4 +1,4 @@
-"""02 Identity & demographics -- who the applicant is, plus prior identifiers.
+"""Identity & demographics -- who the applicant is, plus prior identifiers.
 
 Sources: customerInfo, identification, contacts, addresses.
 

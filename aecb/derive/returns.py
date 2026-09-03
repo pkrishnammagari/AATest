@@ -21,7 +21,7 @@ from __future__ import annotations
 from .. import dates
 
 
-class Return(object):
+class Return:
     """One returned instrument, as delivered."""
 
     def __init__(self, row, cfg):
@@ -48,7 +48,7 @@ class Return(object):
 
 
 def build(ctx) -> dict:
-    """Everything section 05 needs.
+    """Everything section 04 needs.
 
     `chart` is 'timeline' when at least one return carries a date, else
     'none'. Records without a date stay in `undated` -- listed, never plotted.

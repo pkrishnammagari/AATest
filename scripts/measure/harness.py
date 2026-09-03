@@ -17,7 +17,6 @@ Python 3.9 compatible.
 """
 from __future__ import annotations
 
-import io
 import json
 import os
 import sys
@@ -103,7 +102,7 @@ def main() -> int:
         for width in paths.WIDTHS:
             data = paths.probe(doc, JS, width, sentinel="P")
             target = os.path.join(outdir, "%s_%d.json" % (state, width))
-            io.open(target, "w", encoding="utf-8").write(
+            open(target, "w", encoding="utf-8").write(
                 json.dumps(data, indent=1, sort_keys=True))
             print("  %-8s %5dpx  bodyH=%-6s sections=%s"
                   % (state, width, data["meta"]["bodyH"],

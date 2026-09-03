@@ -6,14 +6,18 @@
     "mapping are policy configuration and live here.",
     "",
     "The screen renders the delivered band; it does not recompute it. The scale",
-    "geometry below exists only to position the gauge marker."
+    "geometry below exists only to position the gauge marker.",
+    "",
+    "Each band runs from its `from` to the NEXT band's `from` (the last runs to",
+    "scale.max) -- scoring.gauge() derives zone ends that way, so there is no",
+    "`to` field to fall out of step with."
   ],
   "scale": {"min": 300, "max": 900},
   "fh_bands": [
-    {"code": "HR",  "label": "High risk",     "from": 300, "to": 619, "tone": "red"},
-    {"code": "MR",  "label": "Medium risk",   "from": 620, "to": 678, "tone": "amber"},
-    {"code": "LR",  "label": "Low risk",      "from": 679, "to": 729, "tone": "green-mid"},
-    {"code": "VLR", "label": "Very low risk", "from": 730, "to": 900, "tone": "green"}
+    {"code": "HR",  "label": "High risk",     "from": 300, "tone": "red"},
+    {"code": "MR",  "label": "Medium risk",   "from": 620, "tone": "amber"},
+    {"code": "LR",  "label": "Low risk",      "from": 679, "tone": "green-mid"},
+    {"code": "VLR", "label": "Very low risk", "from": 730, "tone": "green"}
   ],
   "aecb_ranges": {
     "_comment": "score.DataRange letter -> AECB descriptive band. Confirm against the AECB scorecard spec before relying on these labels.",
@@ -40,5 +44,5 @@
     ]
   },
   "validity_days": 30,
-  "_validity_comment": "Report look-back window in days, used by section 01."
+  "_validity_comment": "Report look-back window in days, shown as the validity meter in the top bar (aecb/render/shell.py)."
 }

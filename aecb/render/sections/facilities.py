@@ -1,4 +1,4 @@
-"""06 Active credit facilities -- the book at a glance, split by role.
+"""Active credit facilities -- the book at a glance, split by role.
 
 Sources: contractsFinancialSummary (payment / limit / balance / overdue, per
 category x role), contractsTotalSummary (exposure, newest facility, card
@@ -79,15 +79,13 @@ def _aside(ctx):
 
     exposure = totals.get("TotalExposure")
     if exposure is not None:
-        parts.append(c.tag('Total exposure <b style="font-weight:700; margin-left:4px">%s</b>'
-                           % c.aed(exposure)))
+        parts.append(c.tag('Total exposure <b>%s</b>' % c.aed(exposure)))
 
     # How recently the customer last took on credit. §02 carries the oldest
     # facility as the vintage; this is the other end of the same axis.
     newest = totals.get("NewestContractOpenDate")
     if dates.parse_any(newest):
-        parts.append(c.tag('Newest facility <b style="font-weight:700; margin-left:4px">%s</b>'
-                           % dates.fmt_short(newest)))
+        parts.append(c.tag('Newest facility <b>%s</b>' % dates.fmt_short(newest)))
 
     # Only when there IS guaranteed exposure. A zero here is what backs the
     # per-category "no guaranteed exposure" lines, so showing it as a chip too
@@ -241,5 +239,5 @@ def _utilisation(ctx):
 
 
 def _tag_delivered():
-    return ('<span class="prov-mark delivered" data-info="Delivered by AECB in '
-            'contractsTotalSummary and shown verbatim.">delivered</span>')
+    return c.delivered_mark("Delivered by AECB in contractsTotalSummary "
+                            "and shown verbatim.")

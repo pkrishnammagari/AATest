@@ -7,7 +7,7 @@
  * Sections:
  *   1. helpers
  *   2. charts   (enquiries, heatmap)
- *   3. behaviour (tooltip, expanders, folds, citations, spine nav, rail)
+ *   3. behaviour (tooltip, expanders, folds, spine nav, rail)
  */
 (function () {
   "use strict";
@@ -19,9 +19,11 @@
 
   // Parse 'YYYY-MM-DD' as a LOCAL date. new Date('2023-10-26') would parse as
   // UTC and can land on the previous day west of Greenwich, shifting every
-  // month label on the axis.
+  // month label on the axis. Returns null for a missing date -- falling back
+  // to "today" would stamp real month names onto a report whose date the
+  // payload never stated.
   function d(iso) {
-    if (!iso) return new Date();
+    if (!iso) return null;
     var p = String(iso).slice(0, 10).split("-");
     return new Date(+p[0], +p[1] - 1, +p[2]);
   }
@@ -45,16 +47,12 @@
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  function fmt(n) {
-    return Number(n).toLocaleString("en");
-  }
-
   /* ---------- 2. charts ---------- */
 
   /* Section 04's timeline is inline SVG built in Python, not drawn here: the
      decision of whether a chart can be drawn at all depends on which dates the
      payload carries, and that decision belongs beside the data it is made from.
-     See aecb/render/sections/s04_income.py. */
+     See aecb/render/sections/income.py. */
 
   /* Section 06's utilisation line is built in Python, not here. It reads one
      delivered field (contractsTotalSummary.CreditUtilizationRate) and draws a
@@ -62,7 +60,7 @@
      average-vs-peak trend chart went with the 7 Aug 2026 rebuild. */
 
   /* Section 05's returns timeline is inline SVG built in Python, like section
-     04's -- see aecb/render/sections/s05_returns.py. */
+     04's -- see aecb/render/sections/returns.py. */
 
   /* Section 08's application timeline.
 
@@ -78,8 +76,11 @@
     if (!cfg || !node) return;
 
     var LANE = cfg.lanePitch, BASE = 30;
-    var h = '<div class="enq-focus" style="left:' + cfg.split + '%"></div>' +
-            '<div class="enq-split" style="left:' + cfg.split + '%"></div>' +
+    // split 0 = the focus window IS the whole axis; there is no break to draw.
+    var h = (cfg.split > 0
+              ? '<div class="enq-focus" style="left:' + cfg.split + '%"></div>' +
+                '<div class="enq-split" style="left:' + cfg.split + '%"></div>'
+              : "") +
             '<div class="tl-axis"></div>';
 
     (cfg.ticks || []).forEach(function (t) {
@@ -112,13 +113,19 @@
     var FREQ = cfg.frequency || {};
     var DPD = cfg.dpdBuckets || [];
 
+    // Month label for a cell. Without a report date there is nothing to anchor
+    // real month names to, so cells are labelled by their offset instead.
+    function lbl(m) {
+      return now ? moLbl(now, m) : "m−" + m;
+    }
     function meta(code) {
-      return ST[code] || { label: "Unmapped code", rank: 100 };
+      // rank null = severity unknown -- painted as unknown, never as clean.
+      return ST[code] || { label: "Not in the AECB status table — severity unknown", rank: null };
     }
     // Colour band follows the bureau's own severity ranking.
     function stCls(code) {
       var r = meta(code).rank;
-      return r <= 60 ? "ss" : r < 100 ? "sa" : "sn";
+      return r == null ? "su" : r <= 60 ? "ss" : r < 100 ? "sa" : "sn";
     }
     function bucket(days) {
       for (var i = 0; i < DPD.length; i++) {
@@ -130,32 +137,17 @@
       return v == null ? "var(--dpd-none)" : (v > 100 ? T.red : T["green-mid"]);
     }
 
-    /* Frame-stage fallback only. Once contractsHistory is wired, Python emits a
-       real `u` array per contract and this is never called. */
-    function genU(open, cur, peak) {
-      var arr = [], span = Math.min(open, M - 1);
-      for (var m = 0; m < M; m++) {
-        if (m > open) { arr.push(null); continue; }
-        var t = span > 0 ? 1 - m / span : 1;
-        var v = Math.round(cur * 0.55 + t * (cur * 0.45));
-        if (m < 6 && peak > v) v = Math.round(v + (peak - v) * (1 - m / 6) * 0.9);
-        arr.push(Math.max(2, Math.min(Math.max(peak, cur), v)));
-      }
-      return arr;
-    }
-
     function rowHtml(c) {
       var stats = "";
-      if (c.limit && c.limit !== "—") stats += '<span class="stat">Limit <b>' + esc(c.limit) + "</b></span>";
-      if (c.os && c.os !== "—") stats += '<span class="stat">OS <b>' + esc(c.os) + "</b></span>";
+      if (c.limit) stats += '<span class="stat">Limit <b>' + esc(c.limit) + "</b></span>";
+      if (c.os) stats += '<span class="stat">OS <b>' + esc(c.os) + "</b></span>";
       if (c.payment) stats += '<span class="stat">Payment <b>' + esc(c.payment) + "</b></span>";
       if (c.tenor) stats += '<span class="stat">Tenor <b>' + esc(c.tenor) + "</b></span>";
       if (c.util != null) {
         stats += '<span class="stat">Util <b style="color:' +
-                 (c.util > 100 ? "var(--red)" : "var(--green)") + '">' + c.util + "%</b></span>";
+                 (c.util > 100 ? "var(--red)" : "var(--green)") + '">' + esc(c.util) + "%</b></span>";
       }
-      if (c.contact) stats += '<span class="stat">Contact on file <b>' + esc(c.contact) + "</b></span>";
-      if (c.maxdpd > 0) stats += '<span class="stat dpd">Max DPD <b>' + c.maxdpd + "</b></span>";
+      if (c.maxdpd > 0) stats += '<span class="stat dpd">Max DPD <b>' + esc(c.maxdpd) + "</b></span>";
       // How much of the window this provider actually filed. A row with two
       // reported months tells you almost nothing, however green it looks.
       if (c.monthsReported != null) {
@@ -173,11 +165,18 @@
       }
       if (c.closedOn) {
         stats += '<span class="closed-on">Closed ' + esc(c.closedOn) + "</span>";
-        var fs = c.finalStatus || "U";
-        stats += '<span class="final-st ' + stCls(fs) + '" data-info="Final contract status ' +
-                 esc(fs) + " — " + esc(meta(fs).label) +
-                 '. This is the status AECB carries for the contract\'s closing month.">Final · ' +
-                 esc(meta(fs).label) + "</span>";
+        if (c.finalStatus) {
+          stats += '<span class="final-st ' + stCls(c.finalStatus) + '" data-info="Final contract status ' +
+                   esc(c.finalStatus) + " — " + esc(meta(c.finalStatus).label) +
+                   '. This is the status AECB carries for the contract\'s closing month.">Final · ' +
+                   esc(meta(c.finalStatus).label) + "</span>";
+        } else {
+          // No history row for the closing month (closures outside the window
+          // included). The lifetime WorstStatus is NOT a stand-in for it.
+          stats += '<span class="final-st na" data-info="AECB delivers no status ' +
+                   'row for this contract\'s closing month, so the closing ' +
+                   'status is not reported.">Final · not reported</span>';
+        }
       }
       /* Frequency shows only when AECB delivers one. The old "Frequency n/a"
          chip appeared on every card and service row, and it was not stating a
@@ -220,17 +219,17 @@
       for (m = 0; m < M; m++) {
         if (m > c.openMonths) { h += '<div class="scell sx"></div>'; continue; }
         if (c.closedAtMonth != null && m < c.closedAtMonth) {
-          h += '<div class="scell sc" data-info="' + moLbl(now, m) + " · contract closed " +
+          h += '<div class="scell sc" data-info="' + lbl(m) + " · contract closed " +
                esc(c.closedOn) + ' — no history reported"></div>';
           continue;
         }
         if (!wasReported(m)) {
-          h += '<div class="scell sx" data-info="' + moLbl(now, m) +
+          h += '<div class="scell sx" data-info="' + lbl(m) +
                ' · no status reported for this month"></div>';
           continue;
         }
         var k = st[m] || "U";
-        h += '<div class="scell ' + stCls(k) + '" data-info="' + moLbl(now, m) + " · status " +
+        h += '<div class="scell ' + stCls(k) + '" data-info="' + lbl(m) + " · status " +
              esc(k) + " — " + esc(meta(k).label) + '">' + esc(k) + "</div>";
       }
       h += '</div><div class="hm-cells">';
@@ -238,17 +237,17 @@
       // DPD strip
       for (m = 0; m < M; m++) {
         if (m > c.openMonths) {
-          h += '<div class="cell dn" data-info="' + moLbl(now, m) +
+          h += '<div class="cell dn" data-info="' + lbl(m) +
                ' · before this facility opened"></div>';
           continue;
         }
         if (c.closedAtMonth != null && m < c.closedAtMonth) {
-          h += '<div class="cell dc" data-info="' + moLbl(now, m) + " · contract closed " +
+          h += '<div class="cell dc" data-info="' + lbl(m) + " · contract closed " +
                esc(c.closedOn) + '"></div>';
           continue;
         }
         if (!wasReported(m)) {
-          h += '<div class="cell dn" data-info="' + moLbl(now, m) +
+          h += '<div class="cell dn" data-info="' + lbl(m) +
                ' · NOT REPORTED — the provider filed no row for this month. ' +
                'This is not a record of on-time payment."></div>';
           continue;
@@ -256,18 +255,19 @@
         var dl = delays[m];
         if (dl) {
           var b = bucket(dl.days);
-          h += '<div class="cell ' + b["class"] + '" data-info="' + moLbl(now, m) + " · " +
-               dl.days + " days past due · status: " + esc(b.label) + " · balance AED " +
-               esc(c.os) + '">' + dl.days + "</div>";
+          h += '<div class="cell ' + b["class"] + '" data-info="' + lbl(m) + " · " +
+               esc(dl.days) + " days past due · status: " + esc(b.label) + " · balance AED " +
+               esc(c.os) + '">' + esc(dl.days) + "</div>";
         } else {
-          h += '<div class="cell d0" data-info="' + moLbl(now, m) +
+          h += '<div class="cell d0" data-info="' + lbl(m) +
                ' · current (0 DPD) · balance AED ' + esc(c.os) + '"></div>';
         }
       }
       h += "</div>";
 
-      // utilisation sub-strip, cards and overdrafts only
-      var us = c.u || (c.utilCurrent != null ? genU(c.openMonths, c.utilCurrent, c.utilPeak) : null);
+      // utilisation sub-strip, cards and overdrafts only. Only a payload-fed
+      // series draws -- nothing here synthesises one.
+      var us = c.u;
       if (us) {
         h += '<div class="hm-ustrip">';
         for (m = 0; m < M; m++) {
@@ -276,7 +276,7 @@
             h += '<div class="ucell" style="background:var(--dpd-none)"></div>';
           } else {
             h += '<div class="ucell" style="background:' + uCol(v) + '" data-info="' +
-                 moLbl(now, m) + " · utilisation " + v + "%" + (v > 100 ? " · OVER LIMIT" : "") +
+                 lbl(m) + " · utilisation " + esc(v) + "%" + (v > 100 ? " · OVER LIMIT" : "") +
                  '"></div>';
           }
         }
@@ -292,7 +292,7 @@
     var html = '<div class="hm-axis"><div class="hm-axis-lab"></div><div class="hm-months">';
     for (var m = 0; m < M; m++) {
       html += '<div class="hm-mo ' + (m % 6 === 0 ? "" : "tk") + '">' +
-              (m % 6 === 0 ? moLbl(now, m) : "·") + "</div>";
+              (m % 6 === 0 ? lbl(m) : "·") + "</div>";
     }
     html += "</div></div>";
 
@@ -347,10 +347,14 @@
       return '<span class="stl"><i class="' + stCls(k) + '">' + esc(k) + "</i>" +
              esc(meta(k).label) + "</span>";
     };
+    // '?' is not a config code, so it joins the head chips only when an
+    // unknown status actually occurred in this report.
+    var present = order.filter(function (k) { return seen[k]; });
+    if (seen["?"]) present.push("?");
     var head = el("stlHead"), grid = el("stlGrid"), all = el("stlAll");
     if (head && grid) {
       head.innerHTML = '<span class="stl-t">Monthly status</span>' +
-        order.filter(function (k) { return seen[k]; }).map(chip).join("") +
+        present.map(chip).join("") +
         '<button class="stl-more" id="stlMore">all status codes ▾</button>';
       grid.innerHTML = order.filter(function (k) { return !seen[k]; }).map(chip).join("");
       var more = el("stlMore");
@@ -368,8 +372,9 @@
   /* One shared tooltip for every [data-info] element. */
   function tooltips() {
     var tip = document.createElement("div");
+    // Text colour has no token: it is the tooltip's own light-on-ink pairing.
     tip.style.cssText =
-      "position:fixed;z-index:100;background:#141E2C;color:#EAF0F5;" +
+      "position:fixed;z-index:100;background:" + (T.ink || "#141E2C") + ";color:#EAF0F5;" +
       'font-family:"IBM Plex Mono",monospace;font-size:10px;padding:6px 9px;border-radius:6px;' +
       "pointer-events:none;opacity:0;transition:opacity .1s;" +
       "box-shadow:0 8px 30px rgba(20,30,44,.35);max-width:230px;line-height:1.45";
@@ -434,20 +439,6 @@
     });
   }
 
-  /* Brief citation chips jump to their evidence, expanding it if folded. */
-  function citations() {
-    document.querySelectorAll(".cite").forEach(function (chip) {
-      chip.addEventListener("click", function () {
-        var t = el(chip.dataset.t);
-        if (!t) return;
-        secOpen(t);
-        t.scrollIntoView({ behavior: "smooth", block: "center" });
-        t.classList.add("flash");
-        setTimeout(function () { t.classList.remove("flash"); }, 1400);
-      });
-    });
-  }
-
   function spineNav() {
     var dots = [].slice.call(document.querySelectorAll(".spine-dot"));
     if (!dots.length) return;
@@ -485,7 +476,6 @@
   window.__bindTips();      // charts injected new [data-info] nodes
   expanders();
   collapsibles();
-  citations();
   spineNav();
   railToggle();
 })();

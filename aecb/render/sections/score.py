@@ -34,9 +34,9 @@ META = {
 # had ~13px of slack to spend. Red/amber/green is the correct vocabulary here
 # despite the "risk only" rule: a score band IS a risk grade.
 #
-# Anything not in these maps falls through to the green default below, which is
-# also what an unknown tone gets -- see scoring.fh_band(), which defaults to
-# "green" for an unrecognised band code.
+# An unrecognised band code arrives with an empty tone from scoring.fh_band()
+# and renders as the neutral chip -- an unknown risk band has earned no colour,
+# least of all green. Only a configured green tone gets the green fill.
 _FILL = {"red": "var(--red)", "amber": "var(--amber)"}
 _LINE = {"red": "var(--red)", "amber": "var(--amber)"}
 
@@ -100,7 +100,7 @@ def _band_block(ctx) -> str:
 
 def _band_chip(label, source, tone) -> str:
     """One band tile: the band on the left, the scorecard that named it right."""
-    if tone is None:
+    if not tone:
         return ('<span class="ss-band neutral">%s<em>%s</em></span>'
                 % (c.esc(label), source))
     return ('<span class="ss-band" style="background:%s; color:#fff; '

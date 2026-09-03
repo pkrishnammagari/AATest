@@ -131,12 +131,17 @@ def timeline(ctx, rows):
     dated.sort(key=lambda item: -item[0])          # oldest first
     oldest_days = dated[0][0]
 
-    split_pct = (1.0 - FOCUS_FRACTION) * 100.0
+    # When every dated application sits inside the focus window there is no
+    # older zone to compress: the focus takes the whole axis, split lands at 0
+    # and the renderer draws no break -- claiming a compressed zone that holds
+    # nothing would misstate the axis.
+    focus_fraction = FOCUS_FRACTION if oldest_days > FOCUS_DAYS else 1.0
+    split_pct = (1.0 - focus_fraction) * 100.0
 
     def x_of(days_ago):
         """Days-ago to a percentage. Piecewise, continuous at the boundary."""
         if days_ago <= FOCUS_DAYS:
-            return 100.0 - (days_ago / float(FOCUS_DAYS)) * FOCUS_FRACTION * 100.0
+            return 100.0 - (days_ago / float(FOCUS_DAYS)) * focus_fraction * 100.0
         span = max(1.0, oldest_days - FOCUS_DAYS)
         travelled = (days_ago - FOCUS_DAYS) / span
         return (1.0 - travelled) * split_pct
@@ -230,14 +235,26 @@ def _info(row, when, days_ago, ctx):
     phase = str(row.get("Phase") or "").strip()
     parts.append("Phase: %s" % (phase or "not reported"))
 
-    amount = row.get("TotalAmount")
-    limit = row.get("CreditLimit")
+    amount = _aed(row.get("TotalAmount"))
+    limit = _aed(row.get("CreditLimit"))
     if amount:
-        parts.append("Amount AED {:,.0f}".format(float(amount)))
+        parts.append("Amount %s" % amount)
     if limit:
-        parts.append("Limit sought AED {:,.0f}".format(float(limit)))
+        parts.append("Limit sought %s" % limit)
     installments = row.get("NoOfInstallments")
     if installments:
         parts.append("%s installments" % installments)
 
     return " · ".join(parts)
+
+
+def _aed(value):
+    """'AED 12,500', or None when the payload delivers nothing numeric.
+
+    Amounts are untrusted input: a value like '12,500' must drop out of the
+    hover line, not raise mid-render and take the whole report with it.
+    """
+    try:
+        return "AED {:,.0f}".format(float(value))
+    except (TypeError, ValueError):
+        return None

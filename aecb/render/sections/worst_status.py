@@ -1,4 +1,4 @@
-"""05 Worst statuses -- three delivered figures, shown verbatim.
+"""Worst statuses -- three delivered figures, shown verbatim.
 
 Sources: contractsTotalSummary.WorstStatus24M and summary.Worststatus.
 
@@ -142,12 +142,11 @@ def _lifetime_count(ctx):
 def _known_status(ctx, value):
     """The AECB status this text names, or None when it names none.
 
-    ctx.status() is deliberately lenient: anything it cannot match comes back
-    as rank 100 with the first letter as a code, which is right for the heatmap
-    (a cell must still draw) and wrong here. Rank 100 is the *clean* rank, so
-    an unrecognised status would be painted green -- a reassurance the bureau
-    never gave. This resolves strictly, on code or on label, and returns None
-    otherwise.
+    ctx.status() also refuses to grade the unknown (it returns rank None), but
+    this panel wants the config row itself and a plain None for "unrecognised",
+    so it resolves strictly here -- on code or on label -- and _grade() leaves
+    anything unresolved uncoloured. A green tone is a reassurance the bureau
+    never gave.
     """
     codes = ctx.status_codes.get("codes") or {}
     text = str(value).strip()
@@ -211,5 +210,5 @@ def _panel(window_label, provenance, headline, sub="", tone="", state="clean"):
 
 
 def _tag_delivered():
-    return ('<span class="prov-mark delivered" data-info="Delivered by AECB and '
-            'shown verbatim. Not computed here.">delivered</span>')
+    return c.delivered_mark("Delivered by AECB and shown verbatim. "
+                            "Not computed here.")

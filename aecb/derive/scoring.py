@@ -32,8 +32,10 @@ def fh_band(ctx):
     for band in ctx.bands.get("fh_bands") or []:
         if band.get("code") == code:
             return {"code": code, "label": band.get("label", code),
-                    "tone": band.get("tone", "green")}
-    return {"code": code, "label": code, "tone": "green"}
+                    "tone": band.get("tone", "")}
+    # A band code the config does not know. Tone stays neutral: green is the
+    # best-case colour, and an unrecognised risk band has earned no colour.
+    return {"code": code, "label": code, "tone": ""}
 
 
 def aecb_band(ctx):
@@ -66,7 +68,9 @@ def gauge(ctx):
         return None
 
     span = float(hi - lo)
-    at = lambda v: max(0.0, min(100.0, (v - lo) / span * 100.0))
+
+    def at(v):
+        return max(0.0, min(100.0, (v - lo) / span * 100.0))
 
     bands = ctx.bands.get("fh_bands") or []
     zones = []
@@ -94,8 +98,9 @@ def history_months(ctx):
     oldest = ctx.totals.get("OldestContractOpenDate")
     if not oldest or not ctx.report_date:
         return None
-    months = dates.months_between(oldest, ctx.report_date)
-    return months or None
+    # months_between returns None only for an unparseable date; a genuine 0 --
+    # a file opened this month -- is a real length and must reach the B1 band.
+    return dates.months_between(oldest, ctx.report_date)
 
 
 def vintage_band(ctx):

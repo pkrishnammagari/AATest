@@ -22,7 +22,7 @@ ROOT = os.environ.get("AECB_ROOT") or os.path.dirname(
 #
 # NEVER inside ROOT. app.py's list_payloads() scans ReferenceJSON/ and would
 # offer stray copies in the sidebar; the py39 sweep in HANDOFF walks every
-# *.py under the tree; and check_no_mock.py reads rendered output. Keeping
+# *.py under the tree; and check_report.py reads rendered output. Keeping
 # the work area outside the repo keeps all three honest.
 WORK = os.environ.get("AECB_WORK") or os.path.join(
     tempfile.gettempdir(), "aecb-measure")
@@ -114,12 +114,16 @@ def shoot(html: str, width: int, height: int, png: str, scale: int = 1) -> None:
     page = work("_shot.html")
     with open(page, "w") as handle:
         handle.write(html)
-    subprocess.run(
+    done = subprocess.run(
         [chrome(), "--headless", "--disable-gpu", "--no-sandbox",
          "--hide-scrollbars", "--force-device-scale-factor=%d" % scale,
          "--window-size=%d,%d" % (width, height),
          "--virtual-time-budget=6000", "--screenshot=" + png,
-         "file://" + page], capture_output=True)
+         "file://" + page], capture_output=True, text=True)
+    # A Chrome crash otherwise surfaces later as a missing PNG with no clue.
+    if done.returncode != 0:
+        raise RuntimeError("Chrome exited %d taking the screenshot: %s"
+                           % (done.returncode, (done.stderr or "").strip()[-400:]))
 
 
 def probe(html: str, script: str, width: int, sentinel: str = "M") -> dict:
@@ -139,15 +143,20 @@ def probe(html: str, script: str, width: int, sentinel: str = "M") -> dict:
     page = work("_probe.html")
     with open(page, "w") as handle:
         handle.write(html.replace("</body>", script + "</body>"))
-    dom = subprocess.run(
+    done = subprocess.run(
         [chrome(), "--headless", "--disable-gpu", "--no-sandbox",
          "--hide-scrollbars", "--force-device-scale-factor=1",
          "--window-size=%d,1200" % width, "--virtual-time-budget=6000",
          "--dump-dom", "file://" + page],
-        capture_output=True, text=True).stdout
+        capture_output=True, text=True)
+    # Fail on the crash, not on the cryptic "no probe payload" it causes.
+    if done.returncode != 0:
+        raise RuntimeError("Chrome exited %d probing at width %d: %s"
+                           % (done.returncode, width,
+                              (done.stderr or "").strip()[-400:]))
     match = re.search(
         r"%s(?:&lt;&lt;|<<)([A-Za-z0-9+/=]+)(?:&gt;&gt;|>>)%s" % (sentinel, sentinel),
-        dom)
+        done.stdout)
     if not match:
         raise RuntimeError("no probe payload at width %d" % width)
     return json.loads(base64.b64decode(match.group(1)).decode("utf-8"))

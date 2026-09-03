@@ -29,7 +29,7 @@ import datetime
 from .. import dates
 from . import identity
 
-class Record(object):
+class Record:
     """One employer, collapsed across the providers that reported it."""
 
     def __init__(self, entry):
@@ -49,10 +49,44 @@ class Record(object):
 
         self.point_date = None
         self.point_basis = None          # 'updated' | 'started'
+        # Does DateOfLastUpdate still vouch for this row at the report date?
+        # True / False / None(no update date arrived -- unknown, NOT unconfirmed)
+        self.confirmed = None
 
     @property
     def plottable(self) -> bool:
         return self.income_usable and self.point_date is not None
+
+    @property
+    def stale(self) -> bool:
+        """Positively known to be unrefreshed. Absence of an update date is not.
+
+        Only ever True when DateOfLastUpdate actually arrived and fell outside
+        the configured window, so a payload that omits the field entirely -- as
+        both current ones do on every employment row -- never trips this.
+        """
+        return self.confirmed is False
+
+    @property
+    def contradictory(self) -> bool:
+        """Ends before it starts. Impossible, so nothing may be drawn from it.
+
+        Left visible as two dates and a mark rather than absorbed: the bar
+        drawing clamps its width to a 3px minimum, which would render this as a
+        plausible-looking short job instead of the data error it is.
+        """
+        return bool(self.started and self.ended and self.ended < self.started)
+
+    @property
+    def ongoing(self) -> bool:
+        """Eligible to be the current job.
+
+        A '(Historical)' name or a DateOfTermination each say the bureau
+        considers this employment finished, and either one disqualifies it
+        however recently it started -- a job that has ended cannot be the
+        current one.
+        """
+        return not self.historical and self.ended is None
 
     @property
     def dated(self) -> bool:
@@ -65,7 +99,7 @@ class Record(object):
 
 
 def build(ctx) -> dict:
-    """Everything section 04 needs, with the chart decision already made.
+    """Everything section 03 needs, with the chart decision already made.
 
     Returns a dict; `chart` is one of:
 
@@ -77,16 +111,22 @@ def build(ctx) -> dict:
     cfg = ctx.income_cfg or {}
     floor = cfg.get("placeholder_floor") or 0
 
-    records = _records(ctx)
+    records = _order(_records(ctx))
     for rec in records:
         _classify_income(rec, floor)
         _place_point(rec)
+        _confirm(rec, ctx.report_date, cfg.get("confirmation_window_months"))
 
+    current = _current(records)
     points = [r for r in records if r.plottable]
     # Lanes run in date order, earliest at the top, so the timeline reads the
     # way it is drawn. The record list below the chart stays current-first,
     # which is the order an underwriter reads employment in.
-    spans = sorted((r for r in records if r.started), key=lambda r: r.started)
+    #
+    # A row whose end precedes its start is excluded outright: there is no
+    # honest bar to draw for it, and the list still shows both dates.
+    spans = sorted((r for r in records if r.started and not r.contradictory),
+                   key=lambda r: r.started)
     undated = [r for r in records if r.income is not None and not r.plottable]
 
     if len(points) >= 2:
@@ -103,9 +143,13 @@ def build(ctx) -> dict:
     # The scale describes what is DRAWN, so it is set by the plotted points
     # alone. Scaling to a figure that never reaches the chart -- an undated
     # 153,900 against a plotted 18,450 -- pins the one real point to the axis.
-    plotted = [r.income for r in points]
+    # Coerced here because rec.income keeps the delivered value verbatim (the
+    # renderer prints it), while max() needs comparable numbers -- a payload
+    # mixing '18450' and 18450 must not compare strings lexicographically.
+    plotted = [float(r.income) for r in points]
     return {
         "records": records,
+        "current": current,
         "points": sorted(points, key=lambda r: r.point_date),
         "spans": spans,
         "undated": undated,
@@ -113,7 +157,7 @@ def build(ctx) -> dict:
         "x0": x0,
         "x1": x1,
         "y1": _nice_ceiling(max(plotted)) if plotted else None,
-        "latest": _latest(records, points),
+        "latest": _latest(records, points, current),
         "floor": floor,
         "currency": cfg.get("currency") or "AED",
         "inferred": any(r.point_basis == "started" for r in points),
@@ -128,9 +172,21 @@ def _records(ctx):
 
     identity.employers() already dedups by employer name, splits the
     '(Historical)' suffix and keeps the provider set. It merges its extras
-    first-non-null-wins, which is wrong for two of the fields here: the update
-    date wants the LATEST across providers, and a dispute reported by any one
-    provider is a dispute. Both are resolved in a second pass over the raw rows.
+    first-non-null-wins, which is wrong for every field that matters here, so
+    all of them are resolved in a second pass over the raw rows:
+
+      DateOfLastUpdate    LATEST across providers -- freshness is the newest
+                          time anyone vouched for the row.
+      FlagOpenDispute     a dispute raised with any one provider is a dispute.
+      DateOfEmployment    EARLIEST -- the job started once, and the earliest
+                          date any provider reports is the best evidence of
+                          when. A later start is a provider that only began
+                          reporting mid-employment.
+      DateOfTermination   LATEST -- if one provider says it ended in 2022 and
+                          another in 2023, the job demonstrably ran to 2023.
+
+    Left to first-non-null, all four answer to payload order instead, which is
+    to say to nothing.
     """
     current, prior = identity.employers(ctx)
     records = [Record(e) for e in current] + [Record(e) for e in prior]
@@ -144,6 +200,14 @@ def _records(ctx):
         updated = dates.parse_any(row.get("DateOfLastUpdate"))
         if updated and (rec.updated is None or updated > rec.updated):
             rec.updated = updated
+
+        started = dates.parse_any(row.get("DateOfEmployment"))
+        if started and (rec.started is None or started < rec.started):
+            rec.started = started
+
+        ended = dates.parse_any(row.get("DateOfTermination"))
+        if ended and (rec.ended is None or ended > rec.ended):
+            rec.ended = ended
 
         # A dispute raised with one provider is still a dispute; only when no
         # provider reported the flag at all does it stay unknown.
@@ -162,6 +226,11 @@ def _classify_income(rec, floor) -> None:
         value = float(rec.income)
     except (TypeError, ValueError):
         rec.income = None
+        return
+
+    # A negative annual income is not a plottable fact. It stays visible in
+    # the record list (undated tail) but must not set the chart scale.
+    if value < 0:
         return
 
     # Zero is a delivered fact ("reported as zero"), not a placeholder, and
@@ -204,22 +273,118 @@ def _domain(ctx, points, spans):
     return x0, x1
 
 
-def _latest(records, points):
-    """The most recent salary the payload supports, and how it was arrived at.
+def _confirm(rec, report_date, window_months) -> None:
+    """Does DateOfLastUpdate still vouch for this row at the report date?
 
-    Preference order, because "latest" is only as good as the dating: the newest
-    figure the bureau dated, else the current employer's, else any usable one.
-    `dated` says which, so the screen can qualify what it is showing rather than
-    implying a currency the payload does not support.
+    This is the ONLY job the update date has in deciding employment status, and
+    it is a qualifying one: it can say a claim is unrefreshed, never that it
+    holds. Which employer is current is settled by the start dates alone --
+    otherwise any bank re-touching a 2019 record would promote it over a 2025
+    job (see _current).
+
+    Stays None when no update date arrived, or when no window is configured:
+    unknown is not the same as unconfirmed, and only a delivered date can make
+    the difference.
     """
+    if rec.updated is None or not report_date or not window_months:
+        return
+
+    # A record last touched before the job it describes even began cannot be
+    # vouching for that job.
+    if rec.started and rec.updated < rec.started:
+        rec.confirmed = False
+        return
+
+    # dates.months_between is the ONE month-arithmetic in this codebase (it
+    # backs off until the day-of-month comes round, so "12 months" means
+    # twelve whole months). A private variant here once made the window up to
+    # a month looser than the configured value.
+    months = dates.months_between(rec.updated, report_date)
+    rec.confirmed = months is not None and months <= window_months
+
+
+def _order(records):
+    """Display order: most recent job first, rows with no job date last.
+
+    Employment reads newest-job-first, the way an underwriter asks the question.
+    The anchor ladder is start, else END, else nothing -- a row that carries a
+    termination but no hire date is still placeable in time, and dropping it in
+    with the undated rows would throw away the one date it does have.
+
+    DateOfLastUpdate is deliberately NOT an anchor. It measures when a provider
+    last touched the record, not when the job ran, and letting it rank against
+    real job dates is the confusion this whole module now separates. It orders
+    only WITHIN the undated tail, where there is nothing better and the rows
+    are otherwise indistinguishable.
+
+    sorted() is stable, so rows with nothing at all keep the bureau's own order
+    -- three of the reference payload's five employers are exactly this.
+
+    The timeline lanes are NOT reordered with this; they stay earliest-at-top,
+    which is how a span chart reads. See build().
+    """
+    def key(rec):
+        anchor = rec.started or rec.ended
+        if anchor:
+            return (0, -anchor.toordinal(), 0)
+        return (1, 0, -rec.updated.toordinal() if rec.updated else 0)
+
+    return sorted(records, key=key)
+
+
+def _current(records):
+    """The employer the subject works for now.
+
+    The most recent start date wins, among the jobs the bureau has not marked
+    finished. AECB delivers no current/prior flag on employment, so the newest
+    start is the only evidence available for which job is the live one --
+    hence the whole of the rule.
+
+    Rows are filtered by `ongoing` FIRST and ranked second: a job that carries
+    an end date is out however recently it began, so a short recent stint that
+    has already finished cannot displace a long-running current one.
+
+    None when nothing qualifies -- every employer finished, or no start date
+    arrived at all. Nothing is promoted on absence of evidence.
+
+    Two employers starting the same day are separated by whichever record was
+    refreshed more recently, and failing that by the bureau's own order --
+    `records` arrives from _order(), whose sort is stable, and max() returns the
+    first of equals. Freshness breaks a tie it is not allowed to create.
+    """
+    dated = [r for r in records if r.ongoing and r.started]
+    if not dated:
+        return None
+    return max(dated, key=lambda r: (r.started, r.updated or datetime.date.min))
+
+
+def _latest(records, points, current):
+    """The header figure, and what it is a figure FOR.
+
+    It follows the CURRENT employer rather than the newest figure on file:
+    naming a salary while a different employer is the live one answers a
+    question nobody asked. Where the current employer reports no usable figure
+    the header says so, rather than borrowing another employer's number to
+    fill the slot.
+
+    Only when no employer qualifies as current does it fall back to the newest
+    figure the bureau dated, and then to any usable one. `basis` records which
+    of the three happened, so the screen can qualify what it is showing instead
+    of implying a currency the payload does not support.
+    """
+    if current is not None:
+        return {"record": current, "basis": "current",
+                "dated": current.point_basis == "updated"}
+
     if points:
-        return {"record": max(points, key=lambda r: r.point_date), "dated": True}
+        return {"record": max(points, key=lambda r: r.point_date),
+                "basis": "newest", "dated": True}
 
     usable = [r for r in records if r.income_usable]
     if not usable:
         return None
-    current = [r for r in usable if not r.historical]
-    return {"record": (current or usable)[0], "dated": False}
+    ongoing = [r for r in usable if r.ongoing]
+    return {"record": (ongoing or usable)[0], "basis": "undated", "dated": False}
 
 
 def _nice_ceiling(value):
@@ -228,7 +393,7 @@ def _nice_ceiling(value):
     if value <= 0:
         return 1
     step = 10 ** (len(str(int(value))) - 1)
-    for mult in (1, 2, 2.5, 5, 10):
+    for mult in (1, 2, 2.5, 5):
         if value <= step * mult:
             return int(step * mult)
     return int(step * 10)

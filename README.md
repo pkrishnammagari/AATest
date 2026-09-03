@@ -15,10 +15,10 @@ Every section has also been through a design pass.
 > on last. Keeping it current is a standing instruction; see
 > *[Keeping the documentation current](#keeping-the-documentation-current)*.
 
-**No mockup content remains anywhere in the output.** That is enforced, not
-assumed: `python3 scripts/check_no_mock.py` fails the build if any illustrative
-literal reappears, if a payload value goes missing from the page, or if an
-external reference creeps in.
+**Every figure on screen comes from the payload.** That is enforced, not
+assumed: `python3 scripts/check_report.py` fails the build if a payload value
+goes missing from the page, if a delivered figure stops being shown verbatim, or
+if an external reference creeps in.
 
 **Governing rule: no fabricated value ever reaches the screen.** Where the
 payload carries nothing, the element renders an explicit empty state that
@@ -47,14 +47,14 @@ payload JSON
    ├─ aecb/dates.py       parse the three date formats the payload mixes
    ├─ aecb/context.py     ReportContext: arrays + report date + 5 configs
    └─ aecb/derive/        identity dedup · contracts×history join · score bands
-                          income · returns: what of those rows can be drawn
+                          income · returns · applications: what can be drawn
                               │
                               ▼
    aecb/render/page.py ── render_page(ctx) -> one standalone HTML string
         ├─ css.py         fonts (base64) + tokens + report.css
         ├─ shell.py       top bar, spine nav, brief rail
-        ├─ sections/      s02..s09, each render(ctx) -> str
-        │                 (displayed as 01..08 — see Section numbering)
+        ├─ sections/      identity … applications, each render(ctx) -> str
+        │                 (numbered 01..08 by position — see Section numbering)
         └─ js.py          window.__AECB data blob + report.js
                               │
                               ▼
@@ -77,10 +77,17 @@ Design decisions worth knowing before changing anything:
   stay fixed, because they are the frame rather than the content — scaling them
   too would zoom the page instead of filling it.
   `--colw` on `body` carries the report column width,
-  *derived* rather than measured (`.wrap` is a fixed grid with a cap, so it is
-  `min(100vw,1572px)` less 498 with the rail open or 106 with it closed), and
+  *derived* rather than measured (`.wrap` is a fixed grid, so it is
+  `100vw` less 498 with the rail open or 106 with it closed), and
   `--f` is a 0→1 progress value along the 1074→1466px range that the rail gives
-  back. Sizes read `calc(BASE + GAIN * var(--f,0px))`, so the current value stays
+  back, clamped — full gain arrives at a 1572px viewport and stays there.
+  The page itself is no longer capped: `.wrap`'s old 1572px max-width is now
+  `:root{--page-max}`, set to `none` with auto margins so the grid takes the
+  whole window (on a 16" MacBook, 1728 CSS px, the capped page read as pinned
+  to the left while the full-bleed top bar spanned it). Re-cap `--page-max`
+  and the `--colw` formulas need their `min(100vw, cap)` back, or the type
+  ramp overstates the column.
+  Sizes read `calc(BASE + GAIN * var(--f,0px))`, so the current value stays
   visible as `BASE`. The whole block sits at the end of `report.css` behind an
   `@supports` guard and is purely additive: deleting it restores the px design.
   Three rules govern extending it — `--f` is **pinned to 0 on `body`** so the
@@ -88,9 +95,9 @@ Design decisions worth knowing before changing anything:
   `:has()`** (both Chrome 105, above the ~Chrome 88 floor the code already
   requires, and the downloaded file is opened years later on an unknown
   machine); and **`.rec-t` / `.rec-meta` / `.ret-amt` move Python** — they set
-  §04's record-tile heights, which `s05_returns._TILE_BASE` / `_TILE_ENTRY`
-  mirror, so those constants must be re-measured (not reasoned about) after any
-  change to them. An *element* spends its surplus on either size or density,
+  §04's record-tile heights, which `sections/returns.py`'s `_TILE_BASE` /
+  `_TILE_ENTRY` mirror, so those constants must be re-measured (not reasoned
+  about) after any change to them. An *element* spends its surplus on either size or density,
   never both: §01's tiles get narrower at the density step, so their type gains
   nothing. Density lives at one breakpoint for the whole page,
   `min-width:1510px` scoped to `body.rail-off`, and only **§01** (grid 4-up) and
@@ -102,8 +109,9 @@ Design decisions worth knowing before changing anything:
   no model wired, an open rail would greet every user with its own "no brief
   generated" placeholder. `<body class="rail-off">` in `page.py` sets it; the
   top bar's AI Analysis button and the rail's own × toggle it. Anything
-  calibrated against a column width — `s05_returns._COL_W` — is calibrated to
-  this state and has to be re-measured if the default ever changes.
+  calibrated against a column width — `sections/returns.py`'s `_COL_W` — is
+  calibrated to this state and has to be re-measured if the default ever
+  changes.
 - **Charts never carry literals.** The heatmap and enquiry charts read
   `window.__AECB`, assembled in `js.py`, so wiring them means changing what
   Python puts in the blob, not the JavaScript. §03 and
@@ -112,14 +120,15 @@ Design decisions worth knowing before changing anything:
   payload carries — see those sections below. Their shared time axis lives in
   `aecb/render/svgtime.py`.
 - **Section numbering comes from position** in `sections/__init__.py`. Report
-  validity moved into the top bar, so the modules run `s02..s09` while the
-  displayed numbers run `01..08`. Never hard-code a number.
+  validity moved into the top bar, so the report shows eight sections numbered
+  `01..08`. The module files carry names, not numbers (`identity.py` …
+  `applications.py`), precisely so a filename cannot drift from the position
+  the registry assigns it. Never hard-code a number.
 - **`tokens.py` is the only place a colour is defined.** `report.css` refers to
   `var(--*)` throughout; `js.py` passes the few tokens the SVG charts need.
-- **One brand colour, and it is Finance House blue.** The palette began as the
-  mockup's, whose brand was a teal; every element that carried it now resolves
-  through the five `--fh-blue*` tokens, and the teal tokens were deleted rather
-  than left defined, so a rule cannot reach for one. Two rules govern the rest:
+- **One brand colour, and it is Finance House blue.** Every branded element
+  resolves through the five `--fh-blue*` tokens, and no teal token is defined,
+  so a rule cannot reach for one. Two rules govern the rest:
   red/amber/green mean RISK and nothing else, and a fact that is not a risk
   signal takes brand blue. The single exception is the contract-category accent
   set (`--cat-i/c/n/s/x`), which is categorical rather than brand or risk — five
@@ -139,7 +148,7 @@ The payload does not carry everything the screen shows. These fill the gaps:
 | `config/providers.json` | Provider code → display name and badge kind. **Stub** — the payload carries codes only (`B01`, `T05`), so provider names come entirely from here. Unknown codes fall back to the code itself. |
 | `config/status_codes.json` | AECB contract status codes, labels and severity ranks; roles; payment frequencies; DPD buckets. |
 | `config/bands.json` | FH score bands and gauge geometry, AECB `DataRange` letter → label, vintage bands, validity window. |
-| `config/income.json` | How to read `GrossAnnualIncome`: the assumed currency (the payload carries none), the floor below which a figure is a provider placeholder rather than an income, and the ratio at which providers count as disagreeing. |
+| `config/income.json` | How to read `GrossAnnualIncome`: the assumed currency (the payload carries none), the floor below which a figure is a provider placeholder rather than an income, and `confirmation_window_months` (12) — how recently a provider must have touched an employment row for "still employed there" to count as a confirmed claim rather than an unrefreshed one. |
 | `config/returns.json` | `paymentOrder` vocabularies: `Type` text → instrument kind (Bounced Cheques / Unpaid Direct Debits), and `Severity` text → display tone (Single→amber, Multiple→red, Reported→neutral pending a business definition). Unknown values render neutral, never guessed into a risk colour. |
 
 Still with no source at all, and needing an input path rather than config: **DSR**
@@ -173,9 +182,11 @@ moving onto the figure. The block ends up shorter than before.
 
 The **band chips** are filled solid with white text rather than the old pale
 wash, at 15px rather than 12px. Solid is where the prominence comes from — 15px
-is simply what the slack allowed. `_FILL` / `_LINE` in `s03_score.py` map only
-`red` and `amber`, with green as the fallback, which matches
-`scoring.fh_band()` defaulting an unknown band code to green.
+is simply what the slack allowed. `_FILL` / `_LINE` in `score.py` map only
+`red` and `amber`, with green as the fallback for the green tones.
+`scoring.fh_band()` returns a **neutral** tone for a band code the config does
+not know, and the chip renders uncoloured — green is the best-case colour, and
+an unrecognised risk band has earned no colour.
 
 ### §01 identity — the density step
 
@@ -189,8 +200,9 @@ only makes halves of the existing columns addressable — it cannot move an edge
 should not. The narrow state keeps its six tracks untouched. `1510` is derived,
 not chosen: a span-3-of-12 tile is `W/4 − 6` and the tuned three-up tile is 334px,
 so the fourth column appears only once it is at least as wide as the tile the
-layout was already tuned around. There is no second step — `.wrap`'s 1572px cap
-puts five-up permanently out of reach.
+layout was already tuned around. There is no second step — the density query is
+the only re-map, so on the now-uncapped page a wider viewport buys the four
+tiles width, never a fifth column.
 
 Two markers come from Python, because CSS cannot ask these questions without
 `:has()` (Chrome 105, above the floor this page targets):
@@ -224,9 +236,14 @@ the layout this change removed, and every tile is cramped at that size anyway.
 The card is two halves: **what the bureau delivered**, verbatim, on the left;
 **what can be drawn from it** on the right. The left half never depends on the
 right, so when nothing is drawable the records still stand on their own. The
-header carries the most recent salary the payload supports — headed *Latest
-salary* only when the bureau actually dated a figure, and *Salary on file* when
-it did not, because nothing in the payload then establishes which is newest.
+header follows the **current employer** — settled by the newest start date
+among the jobs the bureau has not marked finished, because employment carries
+no current/prior flag and the start dates are the only evidence of which job is
+the live one. It is headed *Current salary* (or *Current employer*, when that
+row carries no usable figure); only when no employer qualifies as current does
+it fall back to *Latest salary* — the newest figure the bureau dated — and then
+to *Salary on file*, when nothing establishes which is newest. It never borrows
+a different employer's figure to fill the slot.
 
 AECB delivers one `GrossAnnualIncome` per employment row and **no series**, so
 what §03 can draw depends entirely on which of that row's dates arrived.
@@ -249,6 +266,11 @@ Three rules make it honest rather than merely tolerant:
   state: `DateOfLastUpdate` is null on all five rows.
 - **A prior employer with no `DateOfTermination` has an unknown extent**, so its
   bar fades out rather than stopping at an invented date or running to the edge.
+  A **stale** row fades the same way: when `DateOfLastUpdate` arrived but falls
+  outside `confirmation_window_months` (`config/income.json`), running the bar
+  to the report date would assert years nobody vouched for. Absence of an
+  update date is *not* this case — unknown is not unconfirmed, and inventing
+  doubt is as wrong as inventing confidence.
 - **`GrossAnnualIncome` of 1 is a placeholder**, not an income. It is shown,
   flagged, and kept out of the chart scale — where a sentinel flattens every
   real point onto the axis. Exactly zero is *not* a placeholder: a reported zero
@@ -264,7 +286,7 @@ carry the specifics.
 The reference payload disagrees with itself — **18,450** (ADCB) against
 **153,900** (Mashreq, historical), and AECB carries no monthly-or-annual marker
 to reconcile them with. Every delivered figure is shown side by side rather than
-reconciled, and `check_no_mock.py` asserts each one reaches the page,
+reconciled, and `check_report.py` asserts each one reaches the page,
 placeholders included.
 
 The chart is built as **inline SVG in Python** rather than by `report.js`:
@@ -307,7 +329,8 @@ window is claimed and the section renders one flat "On file" set of tiles.
 The **chart is sized to the "Last 6 months" tiles beside it**, so the two
 halves of the card end level: its height mirrors the tile box model (a tile
 base, a gap, and one entry per return in the window), and the constants in
-`s05_returns.py` name the `.rec` / `.rec-item` / `.rec-list` rules they track.
+`sections/returns.py` name the `.rec` / `.rec-item` / `.rec-list` rules they
+track.
 
 Those tile rules are now **fluid**, so `_TILE_BASE` and `_TILE_ENTRY` are the
 rail-closed measurements (39 and 62; they were 37 and 57 before the fluid
@@ -376,19 +399,21 @@ down. §05 is 186 / 201.
 
 **Verbatim is the requirement, not a shortcut** (RRM, Aug 2026). The delivered
 text is printed as it arrived — no relabelling, no rounding, no translating
-display text into a letter code. `check_no_mock.py` reads the figures back out
+display text into a letter code. `check_report.py` reads the figures back out
 of the `.wsx-worst` panels and fails the build if either stops matching its
 payload field; a plain substring search could not do that, because the life-time
 count is `0` and `0` appears all over the page.
 
 The **only** thing the module derives is the colour, and it grades nothing it
-cannot recognise. `ReportContext.status()` is deliberately lenient — anything it
-cannot match comes back at rank 100 with the first letter as a code, which is
-right for the heatmap, where a cell must still draw. Rank 100 is the *clean*
-rank, so grading off it would paint an unrecognised status **green**: a
-reassurance the bureau never gave. `_known_status()` therefore resolves strictly
-on code or on label and returns `None` otherwise, and an unrecognised status
-renders uncoloured with a *Partly reported* header pill. The life-time figure is
+cannot recognise. `ReportContext.status()` refuses to grade the unknown too:
+anything it cannot match comes back as code `?` with rank `None`, and the
+heatmap paints it in a distinct *unknown* tone (`.su`, a dashed ring) — never
+green, and never under an invented letter (deriving a code from the first
+letter of the text used to collide with real codes: `Closed` → `C`, which is
+Settlement's glyph). `_known_status()` still resolves strictly on code or on
+label and returns `None` otherwise, because this panel wants the config row
+itself rather than a resolver result; an unrecognised status renders uncoloured
+with a *Partly reported* header pill. The life-time figure is
 a count, so a non-zero one is amber rather than red — a count says how many,
 never how deep, and the depth is §07's job.
 
@@ -397,11 +422,12 @@ The 36-month panel takes **no provenance mark at all**. Neither `delivered` nor
 would misstate where the number came from once one exists. What the window
 should measure is genuinely open: whether it counts a guarantor's or co-holder's
 delinquency, whether closed contracts count, how sparse coverage is stated, and
-whether status or DPD leads when they disagree. `derive/facilities.worst_in_window()`
-is the previous implementation, kept **uncalled** because two decisions inside it
-are the expensive part — a clean book must not attribute a "worst" to whichever
-contract iterated first, and a severe status outranks a raw DPD number when
-naming what happened.
+whether status or DPD leads when they disagree. The previous implementation,
+`derive/facilities.worst_in_window()`, was **deleted** on 2 September 2026 at
+the user's decision (git history preserves it) — but the two hard-won rules it
+encoded remain requirements for whatever gets built: a clean book must not
+attribute a "worst" to whichever contract iterated first, and a severe status
+outranks a raw DPD number when naming what happened.
 
 `.wsx` is `repeat(3,1fr)` and takes **no density step**: three delivered windows
 is the data, exactly as `.fac-grid`'s four categories are. The panels stretch to
@@ -588,7 +614,9 @@ window is 90 of 990 days, so on a linear axis the cluster that matters most
 would be crushed into 9% of the width. The last 90 days therefore take **62%**
 of the axis and everything older is compressed into the rest. Both zones are
 linear within themselves and meet exactly at the boundary, so a marker never
-jumps.
+jumps. When every application already sits inside the window there is nothing
+to compress: the split lands at 0% and the focus takes the whole axis, rather
+than reserving a compressed zone with nothing in it.
 
 **The distortion is drawn, not just stated** — the focus window carries a wash,
 the boundary a dashed rule, and the two zones are labelled in different units
@@ -604,11 +632,10 @@ axis labels along with it. The shared axis in `render/svgtime.py` is
 deliberately **not** used: §03 and §04 share it so their timelines cannot drift,
 and this one is non-linear by design.
 
-**The phase pills are settled, and the block is closed.** AECB delivers two
+**The phase vocabulary is settled, and the block is closed.** AECB delivers two
 states here — `Requested` and `Disbursed` — encoded as a **hollow** and a
-**filled** marker. The mockup's not-taken-up / approved / rejected states are
-not in the payload and are not invented, so there was never a mapping to make,
-only a vocabulary to stop expecting. The marker letter is the AECB category the
+**filled** marker. A not-taken-up / approved / rejected vocabulary is not in the
+payload and is not invented, so there is no mapping to make. The marker letter is the AECB category the
 rest of the page uses (I / C / S), matched on a keyword so a new wording still
 lands somewhere sensible; an unmatched type renders a **blank** marker and says
 so on hover rather than being filed under a category nobody chose.
@@ -644,7 +671,9 @@ bash scripts/build_wheels.sh          # cross-downloads cp39 manylinux x86_64
 
 This produces `wheels/` and `wheels.tgz` (~103 MB, 36 wheels) and **fails loudly**
 if any dependency resolved to a source archive or the wrong architecture — either
-would only surface as a broken install on the server.
+would only surface as a broken install on the server. Each build also writes
+`requirements.lock`, a committed manifest of exactly which wheels went into the
+bundle, so a deployment is auditable without unpacking the archive.
 
 For a different architecture:
 
@@ -666,7 +695,9 @@ bash scripts/install_offline.sh       # --no-index; never touches the network
 IBM Plex Sans Arabic as base64 `@font-face` rules (~930 KB), generated by
 `scripts/fetch_fonts.py`. **That script needs the internet and must be re-run on
 a connected machine** if the font set ever changes. Without the file the page
-still renders, but in system fallback fonts.
+still renders, but in system fallback fonts. The licences travel with the
+faces: `assets/fonts/OFL.txt` carries the SIL Open Font License text and
+attribution for all four families.
 
 ## Payload notes
 
@@ -694,20 +725,26 @@ wiring sections:
 **Four synthetic returns were added on 6 August 2026** so §04 renders visibly
 when the app runs — a cheque and a direct debit inside the six-month window and
 one of each outside it, carrying this file's own subject id and archive date.
-Everything else in the file is genuine bureau data. Prefer a real adverse
-payload if one arrives, and drop these. Note the file's `summary` counters still
+Everything else in the file follows the genuine AECB payload structure, but the
+subject is **fully anonymized** — names, identifiers and contact details do not
+belong to a real person, so the file is safe to commit and share as the
+reference fixture. Prefer a real (anonymized) adverse payload if one arrives,
+and drop these. Note the file's `summary` counters still
 read `Amount_checks_returned_3mon: 0`, which disagrees with the injected
 September return — harmless today because §04 does not read those counters, but
 do not wire them elsewhere without resolving it.
 
 ## Keeping the documentation current
 
-Two documents describe this project, and **both are part of the deliverable**:
+Four documents describe this project, and **all four are part of the
+deliverable**:
 
 | file | holds | audience |
 |---|---|---|
 | `README.md` | how the thing works — architecture, config, payload traps, per-section design rules | anyone reading the code |
 | `HANDOFF.md` | the state of play — what is done, what is open, what was last worked on, what comes next | an AI or engineer starting a fresh session |
+| `ARCHITECTURE.md` | the technical map — components, data flow, and why the design rules are what they are | an engineer orienting in the code |
+| `OVERVIEW.md` | the product, non-technically — what it is, the workflow, what the screen shows | stakeholders, and anyone before the code |
 
 ### Standing instruction for an AI working on this repo
 
@@ -719,13 +756,16 @@ earlier week.
 whole handover. Do not ask the user to paste either file, and do not start work
 on the next task until they have given you direction on it — `HANDOFF.md`'s
 *Next task* section says what is next and what is still undecided about it.
+(`ARCHITECTURE.md` and `OVERVIEW.md` are reference companions — read them when
+orienting, and keep them current like the other two.)
 
 **Use `scripts/measure/` for any change to `report.css` or to a section's
 markup — do not rebuild an equivalent by hand.** It is committed precisely so
 that no session has to. The workflow is in
-[scripts/measure/README.md](scripts/measure/README.md): back up, capture a
-baseline *from the backup tree*, change, capture again, `compare.py`,
-`synthetic.py`, `shots.py`. Keeping it working is part of the job:
+[scripts/measure/README.md](scripts/measure/README.md): commit, capture a
+baseline *from a git worktree of the pre-change commit*, change, capture
+again, `compare.py`, `synthetic.py`, `shots.py`. Keeping it working is part of
+the job:
 
 - **Add to `scripts/measure/watch.py`** when a section gains a class family,
   or the comparator silently stops watching the thing you changed.
@@ -747,6 +787,11 @@ if the work changed anything they assert.** Specifically:
 - **Always update `README.md`** when the change affects how the code works:
   architecture, configuration, the per-section design rules, or the known-gaps
   table.
+- **Update `ARCHITECTURE.md` and `OVERVIEW.md`** when a change moves what they
+  map: a module added, removed or renamed; the pipeline reshaped; a
+  user-visible behaviour changed. Most changes touch neither; a rename or a
+  new file always does. They drifted once precisely because they sat outside
+  this rule.
 - **Refresh the "Last updated" line and the "Next task" section of
   `HANDOFF.md` every time**, even when nothing else moved. "Nothing in flight"
   is a valid and useful answer.
@@ -755,5 +800,5 @@ if the work changed anything they assert.** Specifically:
 - Say so in your reply when you have updated them, so the user can see the
   documentation kept pace with the code.
 
-Treat a change that leaves either document stale as unfinished work, in the same
-way that a change failing `scripts/check_no_mock.py` is unfinished.
+Treat a change that leaves any of the four documents stale as unfinished work,
+in the same way that a change failing `scripts/check_report.py` is unfinished.

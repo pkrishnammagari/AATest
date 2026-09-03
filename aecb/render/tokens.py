@@ -1,10 +1,8 @@
 """Colour and type schema -- the single source of truth for the report's look.
 
-Started as the mockup's :root block; the illustrative teal brand has since been
-replaced throughout by the Finance House blue below, so the palette is now the
-product's rather than the mockup's. Every value here is emitted as a CSS custom
-property by root_block(); report.css refers to them only as var(--name) and
-hard-codes no colour of its own.
+The palette is the Finance House blue below and the semantic set beside it.
+Every value here is emitted as a CSS custom property by root_block(); report.css
+refers to them only as var(--name) and hard-codes no colour of its own.
 
 Anything that needs a colour from Python (chart series, SVG fills, the heatmap
 DPD ramp) reads it from TOKENS rather than repeating the hex.
@@ -43,13 +41,12 @@ TOKENS = {
     "fh-blue-line": "#B2C6D2",
 
     # --- brand + semantic ---------------------------------------------------
-    # The mockup's teal is deliberately GONE. It was the illustrative brand, and
-    # everything it dressed -- the section-toggle and hint hovers, .cite,
-    # .ai-mark, .stl-more, the delivered provenance mark -- now resolves through
-    # the fh-blue five above. Do not reintroduce a teal token: a second brand
+    # There is deliberately NO teal token. The section-toggle and hint hovers,
+    # .cite, .ai-mark, .stl-more and the delivered provenance mark all resolve
+    # through the fh-blue five above. Do not introduce a teal: a second brand
     # colour beside Finance House blue reads as a meaning the page is not
-    # carrying. The one surviving teal HUE is cat-c below, which is a member of
-    # the categorical accent set rather than a brand.
+    # carrying. The one teal HUE here is cat-c below, which is a member of the
+    # categorical accent set rather than a brand.
     "brass": "#9A7B3F",
     "brass-wash": "#F1EADA",
     "red": "#B02430",
@@ -69,7 +66,7 @@ TOKENS = {
     "red-line": "#E6C4C7",   "red-ink": "#8f1a24",
     # The brand's own triad is fh-blue-wash / fh-blue-line / fh-blue-ink above.
 
-    # --- DPD severity ramp (section 08 heatmap) -----------------------------
+    # --- DPD severity ramp (section 07 heatmap) -----------------------------
     "dpd0": "#3D9C74",   # current, 0 DPD
     "dpd1": "#E7B84B",   # 1-29
     "dpd2": "#DE8C3A",   # 30-59

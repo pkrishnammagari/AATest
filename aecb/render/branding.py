@@ -115,21 +115,3 @@ def favicon_data_uri(blue: str = None) -> str:
         svg.encode("utf-8")).decode("ascii")
 
 
-def favicon_bytes():
-    """(bytes, mime) for the tab icon -- what Streamlit's page_icon needs.
-
-    Returns None when there is no logo and the caller should use the SVG data
-    URI instead.
-    """
-    path = logo_path()
-    if not path:
-        return None
-    mime = MIME.get(os.path.splitext(path)[1].lower())
-    if not mime:
-        return None
-    with open(path, "rb") as fh:
-        return fh.read(), mime
-
-
-def clear_cache() -> None:
-    _cache.clear()

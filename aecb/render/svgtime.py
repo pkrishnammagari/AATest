@@ -1,4 +1,4 @@
-"""Shared time axis for the inline-SVG timelines (sections 04 and 05).
+"""Shared time axis for the inline-SVG timelines (sections 03 and 04).
 
 Both sections draw events against calendar time ending at the report date, so
 the tick strategy, the label-collision rule and the report-date marker live
@@ -54,15 +54,18 @@ def axis(sx, x0, x1, axis_y, width, pad_l, pad_r, pad_t, report_date) -> str:
     out = ['<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s"/>'
            % (pad_l, axis_y, width - pad_r, axis_y, tokens.token("line-2"))]
 
-    # The domain anchor is always drawn, so a period tick that would print on
-    # top of it is dropped. Measured against the anchor's actual width rather
-    # than a fixed gap: "Feb '14" is twice the width of "2015", and a constant
-    # that clears one collides on the other.
+    # A tick whose label would print on top of the LAST label drawn is
+    # dropped -- not just one colliding with the domain anchor: half-year
+    # labels on a narrow domain can touch each other even when both clear the
+    # anchor. Measured against each label's actual width rather than a fixed
+    # gap: "Feb '14" is twice the width of "2015", and a constant that clears
+    # one collides on the other.
     all_ticks = ticks(x0, x1)
-    anchor_end = sx(x0) + CHAR_W * len(all_ticks[0][1]) + 10
+    last_end = None
     for i, (when, label) in enumerate(all_ticks):
         x = sx(when)
-        if i and (x - CHAR_W * len(label) / 2.0) < anchor_end:
+        half = CHAR_W * len(label) / 2.0
+        if i and last_end is not None and (x - half) < last_end:
             continue
         anchor = "middle"
         if x < pad_l + 14:
@@ -74,6 +77,14 @@ def axis(sx, x0, x1, axis_y, width, pad_l, pad_r, pad_t, report_date) -> str:
         out.append('<text x="%.1f" y="%.1f" text-anchor="%s" '
                    'font-family="IBM Plex Mono" font-size="8.5" fill="%s">%s</text>'
                    % (x, axis_y + 14, anchor, tokens.token("ink-3"), label))
+        # Right edge of the label just drawn (per its anchor), plus breathing
+        # room -- the next tick must clear this.
+        if anchor == "start":
+            last_end = x + 2 * half + 10
+        elif anchor == "end":
+            last_end = x + 10
+        else:
+            last_end = x + half + 10
 
     if report_date and x0 <= report_date <= x1:
         x = sx(report_date)

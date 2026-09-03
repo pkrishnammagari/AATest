@@ -1,4 +1,4 @@
-"""Contract and conduct derivation -- the join behind sections 07 and 08.
+"""Contract and conduct derivation -- the join behind sections 06 and 07.
 
 The critical rule in here concerns coverage. `contractsHistory` is sparse: in the
 reference payload one contract has all 36 months and most have between one and
@@ -45,18 +45,23 @@ def month_index(report_date, value):
 
 
 def history_by_contract(ctx):
-    """{CBContractId: {months_ago: history_row}} for the report window."""
+    """{CBContractId: {months_ago: history_row}} for the report window.
+
+    Rows outside the 36-month window are dropped HERE, not at render time:
+    months_reported, max_dpd and worst_status all iterate this dict and claim
+    to describe the window, so a month-37 row must never reach them.
+    """
     grouped = {}
     report_date = ctx.report_date
     for row in ctx.rows("contractsHistory"):
         idx = month_index(report_date, row.get("ReferenceDate"))
-        if idx is None or idx < 0:
+        if idx is None or idx < 0 or idx >= WINDOW_MONTHS:
             continue
         grouped.setdefault(row.get("CBContractId"), {})[idx] = row
     return grouped
 
 
-class Facility(object):
+class Facility:
     """One contract plus its month-indexed conduct series."""
 
     def __init__(self, ctx, contract, history):
@@ -105,7 +110,7 @@ class Facility(object):
                 out.append(None)
                 continue
             out.append({
-                "dpd": row.get("DaysPaymentDelay"),
+                "dpd": _as_days(row.get("DaysPaymentDelay")),
                 "status": self.ctx.status(row.get("ContractStatus")),
                 "balance": row.get("Balance"),
                 "overdue": row.get("OverdueAmount"),
@@ -129,27 +134,26 @@ class Facility(object):
     @property
     def max_dpd(self):
         """Deepest delay in the window, or None if nothing was reported."""
-        seen = [row.get("DaysPaymentDelay") for row in self.history.values()
-                if row.get("DaysPaymentDelay") is not None]
+        seen = [_as_days(row.get("DaysPaymentDelay"))
+                for row in self.history.values()]
+        seen = [v for v in seen if v is not None]
         return max(seen) if seen else None
 
     @property
-    def worst_status(self):
-        """Lowest-ranked (most severe) status in the window."""
-        seen = [self.ctx.status(row.get("ContractStatus"))
-                for row in self.history.values() if row.get("ContractStatus")]
-        return min(seen, key=lambda s: s["rank"]) if seen else None
-
-    @property
     def final_status(self):
-        """Status in the closing month -- what AECB carries for the closure."""
+        """Status in the closing month, when the payload reports one.
+
+        None when the closing month carries no history row -- including every
+        closure outside the 36-month window. The lifetime WorstStatus is NOT an
+        acceptable stand-in: presenting a 2017 arrangement as the status a loan
+        closed on in 2019 mislabels a cured contract, so the renderer says
+        "not reported" instead.
+        """
         if not self.closed:
             return None
         idx = self.closed_at_month
         row = self.history.get(idx) if idx is not None else None
-        if row:
-            return self.ctx.status(row.get("ContractStatus"))
-        return self.ctx.status(self.raw.get("WorstStatus"))
+        return self.ctx.status(row.get("ContractStatus")) if row else None
 
     # --- current-state passthroughs ----------------------------------------
 
@@ -216,7 +220,7 @@ def by_category(facilities):
     return out
 
 
-# --- section 07 aggregates --------------------------------------------------
+# --- section 06 aggregates ---------------------------------------------------
 
 def financial_summary(ctx, role="A"):
     """{category: contractsFinancialSummary row} for one role."""
@@ -242,58 +246,14 @@ def _as_number(value):
         return None
 
 
-# --- section 06 -------------------------------------------------------------
+def _as_days(value):
+    """DaysPaymentDelay as an int. Anything non-numeric counts as not reported.
 
-def worst_in_window(ctx, months):
-    """Deepest delinquency across the whole book in the last `months`.
-
-    Returns {'max_dpd', 'status', 'facility', 'when', 'reported_months'} or None
-    when no history covers the window at all.
-
-    CURRENTLY UNCALLED, and deliberately kept. Section 05 drove its 36-month
-    panel from this until 7 Aug 2026, when that panel became "To be built"
-    pending an RRM decision on what the window should measure. Two things in
-    here are the expensive part and are worth not rediscovering: a clean book
-    must not attribute a "worst" to whichever contract iterated first, and a
-    severe STATUS outranks a raw DPD number when naming what happened. Whatever
-    the 36-month rule turns out to be, it starts here. Delete it only if that
-    decision lands somewhere else entirely.
+    The payload usually delivers an int, but the field is untrusted input that
+    is compared and interpolated downstream -- a string here would corrupt both
+    the DPD bucketing and the heatmap markup.
     """
-    worst_dpd, worst_status, holder, when = None, None, None, None
-    reported = 0
-
-    for facility in all_facilities(ctx):
-        for month, row in facility.history.items():
-            if month >= months:
-                continue
-            reported += 1
-            dpd = row.get("DaysPaymentDelay")
-            # Strictly greater, and only a real delay counts as an event -- a
-            # book of zeroes must not attribute a "worst" to whichever contract
-            # happened to be iterated first.
-            if dpd and (worst_dpd is None or dpd > worst_dpd):
-                worst_dpd, holder = dpd, facility
-                when = dates.parse_any(row.get("ReferenceDate"))
-            status = ctx.status(row.get("ContractStatus"))
-            if status and (worst_status is None or status["rank"] < worst_status["rank"]):
-                worst_status = status
-                # A severe status outranks a raw DPD number for "what happened".
-                if status["rank"] < 100:
-                    holder = facility
-                    when = dates.parse_any(row.get("ReferenceDate"))
-
-    if not reported:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
         return None
-
-    # A clean window has no worst event to point at. Report the delay as 0 (the
-    # bureau did report zeroes) but leave facility and date empty, so section 06
-    # renders "no delinquency" rather than naming an innocent contract.
-    clean = not worst_dpd and (worst_status is None or worst_status["rank"] >= 100)
-    return {
-        "max_dpd": 0 if worst_dpd is None else worst_dpd,
-        "status": worst_status,
-        "facility": None if clean else holder,
-        "when": None if clean else when,
-        "clean": clean,
-        "reported_months": reported,
-    }

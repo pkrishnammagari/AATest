@@ -113,7 +113,8 @@ def normalise(payload: dict) -> dict:
         data[name] = cleaned
 
     # Surface anything the payload carries that we do not know about, rather
-    # than dropping it silently -- a new AECB section should be visible.
+    # than dropping it silently -- a new AECB section should be visible. Read
+    # back through ReportContext.unknown_arrays; app.py warns in the sidebar.
     unknown = sorted(set(payload) - set(ARRAYS))
     data["_unknownArrays"] = unknown
     return data
