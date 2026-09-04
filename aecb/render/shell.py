@@ -18,6 +18,7 @@ from __future__ import annotations
 from .. import dates
 from ..derive import scoring
 from . import branding
+from . import brief as render_brief
 from . import components as c
 from .sections import nav_items
 
@@ -147,21 +148,18 @@ def spine(ctx) -> str:
 def rail(ctx) -> str:
     """The underwriting brief panel.
 
-    Kept as a shell. The brief is an LLM reading of the payload and the target
-    server has no model available, so rather than carry narrative about a
-    customer this report does not describe, the panel states plainly that no
-    brief was generated.
+    Renders the AI brief when one is attached to the context (ctx.brief, set
+    by the Streamlit host after a validated model run -- see aecb.brief) and
+    falls back to the long-standing "no brief generated" shell when none is:
+    the target server may have no model available, and the report must not
+    carry narrative about a customer it cannot describe.
     """
-    return """
-  <aside class="rail" id="rail">
-    <div class="rail-head">
-      <div class="rail-ht">
-        <div class="ai-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.9 4.5L18.5 9l-4.6 1.5L12 15l-1.9-4.5L5.5 9l4.6-1.5L12 3z" fill="#fff"/><circle cx="18" cy="17" r="2" fill="#9DDBDF"/></svg></div>
-        <div><div class="rail-title">Underwriting Brief</div><div class="rail-sub">AI reading of the bureau payload</div></div>
-        <button class="rail-x" id="railX" title="Hide">›</button>
-      </div>
-    </div>
-    <div class="rail-body">
+    brief = getattr(ctx, "brief", None)
+    if brief is not None:
+        body = render_brief.body(brief)
+        foot_extra = render_brief.provenance(brief)
+    else:
+        body = """
       <div class="rail-empty">
         <div class="re-title">No brief generated</div>
         <div class="re-body">
@@ -173,9 +171,20 @@ def rail(ctx) -> str:
           figures are marked.</p>
         </div>
       </div>
+"""
+        foot_extra = ""
+    return """
+  <aside class="rail" id="rail">
+    <div class="rail-head">
+      <div class="rail-ht">
+        <div class="ai-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.9 4.5L18.5 9l-4.6 1.5L12 15l-1.9-4.5L5.5 9l4.6-1.5L12 3z" fill="#fff"/><circle cx="18" cy="17" r="2" fill="#9DDBDF"/></svg></div>
+        <div><div class="rail-title">Underwriting Brief</div><div class="rail-sub">AI reading of the bureau payload</div></div>
+        <button class="rail-x" id="railX" title="Hide">›</button>
+      </div>
     </div>
-    <div class="rail-foot">
-      <div class="rail-note">When enabled, the brief interprets only — it never computes figures and never renders the decision. In-tenancy · model + prompt under MRM change control.</div>
+    <div class="rail-body">{body}</div>
+    <div class="rail-foot">{foot_extra}
+      <div class="rail-note">The brief interprets only — it never computes figures and never renders the decision. In-tenancy · model + prompt under MRM change control.</div>
     </div>
   </aside>
-"""
+""".format(body=body, foot_extra=foot_extra)

@@ -468,6 +468,21 @@
     if (btn) btn.addEventListener("click", function () { document.body.classList.toggle("rail-off"); });
   }
 
+  /* Brief findings carry "Verify at §N" links. Same mechanism as the spine
+     dots -- open the section if folded, then scroll -- so verifying a model
+     claim lands the reader exactly where the payload evidence is drawn. The
+     brief is baked server-side, so binding once at boot is enough. */
+  function briefLinks() {
+    [].slice.call(document.querySelectorAll(".bf-go[data-to]")).forEach(function (link) {
+      link.addEventListener("click", function () {
+        var t = el(link.dataset.to);
+        if (!t) return;
+        secOpen(t);
+        t.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+
   /* ---------- boot ---------- */
 
   tooltips();
@@ -478,4 +493,5 @@
   collapsibles();
   spineNav();
   railToggle();
+  briefLinks();
 })();

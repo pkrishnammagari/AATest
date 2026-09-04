@@ -828,10 +828,79 @@ body.rail-off .rail{display:none}
   border-radius:var(--r-sm); padding:8px 12px}
 .oi-line + .oi-line{margin-top:7px}
 
-/* brief rail, no model available */
+/* brief rail, no model available (and the "ran, nothing survived" state) */
 .rail-empty{padding:18px 16px}
 .re-title{font-family:var(--font-display); font-weight:700; font-size:14px; margin-bottom:8px}
 .re-body p{font-size:12px; color:var(--ink-2); line-height:1.55; margin-bottom:10px}
+
+/* ========== BRIEF FINDINGS ==========
+   Cards for validated model findings (aecb/render/brief.py). Severity chips
+   draw the same wash triads as the report's tags, so the rail speaks the
+   page's risk vocabulary rather than inventing its own. Everything must fit
+   the 372px rail track (report.css geometry note below) -- cards are one
+   column and wrap, never scroll sideways. */
+.bf-list{padding:12px 14px}
+.bf-intro{font-size:10.5px; color:var(--ink-3); line-height:1.45; margin-bottom:10px}
+.bf-card{border:1px solid var(--line); border-radius:var(--r-sm);
+  background:var(--surface); padding:10px 12px 9px}
+.bf-card + .bf-card{margin-top:9px}
+.bf-top{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+.bf-sev{font-family:var(--font-mono); font-size:9px; font-weight:600;
+  letter-spacing:.05em; text-transform:uppercase; padding:2px 7px;
+  border-radius:99px; border:1px solid var(--line-2); color:var(--ink-2)}
+.bf-sev.severe{background:var(--red-wash); border-color:var(--red-line); color:var(--red-ink)}
+.bf-sev.adverse{background:var(--red-wash); border-color:var(--red-line); color:var(--red-ink); opacity:.82}
+.bf-sev.watch{background:var(--amber-wash); border-color:var(--amber-line); color:var(--amber-ink)}
+.bf-sev.info{background:var(--fh-blue-wash); border-color:var(--fh-blue-line); color:var(--fh-blue-ink)}
+.bf-conf{font-size:9.5px; color:var(--ink-4)}
+.bf-claim{font-size:12px; color:var(--ink); line-height:1.5}
+.bf-act{margin-top:7px; font-size:11px; color:var(--ink-2); line-height:1.45;
+  background:var(--surface-2); border:1px solid var(--line);
+  border-radius:6px; padding:6px 9px}
+.bf-act-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--ink-3); margin-right:6px}
+.bf-foot{display:flex; align-items:center; flex-wrap:wrap; gap:5px; margin-top:8px}
+.bf-cite{font-family:var(--font-mono); font-size:9px; color:var(--fh-blue-ink);
+  background:var(--fh-blue-wash); border:1px solid var(--fh-blue-line);
+  border-radius:5px; padding:1px 5px; cursor:default}
+.bf-go{margin-left:auto; font-size:10.5px; font-weight:600;
+  color:var(--fh-blue); cursor:pointer; white-space:nowrap}
+.bf-go:hover{color:var(--fh-blue-d); text-decoration:underline}
+/* The synthesis lead: the two-sentence shape of the file, set slightly larger
+   than the cards it compresses. Only renders when a second model pass
+   survived re-validation against the findings. */
+.bf-syn{font-size:12.5px; color:var(--ink); line-height:1.55;
+  border-left:3px solid var(--fh-blue); padding:2px 0 2px 10px;
+  margin-bottom:12px}
+
+/* Background context is fenced: dashed border and no severity vocabulary, so
+   it cannot be mistaken for a payload finding. */
+.bf-bg{margin-top:12px; border:1px dashed var(--line-2);
+  background:var(--surface-2); border-radius:var(--r-sm); padding:10px 12px}
+.bf-bg-t{font-family:var(--font-mono); font-size:9px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3);
+  margin-bottom:6px}
+.bf-bg-note{font-size:11.5px; color:var(--ink-2); line-height:1.5}
+.bf-bg-note+.bf-bg-note{margin-top:6px}
+.bf-bg-cav{font-size:9.5px; color:var(--ink-4); line-height:1.4;
+  margin-top:8px; padding-top:6px; border-top:1px dashed var(--line)}
+
+/* The unknowns block reads as a request list, not a finding: brass tones,
+   which the page already uses for "attention, not severity" (services). */
+.bf-unk{margin-top:12px; border:1px solid var(--amber-line);
+  background:var(--brass-wash); border-radius:var(--r-sm); padding:10px 12px}
+.bf-unk-t{font-family:var(--font-mono); font-size:9px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--brass);
+  margin-bottom:6px}
+.bf-unk-list{list-style:none}
+.bf-unk-list li{font-size:11.5px; color:var(--ink-2); line-height:1.5;
+  padding-left:14px; position:relative}
+.bf-unk-list li+li{margin-top:5px}
+.bf-unk-list li::before{content:"?"; position:absolute; left:0;
+  font-family:var(--font-mono); font-size:10px; color:var(--brass)}
+/* Provenance sits above the standing governance note in the rail foot. */
+.bf-prov{font-family:var(--font-mono); font-size:9px; color:var(--ink-3);
+  margin-bottom:6px; line-height:1.4; word-break:break-all}
 
 /* ========== TOP-BAR VALIDITY STRIP ==========
    Section 01 used to spend a whole card on one status and two dates. It now

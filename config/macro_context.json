@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Curated macro / market context for the AI underwriting brief.",
+    "",
+    "This file is OPTIONAL and unlike every other config it degrades",
+    "silently: when it is absent the brief simply runs without macro",
+    "context. It is the only channel through which anything time-sensitive",
+    "reaches the model on an air-gapped deployment -- the model's own",
+    "knowledge is frozen at its training cutoff and is never allowed to",
+    "supply current conditions.",
+    "",
+    "Rules for maintainers (this file is under the same MRM change control",
+    "as the prompt in aecb/brief/prompt.py):",
+    "  - every entry must hold true AS OF the as_of date below; update",
+    "    as_of whenever entries are reviewed, even if unchanged",
+    "  - entries are short, factual and generic -- no issuer-specific or",
+    "    customer-specific content, no forecasts",
+    "  - the brief renders these as background context with the as_of date",
+    "    attached; they never carry severity and never cite the payload"
+  ],
+  "as_of": "2026-08",
+  "facts": [
+    {
+      "topic": "rates",
+      "text": "UAE retail lending is predominantly variable-rate priced off EIBOR; the repayment burden on variable-rate facilities moves with the rate environment, so long-tenor exposure opened in a low-rate period can carry payment shock later."
+    },
+    {
+      "topic": "regulation",
+      "text": "Central Bank of the UAE retail lending rules cap the debt burden ratio at 50% of gross salary and personal loans at 20 times salary; facilities granted near these ceilings leave little absorption room."
+    },
+    {
+      "topic": "sectors",
+      "text": "Income stability differs structurally by sector in the UAE: government and government-related employment is salaried and comparatively stable; construction and contracting income is project-cyclical; hospitality and retail trade are seasonal and demand-sensitive."
+    }
+  ]
+}

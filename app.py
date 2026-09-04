@@ -20,7 +20,7 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 
-from aecb import context
+from aecb import brief, context
 from aecb.render import branding
 from aecb.render.page import clear_cache, render_page
 
@@ -154,6 +154,51 @@ def load_context():
     return context.from_file(os.path.join(PAYLOAD_DIR, chosen))
 
 
+def attach_brief(ctx):
+    """Sidebar controls for the AI brief; sets ctx.brief when one is cached.
+
+    The report always renders immediately WITHOUT the brief -- a model call
+    takes tens of seconds and must never gate first paint. Generation is a
+    button press; the result is cached in session memory only, keyed by
+    payload hash + model + prompt version, so it follows the same guarantee
+    as uploads: nothing written to disk, nothing visible to another session.
+    """
+    st.divider()
+    st.markdown("**AI brief**")
+
+    reason = brief.probe()
+    if reason:
+        # The rail keeps its own "no brief generated" copy; the sidebar says
+        # WHY, because that part is infrastructure, not underwriting.
+        st.caption("Unavailable: %s." % reason)
+        return
+
+    cache = st.session_state.setdefault("_brief_cache", {})
+    key = brief.cache_key(ctx)
+
+    if st.button("Generate AI brief",
+                 help="One local-model pass over a derived fact digest. "
+                      "Findings are validated against the payload before "
+                      "anything renders; nothing leaves this machine."):
+        with st.spinner("Reading the payload with %s…" % brief.MODEL):
+            try:
+                cache[key] = brief.generate_brief(ctx)
+            except brief.BriefUnavailable:
+                _LOG.exception("Brief generation failed for %r",
+                               ctx.source_name)
+                st.warning("The model did not return a usable brief; "
+                           "details are in the server log.")
+
+    cached = cache.get(key)
+    if cached is not None:
+        ctx.brief = cached
+        st.caption("Brief attached — %d finding(s), %d unknown(s), %d "
+                   "dropped by validation. Open it with the AI Analysis "
+                   "button."
+                   % (len(cached["findings"]), len(cached["unknowns"]),
+                      len(cached["dropped"])))
+
+
 with st.sidebar:
     st.markdown("### AECB Analyzer")
     st.caption("AECB bureau report renderer")
@@ -167,6 +212,9 @@ with st.sidebar:
         st.error("Failed to load the payload or configuration; details are "
                  "in the server log.")
         ctx = None
+
+    if ctx is not None:
+        attach_brief(ctx)
 
     st.divider()
     if st.button("Reload CSS / JS", help="Re-read report.css and report.js from "
