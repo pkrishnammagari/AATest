@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -79,10 +80,23 @@ def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
             return response.read()
     except urllib.error.HTTPError as exc:
         try:
-            body = exc.read(_BODY_SNIPPET).decode("utf-8", "replace").strip()
+            body = exc.read(_BODY_SNIPPET * 4).decode("utf-8", "replace")
         except Exception:
             body = ""
+        # IIS error bodies are HTML; strip the markup so the human-readable
+        # sentence survives instead of a snippet of doctype.
+        body = re.sub(r"<[^>]+>", " ", body)
+        body = re.sub(r"\s+", " ", body).strip()[:_BODY_SNIPPET]
         detail = (" -- %s" % body) if body else ""
+        # A 401 means the API wants credentials the request did not carry.
+        # WWW-Authenticate names the scheme the server expects (Basic /
+        # Negotiate / NTLM / Bearer), which is exactly what integration
+        # needs to know -- surface it instead of leaving it in the wire.
+        if exc.code == 401:
+            scheme = exc.headers.get("WWW-Authenticate")
+            detail += (" [server expects authentication: %s]" % scheme
+                       if scheme else
+                       " [the response names no WWW-Authenticate scheme]")
         raise ApiError("The bureau-report API answered HTTP %d for subject "
                        "%r%s" % (exc.code, subject_id, detail))
     except (urllib.error.URLError, OSError) as exc:
