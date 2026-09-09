@@ -50,7 +50,10 @@ requirements.txt           streamlit==1.50.0, pinned with reasoning
 requirements.lock          wheel-bundle manifest, written by build_wheels.sh
 
 aecb/                      the renderer package
-├── api.py                 bureau-report API client (urllib; config/api.json)
+├── api.py                 bureau-report API client (http.client; NTLM
+│                          handshake on one connection; config/api.json)
+├── ntlm.py                NTLMv2 messages + crypto (MS-NLMP, stdlib only,
+│                          spec-vector self-test: python3 -m aecb.ntlm)
 ├── loader.py              parse + normalise the payload
 ├── dates.py               the three date formats, and date arithmetic
 ├── context.py             ReportContext — the object every section receives
@@ -609,7 +612,7 @@ All five files carry `_comment` blocks explaining what they are and why.
 | `providers.json` | **Registry (STUB)** | Provider code → `{name, kind}`. Names are currently the codes themselves. `kind` drives the badge: `bank` / `tel` / `onus` (set `onus` for FH's own code to mark our facilities). |
 | `income.json` | **FH policy** | `currency: AED` (assumed — the payload carries none); `placeholder_floor: 1200`; `confirmation_window_months: 12` — how recently a provider must have touched an employment row for an open-ended "still employed" claim to count as confirmed rather than unrefreshed. |
 | `returns.json` | **Vocabulary + policy** | `window_months: 6`; instrument type labels; severity → tone (Single→amber, Multiple→red, Reported→neutral pending a business definition). |
-| `api.json` | **Deployment** | Bureau-report API `base_url` + `timeout_seconds`, for `app_api.py` only — the single source of the endpoint (the Postman-collection URL); no environment override. Not loaded by `ReportContext`; missing → the API entry fails loud on screen. |
+| `api.json` | **Deployment** | Bureau-report API `base_url` + `timeout_seconds` + the `auth` service account (IIS Windows authentication, NTLMv2 — committed as DUMMY values, replaced on the deployment server), for `app_api.py` only. The single source of the endpoint; no environment override. Not loaded by `ReportContext`; missing → the API entry fails loud on screen. |
 
 The **rank thresholds** are the load-bearing part of `status_codes.json`:
 `rank ≤ 60` severe (red), `65–95` adverse (amber), `100` normal (grey/green),

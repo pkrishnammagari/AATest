@@ -40,9 +40,19 @@ python3 -m venv .venv
 collection, and the only place it lives), validates the response exactly as
 the uploader does, and renders through the same pipeline. The payload lives
 in session memory only. A subject-id mismatch between request and response
-renders the report under a prominent warning naming both ids. Off the bank
-network the entry screen still renders; a Display click reports the API as
-not reachable, which is the expected result there.
+renders the report under a prominent warning naming both ids.
+
+The API sits behind **IIS Windows authentication**, so requests authenticate
+as a service account over **NTLMv2** — implemented in `aecb/ntlm.py` from the
+MS-NLMP spec, stdlib only (no wheels added to the offline bundle), self-tested
+against the official vectors (`python3 -m aecb.ntlm`). The account lives in
+`config/api.json` under `auth` as **DUMMY values — replace them on the
+deployment server** (`DOMAIN\\account` form; NTLM sends a challenge proof,
+never the password itself). API failures are logged in full — status, every
+header, untruncated body — to `aecb_api.log` beside the app (gitignored;
+successful payloads are never logged). Off the bank network the entry screen
+still renders; a Display click reports the API as not reachable, which is the
+expected result there.
 
 ## How it fits together
 

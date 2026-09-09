@@ -48,7 +48,14 @@ payloads, subject-id mismatch warns-and-displays, "Query another subject"
 resets. app.py is untouched and remains the fixture/upload dev harness.
 Client/flow logic was verified with in-process tests + AppTest; the live
 endpoint (172.17.16.41) is only reachable on the bank network, where the
-first real test is subject G03929019.
+first real test is subject G03929019. The endpoint requires **IIS Windows
+auth** (first live attempt answered 401 WWW-Authenticate: Negotiate; API
+team confirmed NTLM): `aecb/ntlm.py` implements NTLMv2 from MS-NLMP in pure
+stdlib (spec-vector self-test `python3 -m aecb.ntlm`; handshake verified
+against a proof-checking local stub), `aecb/api.py` runs both legs on one
+http.client connection, and the service account sits in `config/api.json`
+`auth` as DUMMY values the user replaces on the server. Full API error
+responses (headers + body) log to `aecb_api.log`.
 
 **Every section is now designed and wired.** §05's 36-month worst status —
 long the one deliberately unbuilt panel — was **built 9 Sep 2026** with the

@@ -14,5 +14,17 @@
     "silently pointed nowhere would read as 'subject not found' and mislead."
   ],
   "base_url": "http://172.17.16.41/historyapi/api/bureau-report",
-  "timeout_seconds": 30
+  "timeout_seconds": 30,
+
+  "_auth_comment": [
+    "IIS Windows-authentication service account (NTLMv2). DUMMY values --",
+    "replace on the deployment server after copying the tree; the password",
+    "never leaves this machine's requests (NTLM sends a challenge proof,",
+    "not the password). username takes the 'DOMAIN\\\\account' form; a bare",
+    "account name (no domain) is also accepted."
+  ],
+  "auth": {
+    "username": "DOMAIN\\svc_aecb_CHANGE_ME",
+    "password": "CHANGE_ME"
+  }
 }
