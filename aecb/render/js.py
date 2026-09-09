@@ -70,6 +70,53 @@ def _as_int(value):
         return None
 
 
+def _truthy_flag(value) -> bool:
+    """Payload booleans arrive as True, 1 or 'Y' variants; None stays False --
+    an unreported flag must not become a chip."""
+    if value is None:
+        return False
+    return str(value).strip().upper() in ("1", "Y", "YES", "TRUE")
+
+
+def _worst_ever(ctx, raw):
+    """The contract's dated LIFETIME worst, when it says something adverse.
+
+    Rendered as a row chip so a Default that predates the 36-month window is
+    not invisible behind a clean-looking strip. Shown only when the delivered
+    status ranks below normal (or cannot be ranked -- unknown is not clean),
+    or a positive max delay was delivered; a lifetime of "Active Payments"
+    at 0 days earns no chip.
+    """
+    value = raw.get("WorstStatus")
+    w_status = ctx.status(value) if value is not None else None
+    w_days = _as_int(raw.get("MaxDaysPaymentDelay"))
+    adverse_status = w_status is not None and (
+        w_status["rank"] is None or w_status["rank"] < 100)
+    if not adverse_status and not w_days:
+        return None
+
+    out = {}
+    if adverse_status:
+        out["code"] = w_status["code"]
+        out["label"] = w_status["label"]
+    when = dates.parse_any(raw.get("WorstStatusDate"))
+    if adverse_status and when:
+        out["when"] = dates.fmt_short(when)
+    if w_days:
+        out["maxDays"] = w_days
+        d_when = dates.parse_any(raw.get("MaxDaysPaymentDelayDate"))
+        if d_when:
+            out["maxDaysWhen"] = dates.fmt_short(d_when)
+    if raw.get("MaxOverdueAmount"):
+        max_od = _money(raw.get("MaxOverdueAmount"))
+        if max_od:
+            out["maxOverdue"] = max_od
+            od_when = dates.parse_any(raw.get("MaxOverdueAmountDate"))
+            if od_when:
+                out["maxOverdueWhen"] = dates.fmt_short(od_when)
+    return out
+
+
 def _facility_row(ctx, facility) -> dict:
     """One heatmap row: identity, current stats, and the month series.
 
@@ -80,7 +127,8 @@ def _facility_row(ctx, facility) -> dict:
     """
     series = facility.series()
 
-    status, delays, reported = {}, {}, []
+    status, delays, reported, no_dpd = {}, {}, [], []
+    bal, od = {}, {}
     for month, point in enumerate(series):
         if point is None:
             continue
@@ -88,6 +136,20 @@ def _facility_row(ctx, facility) -> dict:
         status[str(month)] = point["status"]["code"]
         if point["dpd"]:
             delays[str(month)] = {"days": point["dpd"]}
+        elif point["dpd"] is None:
+            # Status filed, delay NOT delivered. Without this the cell would
+            # paint as "current (0 DPD)" -- a zero the bureau never sent.
+            no_dpd.append(month)
+        # The month's own money, for the cell tooltips -- the row-level
+        # Current_Balance is a single snapshot and must not masquerade as a
+        # monthly figure across 36 cells.
+        month_bal = _money(point["balance"])
+        if month_bal is not None:
+            bal[str(month)] = month_bal
+        if point["overdue"]:
+            month_od = _money(point["overdue"])
+            if month_od is not None:
+                od[str(month)] = month_od
 
     util_series = facility.utilisation_series()
     final = facility.final_status
@@ -114,7 +176,44 @@ def _facility_row(ctx, facility) -> dict:
         "delays": delays,
         "reported": reported,
         "monthsReported": facility.months_reported,
+        "possible": facility.possible_months,
     }
+
+    if bal:
+        row["bal"] = bal
+    if od:
+        row["od"] = od
+    if no_dpd:
+        row["noDpd"] = no_dpd
+
+    raw = facility.raw
+
+    # Row flags and lifetime figures, shipped only when they say something --
+    # an omitted key is report.js's cue to draw nothing.
+    if _truthy_flag(raw.get("FlagOpenDispute")):
+        row["dispute"] = True
+    if _truthy_flag(raw.get("HolderIsNotLiable")):
+        row["notLiable"] = True
+    security = raw.get("SecurityType")
+    if security or _truthy_flag(raw.get("SecuredContractFlag")):
+        row["secured"] = str(security).strip() if security else ""
+    amount = _money(raw.get("TotalAmount"))
+    if raw.get("TotalAmount") and amount:
+        row["amount"] = amount
+    if raw.get("MethodOfPayment"):
+        row["method"] = raw.get("MethodOfPayment")
+    currency = str(raw.get("OriginalCurrency") or "").strip()
+    if currency and currency.upper() != "AED":
+        # The whole page renders money under the AED mark; a contract in any
+        # other currency must say so on its row.
+        row["currency"] = currency
+    as_at = dates.parse_any(raw.get("Current_ReferenceDate"))
+    if as_at:
+        row["asAt"] = dates.fmt_short(as_at)
+
+    worst_ever = _worst_ever(ctx, raw)
+    if worst_ever:
+        row["worstEver"] = worst_ever
 
     if util_series is not None:
         row["u"] = util_series

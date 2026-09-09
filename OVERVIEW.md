@@ -153,8 +153,8 @@ different payload simply re-renders the page.
 | **02** | Score & bureau history | How does the bureau grade them, and how long is their credit file? The score, both the AECB and FH risk bands, a proportional gauge showing where the score sits, and how many months of history exist. |
 | **03** | Income & employment | What do they earn, where do they work, and how confident can we be in that figure? Employers with their tenure, salaries as delivered, and a timeline plotting the two together — but only where the bureau supplied a date to plot against. |
 | **04** | Cheque & direct-debit returns | Have they bounced anything? In the UAE this is a first-order adverse signal. Each returned instrument as delivered, split into a recent 6-month review window and everything earlier, with a matching timeline. |
-| **05** | Worst statuses | What is the worst thing on their file? Three windows side by side — the bureau's delivered 24-month worst status with its maximum payment delay, a 36-month window awaiting a business decision, and a lifetime adverse count. |
-| **06** | Active credit facilities — overview | What is the total exposure, and how is it split? Four category cards (instalments, credit cards, non-instalments, services), each split between what they hold as *main borrower* and what they *guarantee for someone else* — because Finance House lends against those differently. |
+| **05** | Worst statuses | What is the worst thing on their file? Three windows side by side — the bureau's delivered 24-month worst status with its maximum payment delay, a 36-month window derived from the delivered conduct evidence (marked as derived, with its own maximum delay), and a lifetime adverse count. |
+| **06** | Active credit facilities — overview | What is the total exposure, and how is it split? Four category cards (instalments, credit cards, non-instalments, services), each split between what they hold as *main borrower*, any *co-held* share the bureau reports, and what they *guarantee for someone else* — because Finance House lends against those differently. Guaranteed exposure already overdue, and any bureau-recorded declined or rejected applications, surface only when present. |
 | **07** | Credit facilities — detail & 36-month conduct | How have they actually behaved, month by month? A heatmap of every facility across 36 months, colour-coded by how many days past due, grouped into active facilities, recent closures, older closures and quiet services. |
 | **08** | Recent applications | How much credit have they been seeking elsewhere? A timeline where the last 90 days — the window that matters for underwriting — is deliberately stretched to occupy most of the width, and the years behind it are compressed into the remainder. |
 
@@ -239,8 +239,11 @@ embedded permanently into the application's stylesheet.
 These are open business decisions, not defects. In each case the product holds
 the space open rather than guessing:
 
-- **The 36-month worst status.** AECB delivers no such figure, and how the
-  window should be measured is undecided. The panel says *To be built*.
+- **The 36-month worst status — refinements.** The panel is now derived from
+  the bureau's own conduct evidence (whole book, closed contracts included)
+  and marked as derived. Still open: whether to derive a like-for-like
+  24-month figure as a cross-check against the bureau's delivered one, and
+  whether a guarantor's delinquency should be flagged distinctly.
 - **A contradictory bureau field.** One delivered field claims a current payment
   delay that every other field in the file contradicts. Nothing on screen reads
   it, by decision, until AECB explains the discrepancy — showing it would state

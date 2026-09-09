@@ -132,6 +132,20 @@ class Facility:
         return len(self.history)
 
     @property
+    def possible_months(self) -> int:
+        """Window months this facility was actually open -- the honest
+        denominator for its coverage figures. Counting 36 for a loan open
+        three months understates its coverage; "3 of 3" and "3 of 36" are
+        different claims. Spans the opening month down to the closure month
+        (or the report month while open; an undated closure conservatively
+        spans to the report month). Clamped to at least months_reported so
+        contradictory data can never push coverage past 100%.
+        """
+        newest = self.closed_at_month if self.closed_at_month is not None else 0
+        possible = min(WINDOW_MONTHS, self.open_months - newest + 1)
+        return max(possible, self.months_reported, 0)
+
+    @property
     def max_dpd(self):
         """Deepest delay in the window, or None if nothing was reported."""
         seen = [_as_days(row.get("DaysPaymentDelay"))
@@ -218,6 +232,126 @@ def by_category(facilities):
     for f in facilities:
         out.setdefault(f.category, []).append(f)
     return out
+
+
+# --- section 05: the derived worst-status window -----------------------------
+
+def worst_in_window(ctx, months=WINDOW_MONTHS):
+    """Deepest delinquency across the whole book in the last `months`.
+
+    Reinstated 9 Sep 2026 (deleted 2 Sep 2026; git history) when RRM settled
+    the defaults: EVERY contract counts -- closed ones and every role included,
+    because a closure inside the window does not erase the conduct that
+    preceded it. Two rules survive from the original implementation:
+
+      * a clean book must not attribute a "worst" to whichever contract
+        iterated first -- only a real delay or a below-normal status names a
+        facility;
+      * a severe STATUS outranks a raw DPD number when naming what happened.
+
+    Evidence comes from two delivered places, because monthly coverage is
+    sparse: contractsHistory rows inside the window, plus each contract's
+    DATED lifetime worst fields (WorstStatus/WorstStatusDate,
+    MaxDaysPaymentDelay/MaxDaysPaymentDelayDate) whenever their date falls
+    inside the window -- a dated lifetime event is delivered evidence the
+    monthly rows may not carry. A status the config cannot rank is counted in
+    `unknown`, never graded and never read as clean.
+
+    Returns None when nothing evidences the window at all (which includes any
+    payload without a resolvable report date). Otherwise:
+
+        status              worst RANKED status seen, or None if none was
+        max_dpd             deepest delay; 0 only when a zero was reported;
+                            None when no delay figure was delivered at all
+        facility, when      the naming event -- None on a clean book
+        clean               no delay and nothing ranked below normal
+        unknown             delivered statuses the config cannot rank
+        reported_months     monthly history rows inside the window
+        facilities_covered  contracts contributing any evidence
+        facilities_total    contracts on file
+        months              the window, echoed for the renderer
+    """
+    facs = all_facilities(ctx)
+    report_date = ctx.report_date
+
+    worst_dpd, dpd_fac, dpd_when = None, None, None
+    worst_status, st_fac, st_when = None, None, None
+    dpd_reported = False
+    unknown = 0
+    reported = 0
+    covered = set()
+    lifetime_events = 0
+
+    def consider_dpd(dpd, facility, at):
+        nonlocal worst_dpd, dpd_fac, dpd_when, dpd_reported
+        if dpd is None:
+            return
+        dpd_reported = True
+        if dpd and (worst_dpd is None or dpd > worst_dpd):
+            worst_dpd, dpd_fac, dpd_when = dpd, facility, at
+
+    def consider_status(value, ctx_status, facility, at):
+        nonlocal worst_status, st_fac, st_when, unknown
+        if value is None:
+            return
+        if ctx_status["rank"] is None:
+            unknown += 1
+            return
+        if worst_status is None or ctx_status["rank"] < worst_status["rank"]:
+            worst_status = ctx_status
+            if ctx_status["rank"] < 100:
+                st_fac, st_when = facility, at
+
+    for facility in facs:
+        for month, row in facility.history.items():
+            if month >= months:
+                continue
+            reported += 1
+            covered.add(id(facility))
+            at = dates.parse_any(row.get("ReferenceDate"))
+            consider_dpd(_as_days(row.get("DaysPaymentDelay")), facility, at)
+            consider_status(row.get("ContractStatus"),
+                            ctx.status(row.get("ContractStatus")), facility, at)
+
+        raw = facility.raw
+        w_at = dates.parse_any(raw.get("WorstStatusDate"))
+        idx = month_index(report_date, w_at)
+        if idx is not None and 0 <= idx < months and raw.get("WorstStatus") is not None:
+            lifetime_events += 1
+            covered.add(id(facility))
+            consider_status(raw.get("WorstStatus"),
+                            ctx.status(raw.get("WorstStatus")), facility, w_at)
+
+        d_at = dates.parse_any(raw.get("MaxDaysPaymentDelayDate"))
+        idx = month_index(report_date, d_at)
+        if idx is not None and 0 <= idx < months:
+            dpd = _as_days(raw.get("MaxDaysPaymentDelay"))
+            if dpd is not None:
+                lifetime_events += 1
+                covered.add(id(facility))
+                consider_dpd(dpd, facility, d_at)
+
+    if not reported and not lifetime_events:
+        return None
+
+    clean = (not worst_dpd
+             and (worst_status is None or worst_status["rank"] >= 100))
+    naming_fac = st_fac if st_fac is not None else dpd_fac
+    naming_when = st_when if st_fac is not None else dpd_when
+
+    return {
+        "status": worst_status,
+        "max_dpd": worst_dpd if worst_dpd is not None
+                   else (0 if dpd_reported else None),
+        "facility": None if clean else naming_fac,
+        "when": None if clean else naming_when,
+        "clean": clean,
+        "unknown": unknown,
+        "reported_months": reported,
+        "facilities_covered": len(covered),
+        "facilities_total": len(facs),
+        "months": months,
+    }
 
 
 # --- section 06 aggregates ---------------------------------------------------

@@ -85,21 +85,16 @@ class ReportContext:
     def report_date(self):
         """The date the report is measured against.
 
-        score.DataPullDate -- when AECB was actually queried. Chosen over
-        ArchiveDate (a warehouse write timestamp) and sectionStatus's
-        'Last EnquiryDate' (which can post-date the contract data by months)
-        because it is the only one consistent with contracts.ReferenceDate and
-        the newest contractsHistory month.
+        score.DataPullDate -- when AECB was actually queried -- and nothing
+        else, by decision (8 Sep 2026). The ArchiveDate fallbacks (score's and
+        customerInfo's) were removed: both are warehouse write timestamps that
+        can post-date the contract data by months, and anchoring the page to
+        one silently misstates every window on it. A payload without a
+        DataPullDate has no resolvable report date: the top bar says
+        "Validity unknown" and every windowed section renders its own
+        no-report-date state.
         """
-        for candidate in (
-            self.score.get("DataPullDate"),
-            self.score.get("ArchiveDate"),
-            self.customer.get("ArchiveDate"),
-        ):
-            parsed = dates.parse_any(candidate)
-            if parsed:
-                return parsed
-        return None
+        return dates.parse_any(self.score.get("DataPullDate"))
 
     @property
     def unknown_arrays(self) -> list:

@@ -90,11 +90,16 @@
 
     (cfg.events || []).forEach(function (e) {
       var stem = BASE + e.lane * LANE;
+      /* Exceptions only: a delivered dispute rings the marker, a non-main-
+         holder role letters the provider label. Both keys are absent on the
+         default case and nothing extra is drawn. */
       h += '<div class="tl-event" style="left:' + e.x + '%" data-info="' +
            esc(e.info) + '">' +
-           '<div class="amt">' + esc(e.provider || "") + "</div>" +
+           '<div class="amt">' + esc(e.provider || "") +
+           (e.role ? " · " + esc(e.role) : "") + "</div>" +
            '<div class="mk' + (e.taken ? " taken" : "") +
-           (e.focus ? " focus" : "") + '">' + esc(e.glyph || "") + "</div>" +
+           (e.focus ? " focus" : "") + (e.disp ? " disp" : "") + '">' +
+           esc(e.glyph || "") + "</div>" +
            '<div class="stem" style="height:' + stem + 'px"></div></div>';
     });
 
@@ -140,22 +145,73 @@
     function rowHtml(c) {
       var stats = "";
       if (c.limit) stats += '<span class="stat">Limit <b>' + esc(c.limit) + "</b></span>";
-      if (c.os) stats += '<span class="stat">OS <b>' + esc(c.os) + "</b></span>";
+      /* "Current" figures are as delivered at Current_ReferenceDate, which can
+         lag the report date -- the hover says when "current" actually was. */
+      if (c.os) {
+        stats += '<span class="stat"' +
+                 (c.asAt ? ' data-info="Current balance as delivered by AECB, as at ' +
+                           esc(c.asAt) + ' — this snapshot can lag the report date."' : "") +
+                 '>OS <b>' + esc(c.os) + "</b></span>";
+      }
+      if (c.amount) stats += '<span class="stat">Amount <b>' + esc(c.amount) + "</b></span>";
       if (c.payment) stats += '<span class="stat">Payment <b>' + esc(c.payment) + "</b></span>";
       if (c.tenor) stats += '<span class="stat">Tenor <b>' + esc(c.tenor) + "</b></span>";
       if (c.util != null) {
         stats += '<span class="stat">Util <b style="color:' +
                  (c.util > 100 ? "var(--red)" : "var(--green)") + '">' + esc(c.util) + "%</b></span>";
       }
+      if (c.method) stats += '<span class="stat">' + esc(c.method) + "</span>";
+      if (c.secured != null) {
+        stats += '<span class="stat">Secured' + (c.secured ? " · " + esc(c.secured) : "") + "</span>";
+      }
       if (c.maxdpd > 0) stats += '<span class="stat dpd">Max DPD <b>' + esc(c.maxdpd) + "</b></span>";
-      // How much of the window this provider actually filed. A row with two
-      // reported months tells you almost nothing, however green it looks.
+      /* The contract's dated LIFETIME worst -- it can predate the window, so a
+         clean-looking strip must not hide it. Ships only when adverse. */
+      if (c.worstEver) {
+        var we = c.worstEver, weBits = [];
+        if (we.code) {
+          weBits.push("worst status " + we.code + " — " + (we.label || meta(we.code).label) +
+                      (we.when ? " (" + we.when + ")" : ""));
+        }
+        if (we.maxDays) {
+          weBits.push("deepest delay " + we.maxDays + " days" +
+                      (we.maxDaysWhen ? " (" + we.maxDaysWhen + ")" : ""));
+        }
+        if (we.maxOverdue) {
+          weBits.push("peak overdue AED " + we.maxOverdue +
+                      (we.maxOverdueWhen ? " (" + we.maxOverdueWhen + ")" : ""));
+        }
+        stats += '<span class="final-st we ' + (we.code ? stCls(we.code) : "sa") +
+                 '" data-info="Lifetime worst, delivered on the contract row — it can predate ' +
+                 'the 36-month window: ' + esc(weBits.join("; ")) + '.">Worst ever · ' +
+                 esc(we.code ? (we.label || meta(we.code).label) : we.maxDays + "d late") + "</span>";
+      }
+      if (c.dispute) {
+        stats += '<span class="hm-warn" data-info="FlagOpenDispute is set on this contract — ' +
+                 'the row may change once the dispute resolves.">Open dispute</span>';
+      }
+      if (c.notLiable) {
+        stats += '<span class="hm-warn" data-info="HolderIsNotLiable is set — the conduct on ' +
+                 'this row may not be the subject&#39;s own liability.">Holder not liable</span>';
+      }
+      if (c.currency) {
+        stats += '<span class="hm-warn" data-info="Original currency ' + esc(c.currency) +
+                 ' — the page otherwise renders money as AED; this contract&#39;s figures are ' +
+                 'in its own currency.">' + esc(c.currency) + "</span>";
+      }
+      // How much of the window this provider actually filed, against the
+      // months the facility was actually open -- "3/3" and "3/36" are
+      // different claims. A row with two reported months tells you almost
+      // nothing, however green it looks; a short facility fully reported is
+      // complete, not thin.
       if (c.monthsReported != null) {
-        var thin = c.monthsReported < 6;
+        var poss = c.possible != null ? c.possible : M;
+        var thin = c.monthsReported < 6 && c.monthsReported < poss;
         stats += '<span class="stat cov' + (thin ? " thin" : "") + '" data-info="' +
-                 'The provider filed ' + c.monthsReported + ' monthly rows out of ' + M +
-                 '. Unreported months are grey and carry no conduct information.">' +
-                 'Reported <b>' + c.monthsReported + "/" + M + "</b></span>";
+                 'The provider filed ' + c.monthsReported + ' monthly row(s) out of the ' + poss +
+                 ' month(s) this facility was open inside the window. Unreported months are ' +
+                 'grey and carry no conduct information.">' +
+                 'Reported <b>' + c.monthsReported + "/" + poss + "</b></span>";
       }
       if (c.closedUndated) {
         stats += '<span class="closed-on na" data-info="AECB reports this ' +
@@ -234,6 +290,21 @@
       }
       h += '</div><div class="hm-cells">';
 
+      /* The month's OWN balance/overdue for a cell tooltip. These used to
+         show the row-level current balance in every cell, which read as a
+         monthly figure and was not one. Absent months simply say nothing. */
+      var noDpd = null;
+      if (c.noDpd) {
+        noDpd = {};
+        for (var nd = 0; nd < c.noDpd.length; nd++) noDpd[c.noDpd[nd]] = true;
+      }
+      function moneyBits(mo) {
+        var s = "";
+        if (c.bal && c.bal[mo] != null) s += " · balance AED " + esc(c.bal[mo]);
+        if (c.od && c.od[mo] != null) s += " · overdue AED " + esc(c.od[mo]);
+        return s;
+      }
+
       // DPD strip
       for (m = 0; m < M; m++) {
         if (m > c.openMonths) {
@@ -252,15 +323,23 @@
                'This is not a record of on-time payment."></div>';
           continue;
         }
+        /* A month with a status row but no delivered DaysPaymentDelay must
+           not paint as 0 DPD -- that would be a zero the bureau never sent. */
+        if (noDpd && noDpd[m]) {
+          h += '<div class="cell dn" data-info="' + lbl(m) +
+               ' · status reported, but DaysPaymentDelay was not delivered for ' +
+               'this month — this is not a record of 0 DPD.' + moneyBits(m) + '"></div>';
+          continue;
+        }
         var dl = delays[m];
         if (dl) {
           var b = bucket(dl.days);
           h += '<div class="cell ' + b["class"] + '" data-info="' + lbl(m) + " · " +
-               esc(dl.days) + " days past due · status: " + esc(b.label) + " · balance AED " +
-               esc(c.os) + '">' + esc(dl.days) + "</div>";
+               esc(dl.days) + " days past due · status: " + esc(b.label) +
+               moneyBits(m) + '">' + esc(dl.days) + "</div>";
         } else {
           h += '<div class="cell d0" data-info="' + lbl(m) +
-               ' · current (0 DPD) · balance AED ' + esc(c.os) + '"></div>';
+               ' · current (0 DPD)' + moneyBits(m) + '"></div>';
         }
       }
       h += "</div>";

@@ -4,11 +4,11 @@ Renders an archived AECB bureau payload as a single scannable underwriting
 screen, to collapse time-to-decision on an individual customer report.
 
 **Status: wired to the payload, and on a fluid scale.** All eight sections
-render the real customer. Section 05 carries a third panel that
-is deliberately empty: AECB delivers no 36-month worst status, and how to
-compute one is an open decision, so the panel states *To be built* rather than
-showing a figure. All eight sections grow and shrink with the space available;
-Every section has also been through a design pass.
+render the real customer. Section 05's 36-month panel is **derived** (built
+9 Sep 2026 to RRM defaults — see *§05 worst statuses* below): AECB delivers no
+36-month worst status, so it is computed from the delivered conduct evidence
+and always marked `derived`. All eight sections grow and shrink with the space
+available; every section has also been through a design pass.
 
 > **Picking this up mid-stream?** Read [HANDOFF.md](HANDOFF.md) — it carries the
 > current state of play, the decisions already taken, and what was being worked
@@ -159,7 +159,7 @@ Both render as explicit `n/a` rather than blank.
 
 | What | Why it's blocked |
 |---|---|
-| §05 36-month worst status | AECB delivers no 36-month figure. It has to come from `contractsHistory`, and what the window should measure is undecided — see *§05 worst statuses* below. The panel says *To be built* rather than guessing. |
+| §05 36-month worst status — refinements | **Built 9 Sep 2026** to RRM defaults (whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD). Still open from the original six questions: whether to derive a like-for-like 24-month figure as a reconciliation against AECB's delivered one, and whether guarantor conduct should be flagged rather than merely included. |
 | `MaxCurrentPaymentDelay` | The payload delivers `1` while `MaxPaymentDelay24M` is `0`, every contract's `Current_DaysPaymentDelay` is `0` and all 99 `contractsHistory` rows are 0 DPD. **Nothing on screen reads it**, by decision, until AECB explains the discrepancy — showing it would state a contradiction the file cannot resolve. |
 | §02 score cut-offs | `config/bands.json` places 732 in **VLR**, but AECB delivered **LR**. The delivered band wins and the screen shows a warning. The configured cut-offs are provisional and need reconciling against the FH scorecard. |
 | Provider names | `config/providers.json` is a stub, so the sections that name a reporting provider show its code instead: **§01, §03, §04, §07's heatmap and §08's timeline** (`B08`, `T05`, `C04`). §05 and §06 carry no provider codes at all. |
@@ -385,7 +385,8 @@ book. A third panel carries the life-time count.
 |---|---|---|
 | Worst status · last 24 months | `contractsTotalSummary.WorstStatus24M` | delivered, shown **verbatim** |
 | ↳ Max payment delay · 24m | `contractsTotalSummary.MaxPaymentDelay24M` | delivered, shown **verbatim** |
-| Worst status · last 36 months | none | **To be built** |
+| Worst status · last 36 months | `contractsHistory` + each contract's dated `WorstStatus`/`MaxDaysPaymentDelay` | **derived** (9 Sep 2026, RRM defaults) |
+| ↳ Max payment delay · 36m | same evidence | **derived** |
 | Life-time worst status count · non-services | `summary.Worststatus` | delivered, shown **verbatim** |
 
 The delay sits **under the status it qualifies**, not in a fourth panel. A worst
@@ -417,30 +418,38 @@ with a *Partly reported* header pill. The life-time figure is
 a count, so a non-zero one is amber rather than red — a count says how many,
 never how deep, and the depth is §07's job.
 
-The 36-month panel takes **no provenance mark at all**. Neither `delivered` nor
-`derived` is true of a panel with no figure behind it, and marking it either now
-would misstate where the number came from once one exists. What the window
-should measure is genuinely open: whether it counts a guarantor's or co-holder's
-delinquency, whether closed contracts count, how sparse coverage is stated, and
-whether status or DPD leads when they disagree. The previous implementation,
-`derive/facilities.worst_in_window()`, was **deleted** on 2 September 2026 at
-the user's decision (git history preserves it) — but the two hard-won rules it
-encoded remain requirements for whatever gets built: a clean book must not
-attribute a "worst" to whichever contract iterated first, and a severe status
-outranks a raw DPD number when naming what happened.
+The 36-month panel is **derived and always marked so** (RRM instruction, 9 Sep
+2026 — the chip renders even over the not-derivable empty state, because
+nothing in that panel is ever a bureau figure). The derivation is
+`derive/facilities.worst_in_window()`, reinstated from git with the RRM
+defaults: **every contract counts** — closed ones and every role included — and
+evidence is the monthly `contractsHistory` rows in the window **plus each
+contract's dated lifetime worst fields** (`WorstStatus`/`WorstStatusDate`,
+`MaxDaysPaymentDelay`/`MaxDaysPaymentDelayDate`) whenever their date falls
+inside it, which lets a closure the monthly rows never covered still grade the
+window. The two hard-won rules from the original implementation survive: a
+clean book must not attribute a "worst" to whichever contract iterated first,
+and a severe status outranks a raw DPD number when naming what happened. A
+status the config cannot rank makes the window **unknown, never clean**; the
+`derived` chip's hover carries the method and the coverage figures; the
+figure's own hover names the worst event (facility, provider, month, closed or
+not). Its max-delay sub-line prints `0 days` only when a zero was actually
+reported somewhere in the window — with no delay figure delivered at all it
+says *Not reported*.
 
-`.wsx` is `repeat(3,1fr)` and takes **no density step**: three delivered windows
-is the data, exactly as `.fac-grid`'s four categories are. The panels stretch to
-the tallest of the row, and today the tallest is the pending one, so the figure
-carries `margin:auto 0` to sit centred in the space rather than floating above a
-void.
+`.wsx` is `repeat(3,1fr)` and takes **no density step**: three windows is the
+data, exactly as `.fac-grid`'s four categories are. The panels stretch to the
+tallest of the row, and the figure carries `margin:auto 0` to sit centred in
+the space rather than floating above a void.
 
-Coverage note for whoever builds the 36-month panel: in the reference payload
-`contractsHistory` gives **69 facility-months across 13 contracts** inside 24
-months and **95 across 15** inside 36, against a report date of 2023-10-26. Every
-row is `Active Payments` at 0 DPD, so the section's adverse paths are exercised
-by `scripts/measure/synthetic.py` (`ws-severe`, `ws-adverse`, `ws-unknown`,
-`ws-absent`, `ws-count`, `ws-count-absent`) and not by the reference customer.
+Coverage note: in the reference payload `contractsHistory` gives **69
+facility-months across 13 contracts** inside 24 months and **95 across 15**
+inside 36, against a report date of 2023-10-26 — every row `Active Payments`
+at 0 DPD, so the derived panel reads clean there and adverse on the synthetic
+fixture (Write-off · 214 days, matching the delivered 24M anchor). The
+section's adverse paths are also exercised by `scripts/measure/synthetic.py`
+(`ws-severe`, `ws-adverse`, `ws-unknown`, `ws-absent`, `ws-count`,
+`ws-count-absent`).
 
 ### §06 active credit facilities — split by role
 
@@ -449,6 +458,17 @@ Four cards, one per AECB category, each split into **Main holder** and
 liabilities and FH lends against them differently, so a guarantor block that
 were simply absent would leave an underwriter inferring the guarantor position
 from silence. It always renders, and says which of three things is true.
+
+Three only-when-non-zero surfaces (9 Sep 2026): a red **Guaranteed overdue**
+top chip from `TotalOverdueGuaranteed` (a non-zero one is the guarantee being
+called; it previously never reached the screen); per-role **declined /
+rejected / not-taken-up** lines from `contractsSummary`'s delivered counters —
+the payload's only record of an application outcome — which also keep a card
+alive in the emptiness test; and a **Co-holder** block (role `C`) that renders
+between the other two only when the bureau returns figures or counters for it.
+An absent C row is the bureau not returning the split, so no permanent
+"Not reported" third block is shown — the guarantor rationale does not
+transfer.
 
 | category | headline | rows |
 |---|---|---|
@@ -572,6 +592,27 @@ The header tag reads **`5 Active · 10 Closed`** — AECB's own words. `ActiveFl
 delivers `Active` and `Closed`; "open" was ours and appears nowhere in the
 payload.
 
+**Row signals added 9 Sep 2026, every one only-when-delivered.** A severity-
+toned **Worst ever** chip from the contract's dated lifetime fields
+(`WorstStatus`/`MaxDaysPaymentDelay`/`MaxOverdueAmount` with their dates),
+rendered only when adverse or unrankable — its hover says it can predate the
+36-month window, which is exactly why it exists. Amber chips for **Open
+dispute** (`FlagOpenDispute`), **Holder not liable** and a **non-AED
+`OriginalCurrency`** (the page otherwise renders everything as AED). Stats for
+the original **`TotalAmount`** (paydown context beside OS), **`MethodOfPayment`**
+(salary-transfer conduct is largely involuntary) and **`SecurityType`**. The OS
+stat hovers its **as-at date** (`Current_ReferenceDate` — the "current"
+snapshot can lag the report date). Three honesty fixes travelled with them: a
+month whose status arrived with a null `DaysPaymentDelay` paints **not
+reported, never "0 DPD"** (the `noDpd` list in the blob); DPD-cell tooltips
+carry that **month's own** delivered balance/overdue (`bal`/`od` maps) instead
+of repeating the current balance in all 36 cells; and coverage — the section
+line and the per-row `Reported n/m` chip — counts **only months the facility
+was open** (`possible_months`), so a fully-reported short loan is complete,
+not thin. Deliberately still unread: `PaymentBehaviour` (undocumented coding)
+and the sparse card-activity fields (`AmountSpent`, `CardUsedFlag`,
+`MinimumPaymentFlag`, `BilledAmount`), which feed the AI brief instead.
+
 **Where §07's height went** (652 → 571). The rows were driven by the *label*
 column, not the heatmap: at 250px the stat line wrapped to three rows while the
 36 cells beside it needed only 51px. Widening the label to 320px and dropping
@@ -607,6 +648,15 @@ One chart, and nothing else. The four counter tiles it used to lead with
 (5 / 6 / 4 / 15) answered a question nobody was asking, while the thing an
 underwriter actually needs — *when* the customer went looking, and how the
 recent weeks compare to the years behind them — was not on the screen at all.
+
+**Two exception marks, delivered-only** (9 Sep 2026). A `FlagOpenDispute`
+rings its marker amber; a non-main-holder `Role` puts the letter beside the
+provider code above the marker (`B04 · G` — §07's A/C/G vocabulary) and the
+full role name in the hover. Main holder is the default and earns nothing;
+each mark's legend entry renders only when the payload actually has the
+exception, so a clean file's legend promises nothing the chart does not show.
+The hover names the dispute state in both directions — a delivered `False`
+reads *No dispute*, an absent flag says nothing.
 
 **The axis is split.** AECB delivers applications spanning years while the
 underwriting question is about the last 90 days: in the reference payload that

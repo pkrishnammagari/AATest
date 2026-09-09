@@ -39,11 +39,10 @@ rolled out to **all eight sections**, the teal → FH blue token pass, the
 §03/§04 chart-width fix, the §02 gauge fix, and the brief rail made
 closed-on-load.
 
-**Every section is now designed and wired.** The one piece of deliberately
-unbuilt work left on the page is **§05's 36-month worst status**, which says
-*To be built* because the logic is an open decision. See the last section of
-this file, which carries the six questions already put to the user and still
-unanswered.
+**Every section is now designed and wired.** §05's 36-month worst status —
+long the one deliberately unbuilt panel — was **built 9 Sep 2026** with the
+RRM defaults (see *Next task* at the end of this file, now marked done, for
+what was decided and what refinements remain open).
 
 Read `README.md` first — it documents architecture, config, payload traps and
 known gaps. Then skim `aecb/render/tokens.py` and one section module
@@ -251,8 +250,10 @@ this reason — do not reintroduce them.
     differs by employer segment**, some assessed over 24 months and some over
     36, so an underwriter needs both windows side by side rather than one
     figure that answers half the book.
-  - Panels: `contractsTotalSummary.WorstStatus24M` · **To be built** ·
-    `summary.Worststatus`. Both delivered values print **VERBATIM** — no
+  - Panels: `contractsTotalSummary.WorstStatus24M` · **derived 36-month
+    window** (9 Sep 2026, `facilities.worst_in_window()`, always marked
+    `derived`) · `summary.Worststatus`. Both delivered values print
+    **VERBATIM** — no
     relabelling, no rounding, no translating display text into a letter code.
     That is an explicit instruction, and `check_no_mock.py` now reads the
     figures back out of `.wsx-worst` and fails the build if either stops
@@ -482,9 +483,9 @@ gained the confirmation states after these numbers were captured).
 | 02 Score & Bureau History | `score.py` | done · 162 / 156 · size |
 | 03 Income & employment | `income.py` | done · 560 / 502 open (loads collapsed) · size · heights predate the confirmation model — re-measure |
 | 04 Cheque & direct-debit returns | `returns.py` | done · 357 / 344 · size |
-| 05 Worst Statuses | `worst_status.py` | **rebuilt 7 Aug** · 186 / 201 · size · two panels delivered, the 36-month one says *To be built* ← next |
+| 05 Worst Statuses | `worst_status.py` | **36-month panel built 9 Sep** · heights not re-measured since · two panels delivered verbatim, the 36-month one derived (`worst_in_window`, always marked `derived`) |
 | 06 Active Credit Facilities — overview | `facilities.py` | **rebuilt 7 Aug** · 275 / 283 · size · role split, utilisation line, no counts |
-| 07 Credit facilities — detail | `detail.py` | **restructured 7 Aug** · 571 / 564 · four buckets, grouped by category · size + **density** (legend 4-up) |
+| 07 Credit facilities — detail | `detail.py` | **row signals + honesty fixes 9 Sep** (worst-ever/dispute/secured/currency chips, monthly money in tooltips, noDpd cells, open-months coverage) · heights not re-measured since · four buckets, grouped by category |
 | 08 Recent Applications | `applications.py` | **rebuilt 7 Aug** · 234 / 234 · one split-axis timeline · no gain by construction |
 
 (The modules were renamed 2 Sep 2026 — numbers stripped, `s09_enquiries` →
@@ -670,12 +671,13 @@ elsewhere without resolving it.
 
 ## Open items needing USER decisions
 
-0. **§05's 36-month worst status — the live one.** The panel is built and says
-   *To be built*; what it should measure is undecided. Six questions were put to
-   the user on 7 Aug 2026 and superseded by the three-panel instruction before
-   any were answered, so they are still open and are the shortest path to
-   building it. They are restated in full in *Next task* at the end of this
-   file. Do not pick answers unilaterally: each one changes the number.
+0. **§05's 36-month worst status — RESOLVED 9 Sep 2026.** The user directed it
+   be built with the defaults on record: whole book including closed contracts
+   and all roles; evidence = monthly history plus each contract's dated
+   lifetime worst fields; status outranks DPD for naming; always marked
+   `derived`; max-delay sub-line included. Still open as refinements: a
+   derived 24-month reconciliation against the delivered figure (question 1)
+   and flagging guarantor conduct distinctly (question 2's second half).
 1. `config/bands.json` cut-offs put 732 in VLR but AECB delivers LR. Delivered
    band wins (comment in `sections/score.py` explains why) — reconcile against
    the FH scorecard.
@@ -1069,13 +1071,16 @@ strip's own 26px in every combination, and side by side the chart width equals
 its column width exactly in every combination. The rail toggle was exercised
 from the new default — loads closed, button opens, × closes, button reopens.
 
-## Next task — §05's 36-month worst status
+## Next task — §05's 36-month worst status — DONE 9 Sep 2026
 
-**The panel is built and says *To be built*. The logic behind it is the open
-decision, and it is the user's, not ours.** Six questions were put to the user
-on 7 Aug 2026; the three-panel instruction arrived before any were answered, so
-every one is still open. Ask them, do not assume them — each changes the number
-the panel would show.
+**Built at the user's direction with reasonable RRM defaults** in
+`derive/facilities.worst_in_window()` + `sections/worst_status._derived_36m()`:
+whole book (closed contracts and all roles included), monthly history plus the
+dated contract lifetime worst fields, severe status outranking raw DPD for
+naming, unrankable statuses blocking a clean grade, coverage in the `derived`
+chip's hover — which renders always. The six questions below are kept for the
+record; 1 (a derived 24M reconciliation) and the role-flagging half of 2
+remain open as refinements.
 
 1. **Symmetry versus the bureau's own figure.** Derive both windows from
    `contractsHistory` so 24 and 36 are like-for-like, and keep AECB's delivered
@@ -1125,9 +1130,9 @@ populated on all 15 contracts but `MaxDaysPaymentDelay` is **null** on all 15.
 
 Every section is designed, wired and measured. What remains is not layout work:
 
-1. **§05's 36-month worst status** — the one deliberately unbuilt thing on the
-   page. Six questions are above and still unanswered; they are the shortest
-   path to building it. This is the next task.
+1. **§05's 36-month worst status** — built 9 Sep 2026 (see *Next task*, now
+   marked done). Remaining refinements only: the derived 24M reconciliation
+   and distinct guarantor flagging.
 2. **`config/providers.json` is still a stub** (open item 2) and is now the most
    visible unfinished tell: §01, §03, §04, §07's heatmap and §08's timeline all
    show a provider CODE where a name should be. §08 made this more prominent,

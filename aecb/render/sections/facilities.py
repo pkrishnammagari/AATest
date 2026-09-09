@@ -1,9 +1,12 @@
 """Active credit facilities -- the book at a glance, split by role.
 
 Sources: contractsFinancialSummary (payment / limit / balance / overdue, per
-category x role), contractsTotalSummary (exposure, newest facility, card
-utilisation, guarantee totals), contractsSummary (counts -- read for the
-emptiness test only, never displayed).
+category x role -- A, C and G), contractsTotalSummary (exposure, newest
+facility, card utilisation, guarantee totals including the overdue-guaranteed
+chip), contractsSummary (the emptiness test, plus the delivered
+declined/rejected/not-taken-up counters, shown only when non-zero -- the
+volume counts TotalNo/ActiveNo/ClosedNo stay undisplayed by the 7 Aug 2026
+decision).
 
 Three things worth stating here rather than leaving to be rediscovered:
 
@@ -59,14 +62,18 @@ _FIGURES = ("PaymentAmount", "CreditLimit", "Balance", "OverdueAmount")
 
 def render(ctx, meta) -> str:
     main = facilities.financial_summary(ctx, "A")
+    co = facilities.financial_summary(ctx, "C")
     gtr = facilities.financial_summary(ctx, "G")
-    counts = facilities.count_summary(ctx, "A")
+    counts = dict((role, facilities.count_summary(ctx, role))
+                  for role in ("A", "C", "G"))
     live = facilities.by_category(
         [f for f in facilities.all_facilities(ctx) if not f.closed])
 
     cards = "".join(
-        _card(ctx, cat, main.get(cat) or {}, gtr.get(cat) or {},
-              counts.get(cat) or {}, live.get(cat) or [])
+        _card(ctx, cat, main.get(cat) or {}, co.get(cat) or {},
+              gtr.get(cat) or {},
+              dict((role, counts[role].get(cat) or {}) for role in counts),
+              live.get(cat) or [])
         for cat in _ORDER)
 
     return c.section_card(body='<div class="fac-grid">%s</div>' % cards,
@@ -94,19 +101,34 @@ def _aside(ctx):
     if guaranteed:
         parts.append(c.tag("Guaranteed %s" % c.aed(guaranteed), "warn"))
 
+    # Guaranteed exposure already OVERDUE is the guarantee being called -- an
+    # acute signal, red where the balance chip is amber. Same rule: a zero is
+    # carried by the per-category lines, only a real figure earns a chip.
+    gtr_overdue = totals.get("TotalOverdueGuaranteed")
+    if gtr_overdue:
+        parts.append(c.tag("Guaranteed overdue %s" % c.aed(gtr_overdue), "bad"))
+
     return "".join(parts)
 
 
 # --- one category card ------------------------------------------------------
 
-def _card(ctx, cat, main, gtr, counts, live_rows):
+# The delivered application-outcome counters, per category x role. The ONLY
+# place the payload records an application outcome -- section 08's rows carry
+# no declined/rejected/NTU vocabulary at all.
+_OUTCOME_FIELDS = (("DeclinedNo", "declined"),
+                   ("RejectedNo", "rejected"),
+                   ("NotTakenUpNo", "not taken up"))
+
+
+def _card(ctx, cat, main, co, gtr, counts, live_rows):
     head = ('<div class="fac-h"><span class="fac-cat">%s</span>'
             '<span class="fac-name">%s</span></div>'
             % (cat, CATEGORY_LABEL.get(cat, cat)))
 
     # A category with nothing in it says so, rather than showing dashes that
     # could be misread as zero balances on real facilities.
-    if _is_empty(main, gtr, counts, live_rows):
+    if _is_empty(main, co, gtr, counts, live_rows):
         return ('<div class="fac empty">%s%s</div>'
                 % (head, c.empty_state("No facilities",
                                        "Nothing reported in this category.")))
@@ -114,23 +136,30 @@ def _card(ctx, cat, main, gtr, counts, live_rows):
     parts = [head]
     if cat == "C":
         parts.append(_utilisation(ctx))
-    parts.append(_role_block("Main holder", cat, main))
-    parts.append(_guarantor_block(ctx, cat, gtr))
+    parts.append(_role_block("Main holder", cat, main, counts["A"]))
+    parts.append(_coholder_block(cat, co, counts["C"]))
+    parts.append(_guarantor_block(ctx, cat, gtr, counts["G"]))
     return '<div class="fac">%s</div>' % "".join(parts)
 
 
-def _is_empty(main, gtr, counts, live_rows) -> bool:
+def _is_empty(main, co, gtr, counts, live_rows) -> bool:
     """Whether the screen should say this category holds nothing.
 
-    Keyed off the bureau count as well as the figures. contractsSummary's
+    Keyed off the bureau counts as well as the figures. contractsSummary's
     TotalNo spans more history than the delivered contract rows, so a category
     that is empty NOW but was not always must not claim nothing was ever
-    reported. This is the ONLY thing the counts are read for -- they are no
-    longer displayed anywhere on the card.
+    reported. The outcome counters keep a card alive too: a category holding
+    only declined applications has no contract (TotalNo 0) but is not
+    "nothing reported".
     """
-    if live_rows or counts.get("TotalNo"):
+    if live_rows:
         return False
-    return not _has_figures(main) and not _has_figures(gtr)
+    for row in counts.values():
+        if row.get("TotalNo"):
+            return False
+        if any(row.get(field) for field, _label in _OUTCOME_FIELDS):
+            return False
+    return not any(_has_figures(fin) for fin in (main, co, gtr))
 
 
 def _has_figures(fin) -> bool:
@@ -138,22 +167,37 @@ def _has_figures(fin) -> bool:
     return any(fin.get(field) for field in _FIGURES)
 
 
-# --- the two role blocks ----------------------------------------------------
+# --- the role blocks --------------------------------------------------------
 
-def _role_block(title, cat, fin):
+def _role_block(title, cat, fin, counts):
     # The role label sits ON the balance line rather than above it. It is the
     # caption for that figure, so a line of its own said the same thing twice
     # and cost one per block. .fac-block wraps at narrow widths, which puts the
     # figure back underneath -- the old layout, reached only when it is needed.
-    return ('<div class="fac-block"><span class="fac-role">%s</span>%s</div>%s'
-            % (title, _headline(fin), _rows(cat, fin)))
+    return ('<div class="fac-block"><span class="fac-role">%s</span>%s</div>%s%s'
+            % (title, _headline(fin), _rows(cat, fin), _outcomes(counts)))
 
 
-def _guarantor_block(ctx, cat, fin):
+def _coholder_block(cat, fin, counts):
+    """The C role, rendered ONLY when the bureau returned something for it.
+
+    The guarantor block's always-render rationale (an absent block is
+    ambiguous) does not transfer: neither fixture delivers a single C row, so
+    an ever-present "Co-holder · Not reported" would be a permanent third
+    block of noise for a split the bureau may simply not return. When a row
+    does arrive, ignoring it would hide a co-held liability -- so it renders
+    exactly like the other roles.
+    """
+    if not _has_figures(fin) and not _outcomes(counts):
+        return ""
+    return _role_block("Co-holder", cat, fin, counts)
+
+
+def _guarantor_block(ctx, cat, fin, counts):
     head = '<span class="fac-role">Guarantor</span>'
     if _has_figures(fin):
-        return ('<div class="fac-block">%s%s</div>%s'
-                % (head, _headline(fin), _rows(cat, fin)))
+        return ('<div class="fac-block">%s%s</div>%s%s'
+                % (head, _headline(fin), _rows(cat, fin), _outcomes(counts)))
 
     # Nothing in the category's guarantor row. AECB delivers its own book-wide
     # guarantee totals, and a total of zero means every category's is zero --
@@ -163,9 +207,30 @@ def _guarantor_block(ctx, cat, fin):
     totals = ctx.totals
     if totals.get("TotalBalanceGuaranteed") == 0 and totals.get("TotalOverdueGuaranteed") == 0:
         return ('<div class="fac-block">%s<span class="fac-nil">No exposure '
-                'reported%s</span></div>' % (head, _tag_delivered()))
+                'reported%s</span></div>%s' % (head, _tag_delivered(),
+                                               _outcomes(counts)))
     return ('<div class="fac-block">%s<span class="fac-nil"><span class="na">'
-            'Not reported</span></span></div>' % head)
+            'Not reported</span></span></div>%s' % (head, _outcomes(counts)))
+
+
+def _outcomes(counts) -> str:
+    """Delivered application outcomes for one category x role; '' when none.
+
+    Rendered only when non-zero: the counters are 0 across the whole book on a
+    clean file, and sixteen zero lines would bury the one that matters. A
+    non-zero one is adverse -- the bureau recording a decline elsewhere -- and
+    this is the only place the payload carries it.
+    """
+    parts = ["%s %s" % (c.format_number(counts.get(field)), label)
+             for field, label in _OUTCOME_FIELDS if counts.get(field)]
+    if not parts:
+        return ""
+    info = ("Delivered by AECB in contractsSummary (DeclinedNo, RejectedNo, "
+            "NotTakenUpNo) for this category and role. Shown only when "
+            "non-zero; the payload's application rows carry no outcome, so "
+            "these counters are the only delivered record of one.")
+    return ('<div class="fac-outcomes" data-info="%s">%s</div>'
+            % (c.attr(info), " · ".join(parts)))
 
 
 def _headline(fin):

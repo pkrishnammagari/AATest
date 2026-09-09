@@ -40,6 +40,8 @@ class Record:
         self.income = entry.extra.get("GrossAnnualIncome")
         self.income_usable = False       # set by _classify_income
         self.placeholder = False
+        self.income_others = []          # (value, provider) figures outranked
+                                         # by the shown one -- see _resolve_income
 
         self.started = dates.parse_any(entry.extra.get("DateOfEmployment"))
         self.ended = dates.parse_any(entry.extra.get("DateOfTermination"))
@@ -184,15 +186,21 @@ def _records(ctx):
                           reporting mid-employment.
       DateOfTermination   LATEST -- if one provider says it ended in 2022 and
                           another in 2023, the job demonstrably ran to 2023.
+      GrossAnnualIncome   the MOST RECENTLY REFRESHED row's figure, with rows
+                          not marked historical outranking superseded ones and
+                          dated rows outranking undated -- see _resolve_income.
+                          Figures the winner outranks are kept, not dropped:
+                          the row carries a disagreement marker naming them.
 
-    Left to first-non-null, all four answer to payload order instead, which is
+    Left to first-non-null, all five answer to payload order instead, which is
     to say to nothing.
     """
     current, prior = identity.employers(ctx)
     records = [Record(e) for e in current] + [Record(e) for e in prior]
     by_key = dict((identity.base_type(r.name).upper(), r) for r in records)
 
-    for row in ctx.rows("employment"):
+    candidates = {}
+    for order, row in enumerate(ctx.rows("employment")):
         rec = by_key.get(identity.base_type(row.get("EmploymentName")).upper())
         if rec is None:
             continue
@@ -215,7 +223,61 @@ def _records(ctx):
         if flag is not None:
             rec.disputed = bool(rec.disputed) or bool(flag)
 
+        if row.get("GrossAnnualIncome") is not None:
+            candidates.setdefault(id(rec), []).append((
+                not identity.is_historical(row.get("EmploymentName")),
+                updated,
+                -order,
+                row.get("GrossAnnualIncome"),
+                row.get("ProviderNo"),
+            ))
+
+    for rec in records:
+        _resolve_income(rec, candidates.get(id(rec)) or [])
+
     return records
+
+
+def _resolve_income(rec, cands) -> None:
+    """Pick the figure shown for an employer; keep what it outranks visible.
+
+    Providers repeat an employer, and their figures can disagree. The shown
+    figure is the one with the strongest claim to be current: a row not marked
+    historical beats a superseded one, a dated row beats an undated one, a
+    newer refresh beats an older one, and payload order settles what remains.
+    Every outranked figure that DIFFERS lands in rec.income_others -- the
+    renderer marks the disagreement and names them, because dropping a
+    delivered figure is information loss and hiding the disagreement would
+    present a contested number as settled.
+    """
+    if not cands:
+        return
+
+    def rank(cand):
+        current_row, updated, order, _value, _provider = cand
+        return (current_row, updated is not None,
+                updated or datetime.date.min, order)
+
+    def num(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    ordered = sorted(cands, key=rank, reverse=True)
+    best = ordered[0]
+    rec.income = best[3]
+
+    chosen = num(best[3])
+    seen = set()
+    for cand in ordered[1:]:
+        value = num(cand[3])
+        differs = (str(cand[3]) != str(best[3]) if value is None or chosen is None
+                   else value != chosen)
+        key = value if value is not None else str(cand[3])
+        if differs and key not in seen:
+            seen.add(key)
+            rec.income_others.append((cand[3], cand[4]))
 
 
 def _classify_income(rec, floor) -> None:

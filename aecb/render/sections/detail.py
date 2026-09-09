@@ -30,10 +30,14 @@ def render(ctx, meta) -> str:
             **meta)
 
     reported = sum(f.months_reported for f in rows)
-    possible = len(rows) * facilities.WINDOW_MONTHS
+    # Only months each facility was actually open count as possible -- a loan
+    # open three months reported 3/3 is complete, and counting 36 for it
+    # understated every short facility's coverage.
+    possible = max(1, sum(f.possible_months for f in rows))
     coverage = ('<span class="hm-note">Coverage: %d of %d facility-months '
-                'reported (%d%%). Unreported months are shown grey — absence is '
-                'not a clean record.</span>'
+                'reported (%d%%), counting only the months each facility was '
+                'open inside the window. Unreported months are shown grey — '
+                'absence is not a clean record.</span>'
                 % (reported, possible, round(reported * 100.0 / possible)))
 
     body = """

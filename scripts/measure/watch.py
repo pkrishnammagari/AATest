@@ -4,7 +4,8 @@
 # vocabulary is genuinely shared (.rec* by 03/04, .sub-wrap by 04/06/07,
 # .prov-mark by almost everything).
 SECTIONS = {
-    "s1": [".id-name-h", ".id-name-lg", ".id-name-ar", ".id-traits", ".id-trait",
+    "s1": [".id-name-h", ".id-name-lg", ".id-name-ttl", ".id-name-ar",
+           ".id-traits", ".id-trait",
            ".id-dob", ".facts.id-grid", ".fact", ".fact.c2", ".fact .k",
            ".fact .v", ".fact .v .mono", ".v-sub", ".mob-list", ".mob .num",
            ".mob .when", ".facts.id-grid > .fact:last-child"],
@@ -28,7 +29,7 @@ SECTIONS = {
     # .fac-count, .fac-note, .donut*, .overlimit-flag and the whole .cb-* family.
     # New: the role split (.fac-role / .fac-nil) and the utilisation line.
     "s6": [".fac-grid", ".fac", ".fac-h", ".fac-cat", ".fac-name",
-           ".fac-block", ".fac-role", ".fac-nil", ".fac-big",
+           ".fac-block", ".fac-role", ".fac-nil", ".fac-big", ".fac-outcomes",
            ".fac-rows", ".fac-row", ".fac-row .k", ".fac-row .val",
            ".fac-util", ".fac-util-h .k", ".fac-util-h .v",
            ".fac-util-bar", ".fac-util-fill"],
@@ -40,15 +41,17 @@ SECTIONS = {
     "s7": [".hm-wrap", ".hm", ".hm-axis-lab", ".hm-mo", ".hm-blockhead",
            ".hm-grouphead", ".hm-gc", ".hm-rl", ".hm-rl-t", ".hm-rl-s",
            ".hm-cells", ".cell", ".scell", ".ucell", ".prov-badge",
-           ".closed-on", ".final-st", ".freq", ".role", ".stl-t", ".stl",
+           ".closed-on", ".final-st", ".we", ".hm-warn", ".freq", ".role",
+           ".stl-t", ".stl",
            ".stl-more", ".lg", ".hm-note"],
     # Rewritten 7 Aug 2026 from counter tiles + a deferred table to one chart.
     # Gone: .ret-stats / .rs* / .enq-tbl* / .er-date / .enq-divider /
     # .inc-conflict / the .phase pill vocabulary. The .tl-* family is shared
     # with nothing else now, so it is watched here.
     "s8": [".enq-tl", ".enq-focus", ".enq-split", ".tl-axis", ".tl-mo",
-           ".tl-event", ".tl-event .mk", ".tl-event .amt", ".tl-event .stem",
-           ".enq-key", ".ek", ".ek-mk", ".ek-note"],
+           ".tl-event", ".tl-event .mk", ".tl-event .mk.disp",
+           ".tl-event .amt", ".tl-event .stem",
+           ".enq-key", ".ek", ".ek-mk", ".ek-mk.disp", ".ek-role", ".ek-note"],
     # Shared frame -- belongs to 03 and 04 jointly, and carries the Python
     # mirrors in sections/returns.py (_TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W).
     "shared34": [".inc-split", ".inc-detail", ".inc-vis", ".inc-svg",

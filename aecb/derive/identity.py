@@ -133,26 +133,55 @@ def contacts(ctx, contact_type: str):
 
 
 def addresses(ctx):
-    """Deduped addresses, newest first.
+    """Deduped addresses, newest first. No partially-filled row is dropped.
 
-    The payload carries no AddressType and no historical marker, so the newest
+    A row contributes nothing only when Address, Emirate, PoBox AND PlotNo are
+    all null (decision, 8 Sep 2026). A row with no Address but an Emirate still
+    places the subject somewhere and becomes an Entry with value None, which
+    the renderer states as "Address not provided — Emirate".
+
+    Two dedup rules, by shape:
+
+      * Addressed rows collapse on (Address, Emirate) wherever they appear --
+        the same address repeated by five providers is one entry.
+      * Emirate-only rows collapse only when CONSECUTIVE in payload order with
+        the same Emirate. A re-appearance after any other entry stays separate:
+        it may be a move away and back, and collapsing it would erase that.
+
+    Extras (emirate, pobox, plot) merge first-non-null-wins across a group's
+    rows, so a PO box any provider reported survives the dedup.
+
+    The payload carries no historical marker here, so the newest
     DateOfLastUpdate is treated as current and the rest as prior.
     """
     seen = {}
     order = []
+    run = None            # the entry of an open emirate-only run, else None
     for row in ctx.rows("addresses"):
         text = row.get("Address")
-        if not text:
+        emirate = row.get("Emirate")
+        pobox = row.get("PoBox")
+        plot = row.get("PlotNo")
+        if text is None and emirate is None and pobox is None and plot is None:
             continue
-        key = (text, row.get("Emirate"))
-        entry = seen.get(key)
-        if entry is None:
-            entry = Entry(text)
-            entry.extra["emirate"] = row.get("Emirate")
-            entry.extra["pobox"] = row.get("PoBox")
-            seen[key] = entry
+
+        if text is not None:
+            key = (text, emirate)
+            entry = seen.get(key)
+            if entry is None:
+                entry = Entry(text)
+                seen[key] = entry
+                order.append(entry)
+            run = None
+        elif run is not None and run.extra.get("emirate") == emirate:
+            entry = run
+        else:
+            entry = Entry(None)
             order.append(entry)
-        entry.add(row.get("ProviderNo"), row.get("DateOfLastUpdate"))
+            run = entry
+
+        entry.add(row.get("ProviderNo"), row.get("DateOfLastUpdate"),
+                  {"emirate": emirate, "pobox": pobox, "plot": plot})
 
     ranked = sorted(order, key=_newest_first_key, reverse=True)
     return (ranked[:1], ranked[1:]) if ranked else ([], [])
@@ -191,21 +220,52 @@ def employers(ctx):
 
 # --- name handling ----------------------------------------------------------
 
-def arabic_name(customer):
-    """The Arabic name, or None when it arrived corrupted.
+def _has_arabic(text) -> bool:
+    """Whether the string carries any actual Arabic codepoints.
 
     The reference payload delivers '??? ???? ???? ??? ???' -- an encoding loss
     somewhere upstream. Rendering that is worse than rendering nothing, so a
-    string with no actual Arabic codepoints is suppressed.
+    name with no Arabic codepoints is treated as corrupted and suppressed.
     """
-    text = customer.get("FullNameAR")
-    if not text:
-        return None
-    for ch in text:
+    for ch in text or "":
         # Arabic, Arabic Supplement, Arabic Extended-A, Presentation Forms.
         if "؀" <= ch <= "ۿ" or "ݐ" <= ch <= "ݿ" \
            or "ﭐ" <= ch <= "﷿" or "ﹰ" <= ch <= "﻿":
-            return text
+            return True
+    return False
+
+
+def _compose(parts):
+    """Join whichever name parts arrived. None when none did."""
+    present = [str(p).strip() for p in parts if p]
+    return " ".join(present) or None
+
+
+def english_name(customer):
+    """The display name: FullNameEN, else composed from its delivered parts.
+
+    The payload can carry FirstName/LastName with FullNameEN null; composing
+    what arrived beats rendering a dash beside name parts the bureau sent.
+    None only when nothing arrived at all.
+    """
+    return customer.get("FullNameEN") or _compose(
+        (customer.get("FirstName"), customer.get("LastName")))
+
+
+def arabic_name(customer):
+    """The Arabic name, or None when nothing usable arrived.
+
+    FullNameAR wins; when it is absent or corrupted, the name is composed from
+    FirstnameAR/LastnameAR instead. The corruption guard applies to whichever
+    source wins -- a composed mojibake run is no better than a delivered one.
+    """
+    text = customer.get("FullNameAR")
+    if text and _has_arabic(text):
+        return text
+    composed = _compose(
+        (customer.get("FirstnameAR"), customer.get("LastnameAR")))
+    if composed and _has_arabic(composed):
+        return composed
     return None
 
 

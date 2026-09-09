@@ -22,6 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aecb import context                      # noqa: E402
+from aecb.derive import identity as derive_identity  # noqa: E402
 from aecb.render.page import render_page      # noqa: E402
 
 def strip_noise(html):
@@ -69,6 +70,50 @@ def check(path):
         if value and value not in raw:
             problems.append("payload value missing from page: %s (%r)" % (label, value))
 
+    # The delivered honorific must render too -- checked against the
+    # noise-stripped html, not raw: a 3-character token like 'MRS' can occur
+    # by chance inside the base64 font block and would false-pass there.
+    title = ctx.customer.get("Title")
+    if title and title not in html:
+        problems.append("payload value missing from page: customer title (%r)" % title)
+
+    # Every delivered identification value must reach the page -- the newest
+    # current one as the tile headline, everything else (superseded values AND
+    # surplus current ones) inside the expander. Dropping one is information
+    # loss the page would never reveal (decision, 8 Sep 2026).
+    for row in ctx.rows("identification"):
+        info = row.get("Info")
+        if info and str(info) not in html:
+            problems.append("payload value missing from page: identification "
+                            "%s (%r)" % (row.get("InfoType"), info))
+
+    # Every delivered address text must reach the page too, and a row that
+    # carried a location without the address itself (emirate / PO box / plot
+    # only) must surface as the "Address not provided" statement rather than
+    # vanish. Emirate names alone are too repetitive to assert on.
+    partial = False
+    for row in ctx.rows("addresses"):
+        text = row.get("Address")
+        if text and str(text) not in html:
+            problems.append("payload value missing from page: address (%r)" % text)
+        if text is None and any(row.get(f) is not None
+                                for f in ("Emirate", "PoBox", "PlotNo")):
+            partial = True
+    if partial and "Address not provided" not in html:
+        problems.append("payload delivers an address row without an Address "
+                        "but the page shows no 'Address not provided' entry")
+
+    # Likewise every mobile number and e-mail. Phone Number contacts have no
+    # tile yet (open item), so only the two rendered types are asserted.
+    for row in ctx.rows("contacts"):
+        base = derive_identity.base_type(row.get("ContactType")).lower()
+        if base not in ("mobile number", "e-mail"):
+            continue
+        value = row.get("Contact")
+        if value and str(value) not in html:
+            problems.append("payload value missing from page: contact "
+                            "%s (%r)" % (row.get("ContactType"), value))
+
     # Every delivered income figure must be on the page -- including the ones
     # section 04 keeps off the chart as placeholders. Suppressing a figure the
     # bureau sent is precisely the failure this script exists to catch, and it
@@ -92,6 +137,62 @@ def check(path):
         if not re.search(r"(?<![\d.,])%s(?![\d])" % re.escape(shown), html):
             problems.append("payload value missing from page: return amount "
                             "(%r, reported by %s)" % (shown, row.get("ProviderNo")))
+
+    # Section 06's only-when-non-zero surfaces: a delivered guaranteed-overdue
+    # total and any delivered application-outcome counter must reach the page.
+    # Vacuous on fixtures that deliver zeros, but exactly the values that must
+    # not go missing when a payload does carry them.
+    if ctx.totals.get("TotalOverdueGuaranteed") and "Guaranteed overdue" not in html:
+        problems.append("payload value missing from page: TotalOverdueGuaranteed "
+                        "(%r)" % ctx.totals.get("TotalOverdueGuaranteed"))
+    for field, label in (("DeclinedNo", "declined"), ("RejectedNo", "rejected"),
+                         ("NotTakenUpNo", "not taken up")):
+        if any(row.get(field) for row in ctx.rows("contractsSummary")) \
+                and label not in html:
+            problems.append("payload value missing from page: contractsSummary."
+                            "%s is non-zero but %r never renders" % (field, label))
+
+    # Section 07's rows are drawn client-side, so its only-when-delivered
+    # signals are asserted against the window.__AECB blob rather than markup
+    # (the chip wording lives verbatim in report.js and would always match).
+    # json.dumps writes '"key": value', which is what these needles rely on.
+    from aecb.render.js import _truthy_flag  # local import: test helper only
+    contracts = ctx.rows("contracts")
+    blob_wants = []
+    if any(_truthy_flag(r.get("FlagOpenDispute")) for r in contracts):
+        blob_wants.append(('"dispute": true', "a contract's open dispute"))
+    if any(r.get("SecurityType") or _truthy_flag(r.get("SecuredContractFlag"))
+           for r in contracts):
+        blob_wants.append(('"secured":', "a contract's security"))
+    if any(str(r.get("OriginalCurrency") or "").strip() not in ("", "AED")
+           for r in contracts):
+        blob_wants.append(('"currency":', "a non-AED contract currency"))
+
+    # Section 08's exception marks, same blob-level reasoning.
+    applications = ctx.rows("applications")
+    if any(_truthy_flag(r.get("FlagOpenDispute")) for r in applications):
+        blob_wants.append(('"disp": true', "a disputed application"))
+    role_map = ctx.status_codes.get("role_labels") or {}
+    if any(role_map.get(str(r.get("Role") or "").strip(), "A") != "A"
+           for r in applications):
+        blob_wants.append(('"role":', "a non-main-holder application role"))
+
+    def _adverse_lifetime(r):
+        value = r.get("WorstStatus")
+        if value is not None:
+            rank = ctx.status(value)["rank"]
+            if rank is None or rank < 100:
+                return True
+        try:
+            return float(r.get("MaxDaysPaymentDelay") or 0) > 0
+        except (TypeError, ValueError):
+            return False
+    if any(_adverse_lifetime(r) for r in contracts):
+        blob_wants.append(('"worstEver":', "a contract's adverse lifetime worst"))
+    for needle, label in blob_wants:
+        if needle not in raw:
+            problems.append("payload value missing from the heatmap blob: %s "
+                            "(%r not found)" % (label, needle))
 
     # Section 05 shows two delivered figures VERBATIM, at RRM's instruction --
     # no relabelling, no rounding, no translation into a letter code. A plain

@@ -174,14 +174,17 @@ It carries:
 #### `report_date` — the most load-bearing derived value
 
 ```python
-score.DataPullDate  →  score.ArchiveDate  →  customerInfo.ArchiveDate
+score.DataPullDate    # and nothing else
 ```
 
-`DataPullDate` (when AECB was actually queried) is chosen over `ArchiveDate` (a
-warehouse write timestamp) and over `sectionStatus`'s last-enquiry date (which
-can post-date the contract data by months), because it is the only one
-consistent with `contracts.ReferenceDate` and the newest `contractsHistory`
-month.
+`DataPullDate` (when AECB was actually queried) is the **only** source, by
+decision (8 Sep 2026). The former fallbacks — `score.ArchiveDate`, then
+`customerInfo.ArchiveDate` — were removed: both are warehouse write timestamps
+that can post-date the contract data by months, and anchoring the page to one
+silently misstates every window on it. A payload without a `DataPullDate` has
+no resolvable report date: the top bar shows *Validity unknown* and every
+windowed section falls back to its own no-report-date state (unanchored
+returns window, offset heatmap month labels, no application timeline).
 
 Everything windowed hangs off it: the 36-month conduct grid, the 90-day
 application window, the 6-month returns window and closure window, report
@@ -210,12 +213,33 @@ provider set, the latest `DateOfLastUpdate`, and extra fields (e.g. passport
 both current and historical is treated as **current** — a later provider
 re-confirming it outranks an older supersede.
 
+**No delivered value is dropped** (decision, 8 Sep 2026): the newest-updated
+current value is the tile headline, and *everything* else — historical values
+and any surplus current ones — folds behind the chevron, flagged `Historical`
+or `Also current`. The chevron says "N prior" only when the fold is entirely
+historical, "N more" otherwise. Applies to Emirates ID, passport and e-mail;
+`check_report.py` asserts every delivered identification value and every
+mobile/e-mail contact is on the page. `Phone Number` contacts still have no
+tile (open item).
+
 Addresses carry neither a type nor a historical marker, so "current" there is
-decided by latest update date, and the section says so on screen.
+decided by latest update date, and the section says so on screen. A row is
+empty only when `Address`, `Emirate`, `PoBox` **and** `PlotNo` are all null
+(decision, 8 Sep 2026): an address-less row with an emirate renders as
+*"Address not provided — Emirate"*. Addressed rows dedup on
+`(Address, Emirate)` wherever they repeat; emirate-only rows collapse only
+when **consecutive** in payload order with the same emirate — a re-appearance
+after any other entry may be a move back, and stays separate. Extras
+(emirate, PO box, plot) merge first-non-null-wins, and PO box / plot render
+whenever delivered.
 
 `arabic_name()` suppresses the Arabic name when it arrived encoding-corrupted
 (the reference payload delivers `??? ???? ...`): rendering that is worse than
-rendering nothing.
+rendering nothing. When `FullNameAR` is absent or corrupted it falls back to
+composing `FirstnameAR + LastnameAR`, under the same corruption guard.
+`english_name()` mirrors that on the Latin side — `FullNameEN`, else
+`FirstName + LastName` — and `customerInfo.Title` renders verbatim ahead of
+the name whenever it is delivered (8 Sep 2026).
 
 #### `facilities.py` — the contracts × history join
 
@@ -246,12 +270,16 @@ The core of §07 and §06, and the module with the highest correctness stakes.
   `contractsFinancialSummary` / `contractsSummary` by category for one role
   (`A` main holder, `G` guarantor) — §06's data source.
 
-`worst_in_window()` — the derivation §05's 36-month panel once drove from —
-was **deleted** (2 Sep 2026, user decision; git history preserves it) once
-that window became an open business decision. The two hard-won rules it
-encoded survive as requirements for whatever replaces it: a clean book must
-not attribute a "worst" to whichever contract iterated first, and a severe
-*status* outranks a raw DPD number when naming what happened.
+`worst_in_window()` — deleted 2 Sep 2026 while the window was an open business
+decision, **reinstated 9 Sep 2026** with the RRM defaults: every contract
+counts (closed ones and every role included), evidence is the in-window
+`contractsHistory` rows **plus each contract's dated lifetime worst fields**
+(`WorstStatus`/`WorstStatusDate`, `MaxDaysPaymentDelay` and its date), and the
+two original rules survive — a clean book must not attribute a "worst" to
+whichever contract iterated first, and a severe *status* outranks a raw DPD
+number when naming what happened. A status the config cannot rank is counted
+separately and keeps the window from grading clean. §05's 36-month panel is
+its caller, always marked `derived`.
 
 #### `scoring.py` — bands, gauge, vintage, validity
 
@@ -299,6 +327,13 @@ Three payload behaviours it encodes:
   flagged, but excluded from the chart scale**, where it would flatten every
   real point onto the axis. **Exactly zero is a delivered fact and is plotted.**
   A negative figure is never plotted.
+- Providers repeat an employer and their **figures can disagree**. The shown
+  figure is the one with the strongest claim to be current — a row not marked
+  historical beats a superseded one, a dated row beats an undated one, a newer
+  refresh beats an older — and every outranked figure that differs stays on
+  screen in a disagreement marker on the row (8 Sep 2026; it was first-non-null
+  in payload order, which could present a superseded figure as the current
+  salary).
 - Which employer is **current** is settled by the newest start date among rows
   the bureau has not marked finished — `DateOfLastUpdate` describes the record,
   not the job, so it *qualifies* the claim but never decides it. A row whose
@@ -449,9 +484,14 @@ applications  (omitted entirely when nothing can be dated)
 ```
 
 Heatmap rows carry `status` and `delays` keyed by months-ago containing **only
-months the bureau actually reported**, plus an explicit `reported` list.
-`report.js` paints every other in-window month as *not reported* — which is why
-unreported months must never be filled with defaults here.
+months the bureau actually reported**, plus an explicit `reported` list, the
+month's own money in `bal`/`od` maps (for the cell tooltips), and a `noDpd`
+list for months whose status arrived without a delivered `DaysPaymentDelay` —
+painted not-reported, never as an implied zero. `report.js` paints every other
+in-window month as *not reported* — which is why unreported months must never
+be filled with defaults here. Row flags (`dispute`, `notLiable`, `secured`,
+`currency`, `worstEver`, `asAt`) are omitted entirely when the payload does
+not deliver them.
 
 The four blocks are bucketed in Python because what goes in which is a *payload*
 decision:
@@ -605,17 +645,29 @@ Also: `sectionStatus.ReportType` distinguishes *"requested, came back clean"*
 `paymentOrder` is not the same as an unchecked one.
 
 **§05 Worst statuses** — three panels because FH policy differs by employer
-segment (some assessed over 24 months, some over 36). Only two exist today; the
-36-month panel says *To be built* and carries **no** provenance mark, since
-neither `delivered` nor `derived` is true of a panel with no figure behind it.
-Reads `contractsTotalSummary.WorstStatus24M` only, never `summary`'s field of
+segment (some assessed over 24 months, some over 36). The 24-month and
+lifetime panels are delivered figures shown verbatim; the 36-month panel is
+**derived** via `facilities.worst_in_window()` (9 Sep 2026, RRM defaults) and
+carries the `derived` chip **always** — even over its not-derivable empty
+state — with method and coverage in the chip's hover and the worst event named
+in the figure's. Its max-delay sub-line prints `0 days` only when a zero was
+reported; no delay figure at all renders *Not reported*. The 24-month panel
+reads `contractsTotalSummary.WorstStatus24M` only, never `summary`'s field of
 the same name — that one is in the *other* vocabulary (a letter code), so
 falling back would change the kind of value shown depending on the payload.
 
 **§06 Facilities overview** — every category renders **both** main holder and
 guarantor, because they are different liabilities. A guarantor block that were
 simply absent would leave an underwriter working out whether it means nil or
-unexamined.
+unexamined. A **Co-holder** block (role `C`) renders between them **only when
+the bureau returns something for it** — figures or counters — since an absent
+C row is the bureau not returning the split, not an ambiguity (9 Sep 2026).
+Three only-when-non-zero surfaces added the same day: a red **Guaranteed
+overdue** top chip (`TotalOverdueGuaranteed` — previously read only for the
+zero-inference, so a non-zero value never reached the screen), and per-role
+**declined / rejected / not-taken-up** lines from `contractsSummary`'s
+delivered counters — the payload's only record of application outcomes. Those
+counters also keep a category card alive in the emptiness test.
 
 `TotalExposure` counts a revolving facility's **full credit limit**, not its
 drawn balance — verified: 331,420 instalment balance + the 59,600 card *limit*
@@ -625,12 +677,29 @@ should be "fixed" to reconcile them.
 
 **§07 Detail heatmap** — markup is static; rows are built client-side. Three
 aligned strips per facility: monthly status code, DPD, and (cards/overdrafts
-only) utilisation. A coverage line states how many facility-months were actually
-reported, in words: *"absence is not a clean record."* A per-row `Reported n/36`
-chip flags thin coverage, because a row with two reported months tells you
-almost nothing however green it looks. A closed row's *Final* chip comes from
-the closing month's own history row; when none was reported it says *Final ·
-not reported* rather than borrowing the lifetime worst.
+only) utilisation. A coverage line states how many facility-months were
+actually reported, in words: *"absence is not a clean record"* — and since
+9 Sep 2026 both it and the per-row `Reported n/m` chip count **only the months
+each facility was open inside the window** (`Facility.possible_months`), so a
+3-month-old loan reported 3/3 reads complete rather than thin. A closed row's
+*Final* chip comes from the closing month's own history row; when none was
+reported it says *Final · not reported* rather than borrowing the lifetime
+worst.
+
+Row additions (9 Sep 2026, all only-when-delivered): a **Worst ever** chip
+from the contract's dated lifetime fields (`WorstStatus`, `MaxDaysPaymentDelay`,
+`MaxOverdueAmount`, each with its date) — rendered only when adverse or
+unrankable, severity-toned, its hover stating it can predate the window;
+amber chips for **Open dispute**, **Holder not liable** and a **non-AED
+`OriginalCurrency`**; stats for the original `TotalAmount`, `MethodOfPayment`
+and `SecurityType`; and an *as at* hover on the OS stat
+(`Current_ReferenceDate` — the "current" snapshot can lag the report date).
+Two honesty fixes the same day: a history month whose status arrived with a
+**null `DaysPaymentDelay`** ships as a `noDpd` month and paints not-reported
+rather than "current (0 DPD)" — a zero the bureau never sent; and DPD-cell
+tooltips carry the month's **own** delivered `Balance`/`OverdueAmount`
+(shipped as `bal`/`od` maps) instead of repeating the row's current balance
+in all 36 cells.
 
 Frequency and role chips render **only when meaningful** — frequency only when
 AECB delivers one (it isn't part of the card/service schema at all, so there is
@@ -641,7 +710,12 @@ changes who is liable).
 `Requested` and `Disbursed`, encoded as hollow and filled markers. No
 NTU/Approved/Rejected vocabulary is invented; it is not in the payload. When
 the delivered `Applications90D` counter and the rows disagree, that is surfaced
-as a finding — one line, not a banner.
+as a finding — one line, not a banner. Two exception marks (9 Sep 2026,
+delivered-only): a `FlagOpenDispute` rings the marker amber, and a
+non-main-holder `Role` letters the provider label (`B04 · G`, §07's A/C/G
+vocabulary) — each with a legend entry that renders only when the payload has
+the exception, and both states named in the hover (a delivered `False` says
+*No dispute*).
 
 ---
 
@@ -655,11 +729,15 @@ as a finding — one line, not a banner.
 
 Renders every payload in `ReferenceJSON/` and fails on:
 
-- a **payload value missing from the page** — customer name, score, subject id,
-  **every** delivered employment income (including placeholders §03 keeps off
-  the chart) and **every** returned-instrument amount. Suppressing a figure the
-  bureau sent is exactly the failure this exists to catch, and it would
-  otherwise be invisible: the page would simply look tidier;
+- a **payload value missing from the page** — customer name, title, score,
+  subject id, **every** delivered identification value, **every** mobile and
+  e-mail contact, **every** delivered address (address-less location rows must
+  surface as *"Address not provided"*), **every** delivered employment income
+  (including placeholders
+  §03 keeps off the chart) and **every** returned-instrument amount.
+  Suppressing a figure the bureau sent is exactly the failure this exists to
+  catch, and it would otherwise be invisible: the page would simply look
+  tidier;
 - a **delivered figure not shown verbatim** — the 24-month worst status,
   lifetime count, max payment delay and card utilisation are read back out of
   the *specific elements* meant to carry them. A whole-page substring search
@@ -779,7 +857,7 @@ payload.
 
 | Item | Status |
 |---|---|
-| §05 36-month worst status | Blocked on a business decision about what the window should measure. The deleted `worst_in_window()` (2 Sep 2026, in git history) is the reference implementation; its two rules are restated in HANDOFF's *Next task*. |
+| §05 36-month worst status | **Built 9 Sep 2026** (RRM defaults: whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD; always marked `derived`). Remaining refinements from the original six questions: a derived 24-month reconciliation against the delivered figure, and flagging guarantor conduct distinctly. |
 | `MaxCurrentPaymentDelay` | Delivered as `1` while `MaxPaymentDelay24M` is `0`, every `Current_DaysPaymentDelay` is `0`, and all 99 `contractsHistory` rows are 0 DPD. **Held off screen** until AECB explains it. |
 | `config/bands.json` cut-offs | Place 732 in `VLR`; AECB delivered `LR`. Delivered band wins. Needs reconciling against the FH scorecard. |
 | `config/providers.json` | Stub — §01, §03, §04, §07's heatmap and §08's timeline show codes. |
@@ -801,6 +879,7 @@ wire them elsewhere without resolving it.
 
 | File | Holds |
 |---|---|
+| `PayLoadRead.md` | Field-level reference: for every screen element, the array/node it reads, the rules applied, and the colouring — the final behaviour, not the history. |
 | `README.md` | Per-section design rules in full, configuration reference, payload traps, deployment. |
 | `HANDOFF.md` | State of play — what is done, measured section heights, open decisions **with their reasons**, what was last worked on, what is next. |
 | `OVERVIEW.md` | The product described non-technically — what it is, the workflow, what the screen shows. |

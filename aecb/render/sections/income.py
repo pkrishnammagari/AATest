@@ -422,9 +422,23 @@ def _no_chart(model) -> str:
 
 
 def _income_reason(model) -> str:
+    """Why the spans chart plots no income. Each branch must be TRUE of the
+    payload that reaches it, not merely plausible.
+
+    In the spans state a usable figure can only be undated (usable + any date
+    = plottable), so the first branch cannot coexist with a drawable point.
+    Order matters: a usable-but-undated figure beside a placeholder used to
+    fall into the placeholder sentence, which then claimed every figure was
+    below the floor while a real one sat in the tray beneath it.
+    """
+    if any(r.income_usable for r in model["records"]):
+        return ("A figure needs a date to be plotted, and none of the usable "
+                "figures carries one — they are listed beside the chart")
     if any(r.placeholder for r in model["records"]):
         return ("Every figure is missing or below the usable floor of %s %s a "
                 "year" % (c.esc(model["currency"]), c.format_number(model["floor"])))
+    if any(r.income is not None for r in model["records"]):
+        return "No delivered figure can be plotted as an income"
     return "No employment row carries a GrossAnnualIncome"
 
 
@@ -518,9 +532,28 @@ def _dates_cell(rec) -> str:
     return "Since <b>%s</b>" % since
 
 
+def _conflict_mark(model, rec) -> str:
+    """Marks a figure the providers did not agree on, naming the others.
+
+    The outranked figures are delivered values and must stay on screen (the
+    no-fabrication gate asserts their presence); the hover is where they live.
+    """
+    if not rec.income_others:
+        return ""
+    listed = "; ".join(
+        "%s %s via %s" % (model["currency"], c.format_number(v),
+                          prov or "an unnamed provider")
+        for v, prov in rec.income_others)
+    info = ("Providers disagree on this employer's figure. Shown: the value "
+            "from the most recently refreshed row. Also delivered: %s. All "
+            "figures are the bureau's own." % listed)
+    return ' <span class="attn" data-info="%s">!</span>' % c.attr(info)
+
+
 def _income_cell(model, rec) -> str:
     if rec.income is None:
         return '<span class="na">Income not reported</span>'
+    mark = _conflict_mark(model, rec)
     if rec.placeholder:
         # The figure stays on screen -- it is what the bureau sent. The warning
         # is a mark rather than a phrase so the row still reads as a figure and
@@ -528,13 +561,14 @@ def _income_cell(model, rec) -> str:
         return ('<span class="na">%s %s</span> <span class="attn" '
                 'data-info="Not a usable figure: below the floor of %s %s a '
                 'year set in config/income.json. Delivered by the bureau as-is '
-                'and shown unchanged, but kept out of the chart scale.">!</span>'
+                'and shown unchanged, but kept out of the chart scale.">!</span>%s'
                 % (c.esc(model["currency"]), c.format_number(rec.income),
-                   c.esc(model["currency"]), c.format_number(model["floor"])))
+                   c.esc(model["currency"]), c.format_number(model["floor"]),
+                   mark))
     if not float(rec.income):
-        return ('<b>%s 0</b>/yr <span class="histflag">reported as zero</span>'
-                % c.esc(model["currency"]))
-    return "<b>%s</b>/yr" % c.aed(rec.income)
+        return ('<b>%s 0</b>/yr <span class="histflag">reported as zero</span>%s'
+                % (c.esc(model["currency"]), mark))
+    return "<b>%s</b>/yr%s" % (c.aed(rec.income), mark)
 
 
 def _other_income(ctx) -> str:

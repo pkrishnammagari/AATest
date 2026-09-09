@@ -84,7 +84,14 @@ def _name_line(ctx, cust) -> str:
     second, smaller line -- which also means a long name in either script
     extends into open space instead of colliding with metadata.
     """
-    name_en = '<span class="id-name-lg">%s</span>' % c.esc(cust.get("FullNameEN"))
+    # The title nests INSIDE the headline span rather than as a flex sibling:
+    # .id-name-row carries a 28px gap between children, which would strand the
+    # title an inch from the name it belongs to.
+    title = cust.get("Title")
+    title_html = ('<span class="id-name-ttl">%s</span>' % c.esc(title)
+                  ) if title else ""
+    name_en = '<span class="id-name-lg">%s%s</span>' % (
+        title_html, c.esc(identity.english_name(cust)))
     name_ar = identity.arabic_name(cust)
     ar_html = ('<span class="id-name-ar" dir="rtl" lang="ar">%s</span>'
                % c.esc(name_ar)) if name_ar else ""
@@ -137,31 +144,55 @@ def _residency(cust) -> str:
 
 # --- individual cells -------------------------------------------------------
 
+def _split_display(current, prior):
+    """(headline entry, everything else, historical-only?).
+
+    The newest-updated CURRENT value is the headline; every other value --
+    additional current ones included -- folds behind the chevron. Nothing is
+    dropped: a second current passport is exactly the kind of oddity an
+    underwriter needs to see, and silently discarding it is information loss.
+    """
+    if current:
+        return current[0], current[1:] + prior, False
+    return prior[0], prior[1:], True
+
+
+def _fold_label(extras) -> str:
+    """Chevron caption: 'N prior' only when every folded value is historical."""
+    if all(e.historical for e in extras):
+        return "%d prior" % len(extras)
+    return "%d more" % len(extras)
+
+
+def _fold_flag(entry) -> str:
+    """What a folded value is: superseded, or current but not the newest."""
+    return "Historical" if entry.historical else "Also current"
+
+
 def _identifier_fact(ctx, label, info_type, hist_id, css=""):
     current, prior = identity.identifiers(ctx, info_type)
     if not current and not prior:
         return c.fact(label, '<span class="na">Not reported</span>', css=css)
 
-    if current:
-        entry = current[0]
-        value = '<span class="mono">%s</span>%s' % (
-            c.esc(entry.value), _provider_badge(entry))
-    else:
+    entry, extras, hist_only = _split_display(current, prior)
+    if hist_only:
         # Only superseded values on file -- say so rather than showing a blank.
-        entry = prior[0]
         value = ('<span class="mono na">%s</span> <span class="histflag">Historical only</span>'
                  % c.esc(entry.value))
-        prior = prior[1:]
+    else:
+        value = '<span class="mono">%s</span>%s' % (
+            c.esc(entry.value), _provider_badge(entry))
 
     key = label
     extra = ""
-    if prior:
-        key += " " + c.chevron(hist_id, "%d prior" % len(prior))
+    if extras:
+        key += " " + c.chevron(hist_id, _fold_label(extras))
         extra = c.cell_hist(hist_id, [
             c.hist_row(
-                "<b>%s</b> <span class=\"histflag\">Historical</span>" % c.esc(e.value),
+                '<b>%s</b> <span class="histflag">%s</span>'
+                % (c.esc(e.value), _fold_flag(e)),
                 _when(e))
-            for e in prior
+            for e in extras
         ])
     return c.fact(key, value, extra, css=css)
 
@@ -176,31 +207,30 @@ def _passport_fact(ctx, css=""):
     if not current and not prior:
         return c.fact("Passport", '<span class="na">Not reported</span>', css=css)
 
-    if current:
-        entry = current[0]
-        value = '<span class="mono">%s</span>%s' % (
-            c.esc(entry.value), _provider_badge(entry))
-    else:
-        entry = prior[0]
+    entry, extras, hist_only = _split_display(current, prior)
+    if hist_only:
         value = ('<span class="mono na">%s</span> '
                  '<span class="histflag">Historical only</span>'
                  % c.esc(entry.value))
-        prior = prior[1:]
+    else:
+        value = '<span class="mono">%s</span>%s' % (
+            c.esc(entry.value), _provider_badge(entry))
 
     key = "Passport"
-    if prior:
-        key += " " + c.chevron("ppHist", "%d prior" % len(prior))
+    if extras:
+        key += " " + c.chevron("ppHist", _fold_label(extras))
 
     sub = _expiry_line(ctx, entry.extra.get("ExpiryDate"))
 
     extra = ""
-    if prior:
+    if extras:
         extra = c.cell_hist("ppHist", [
             c.hist_row(
-                '<b>%s</b> <span class="histflag">Historical</span>%s'
-                % (c.esc(e.value), _expiry_note(e.extra.get("ExpiryDate"))),
+                '<b>%s</b> <span class="histflag">%s</span>%s'
+                % (c.esc(e.value), _fold_flag(e),
+                   _expiry_note(ctx, e.extra.get("ExpiryDate"))),
                 _when(e))
-            for e in prior
+            for e in extras
         ])
 
     # The expiry sits INSIDE .v, on the value line. It used to be a sibling of
@@ -227,9 +257,21 @@ def _expiry_line(ctx, expiry):
     return '<span class="v-sub">Expires <b>%s</b></span>' % dates.fmt_short(expiry)
 
 
-def _expiry_note(expiry):
+def _expiry_note(ctx, expiry):
+    """Folded-row expiry, graded against the report date.
+
+    A folded value can be a CURRENT passport now (see _split_display), so the
+    old flat 'expired YYYY' would mislabel a live document. Without a report
+    date no claim is made either way -- the year renders neutrally.
+    """
     parsed = dates.parse_any(expiry)
-    return (" · expired %s" % parsed.strftime("%Y")) if parsed else ""
+    if not parsed:
+        return ""
+    if ctx.report_date:
+        verb = "expired" if parsed < ctx.report_date else "expires"
+    else:
+        verb = "expiry"
+    return " · %s %s" % (verb, parsed.strftime("%Y"))
 
 
 def _mobile_fact(ctx, css=""):
@@ -263,11 +305,44 @@ def _email_fact(ctx, css=""):
     current, prior = identity.contacts(ctx, "E-mail")
     if not current and not prior:
         return ""
-    entry = current[0] if current else prior[0]
-    flag = "" if current else ' <span class="histflag">Historical</span>'
-    return c.fact("E-mail",
+
+    entry, extras, hist_only = _split_display(current, prior)
+    flag = ' <span class="histflag">Historical only</span>' if hist_only else ""
+
+    key = "E-mail"
+    extra = ""
+    if extras:
+        key += " " + c.chevron("mailHist", _fold_label(extras))
+        extra = c.cell_hist("mailHist", [
+            c.hist_row(
+                '<b>%s</b> <span class="histflag">%s</span>'
+                % (c.esc(e.value), _fold_flag(e)),
+                _when(e))
+            for e in extras
+        ])
+    return c.fact(key,
                   '<span class="mono v-mail">%s</span>%s%s'
-                  % (c.esc(entry.value), flag, _provider_badge(entry)), css=css)
+                  % (c.esc(entry.value), flag, _provider_badge(entry)),
+                  extra, css=css)
+
+
+def _addr_line(entry) -> str:
+    """One address as delivered: what arrived, and a plain statement of what
+    did not. entry.value None means the bureau reported a location (emirate,
+    PO box, plot) without the address itself -- stated, never blanked.
+    """
+    if entry.value is not None:
+        head = c.esc(entry.value)
+    else:
+        head = '<span class="na">Address not provided</span>'
+    if entry.extra.get("emirate"):
+        head += " — " + c.esc(entry.extra["emirate"])
+    tail = []
+    if entry.extra.get("pobox"):
+        tail.append("PO Box %s" % c.esc(entry.extra["pobox"]))
+    if entry.extra.get("plot"):
+        tail.append("Plot %s" % c.esc(entry.extra["plot"]))
+    return head + "".join(" · " + t for t in tail)
 
 
 def _address_fact(ctx, css=""):
@@ -277,14 +352,8 @@ def _address_fact(ctx, css=""):
                       css=css)
 
     entry = current[0]
-    parts = [c.esc(entry.value)]
-    if entry.extra.get("emirate"):
-        parts.append(c.esc(entry.extra["emirate"]))
-    if entry.extra.get("pobox"):
-        parts.append("PO Box %s" % c.esc(entry.extra["pobox"]))
     value = ('<span class="v-addr">%s</span>%s'
-             % (" — ".join(parts[:2]) + (" · " + parts[2] if len(parts) > 2 else ""),
-                _provider_badge(entry)))
+             % (_addr_line(entry), _provider_badge(entry)))
 
     key = "Current address " + c.hint(
         "AECB delivers addresses without a type or a historical marker, so the "
@@ -293,10 +362,7 @@ def _address_fact(ctx, css=""):
     if prior:
         key += " " + c.chevron("addrHist", "%d prior" % len(prior))
         extra = c.cell_hist("addrHist", [
-            c.hist_row(
-                "%s%s" % (c.esc(e.value),
-                          " — " + c.esc(e.extra["emirate"]) if e.extra.get("emirate") else ""),
-                _when(e))
+            c.hist_row(_addr_line(e), _when(e))
             for e in prior
         ])
     return ('<div class="fact %s"><span class="k">%s</span>'

@@ -79,6 +79,32 @@ def _glyph(contract_type):
     return None
 
 
+def _truthy_flag(value) -> bool:
+    """Payload booleans arrive as True, 1 or 'Y' variants; None stays False."""
+    if value is None:
+        return False
+    return str(value).strip().upper() in ("1", "Y", "YES", "TRUE")
+
+
+def _role_letter(ctx, row):
+    """The row's role letter, or None for main holder / unmapped text.
+
+    Main holder is the default across the book and earns no mark -- a
+    guarantor or co-holder application is the exception that changes whose
+    credit hunger the marker records. Same A/C/G vocabulary as section 07.
+    """
+    text = str(row.get("Role") or "").strip()
+    if not text:
+        return None
+    letter = (ctx.status_codes.get("role_labels") or {}).get(text, "A")
+    return letter if letter != "A" else None
+
+
+def _role_label(ctx, letter):
+    meta = (ctx.status_codes.get("roles") or {}).get(letter) or {}
+    return meta.get("label", letter)
+
+
 def applied_on(row):
     """The date an application is placed at.
 
@@ -164,7 +190,7 @@ def timeline(ctx, rows):
             lane_ends[lane] = x
 
         phase = str(row.get("Phase") or "").strip()
-        events.append({
+        event = {
             "x": round(x, 3),
             "lane": lane,
             "days": days_ago,
@@ -175,9 +201,18 @@ def timeline(ctx, rows):
             "taken": phase.lower() == "disbursed",
             "provider": ctx.provider(row.get("ProviderNo"))["code"],
             "info": _info(row, when, days_ago, ctx),
-        })
+        }
+        # Exceptions only: a marker gets a dispute ring or a role letter only
+        # when the payload delivers one, and the keys are omitted otherwise.
+        if _truthy_flag(row.get("FlagOpenDispute")):
+            event["disp"] = True
+        role = _role_letter(ctx, row)
+        if role:
+            event["role"] = role
+        events.append(event)
 
     lanes = len(lane_ends)
+    role_letters = sorted(set(e["role"] for e in events if e.get("role")))
     return {
         "events": events,
         "ticks": _ticks(ctx, x_of, oldest_days, report_date),
@@ -186,6 +221,10 @@ def timeline(ctx, rows):
         "lanes": lanes,
         "lanePitch": LANE_PITCH,
         "height": BASE_HEIGHT + max(0, lanes - 1) * LANE_PITCH,
+        # For the section's conditional legend -- nothing renders when empty.
+        "disputed": any(e.get("disp") for e in events),
+        "roles": [{"code": letter, "label": _role_label(ctx, letter)}
+                  for letter in role_letters],
     }
 
 
@@ -234,6 +273,16 @@ def _info(row, when, days_ago, ctx):
 
     phase = str(row.get("Phase") or "").strip()
     parts.append("Phase: %s" % (phase or "not reported"))
+
+    # Delivered-only: role named when it is not main holder (the exception
+    # that changes whose application this is), dispute state whenever the
+    # bureau delivered the flag -- in either direction.
+    role = _role_letter(ctx, row)
+    if role:
+        parts.append("Role: %s" % _role_label(ctx, role))
+    flag = row.get("FlagOpenDispute")
+    if flag is not None:
+        parts.append("Open dispute" if _truthy_flag(flag) else "No dispute")
 
     amount = _aed(row.get("TotalAmount"))
     limit = _aed(row.get("CreditLimit"))

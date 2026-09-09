@@ -68,13 +68,24 @@ def _chart(chart) -> str:
                 'into the left of the break.' % chart["focusDays"])
     else:
         note = 'All applications fall inside the last %d days.' % chart["focusDays"]
+    # Exception keys render only when the payload has the exception: a legend
+    # entry for a dispute ring nobody drew, or role letters nobody carries,
+    # would promise marks the chart does not show.
+    extras = ""
+    if chart.get("disputed"):
+        extras += ('<span class="ek"><i class="ek-mk disp"></i>Open dispute'
+                   '</span>')
+    for role in chart.get("roles") or []:
+        extras += ('<span class="ek"><span class="ek-role">%s</span>%s</span>'
+                   % (c.esc(role["code"]), c.esc(role["label"])))
+
     return (
         '<div class="enq-tl" id="enqTimeline" style="height:%dpx"></div>'
         '<div class="enq-key">'
         '<span class="ek"><i class="ek-mk taken"></i>Disbursed</span>'
         '<span class="ek"><i class="ek-mk"></i>Requested</span>'
-        '<span class="ek-note">%s</span>'
-        '</div>' % (height, note)
+        '%s<span class="ek-note">%s</span>'
+        '</div>' % (height, extras, note)
     )
 
 
