@@ -63,7 +63,8 @@ SECTIONS = {
                  "#s4 .inc-vis", "#s4 .rec", "#s4 .rec-item", "#s4 .rec-list",
                  "#s4 .rec-t", "#s4 .ret-amt", "#s4 .rec-meta", "#s4 .inc-svg"],
     # Never changes: the top bar is locked, and the rail is chrome.
-    "locked": [".topbar", ".brand-t", ".brand-mark", ".tb-valid", ".tv-k",
+    "locked": [".topbar", ".brand-t", ".brand-mark", ".tb-valid", ".tb-scope",
+               ".tv-k",
                ".tv-v", ".tv-meter", ".brief-btn", ".rail", ".rail-title",
                ".rail-sub", ".re-title", ".re-body p",
                ".sec", ".sec-title", ".sec-purpose", ".sec-no", ".sec-toggle",

@@ -60,13 +60,25 @@ except per-contract `OriginalCurrency`, which §07 guards; see there).
 
 ---
 
-## Top bar — report validity
+## Top bar — report validity and enquiry scope
+
+**The validity date has its own ladder** (it is *not* `ctx.report_date`, which
+keeps anchoring every window — the contract data is consistent with the pull
+date, while the enquiry date can post-date it):
+
+1. The `sectionStatus` row whose `ReportType` is the full product
+   (*ConsumerLong with Bounced Cheques*) → its **`Last EnquiryDate`**.
+2. That row absent, or present without a date → the **ConsumerScoreOnly**
+   row's `Last EnquiryDate`.
+3. Neither → `score.DataPullDate` — a last resort only, never first.
+4. Nothing → **Validity unknown** ("no enquiry date or pull date delivered").
 
 | element | source | rule |
 |---|---|---|
-| Pill | `score.DataPullDate` | age = days from pull date to **today** (not to anything in the payload). `Report valid` when 0 ≤ age ≤ window; `Report expired` otherwise (future-dated is not valid); **`Validity unknown`** when `DataPullDate` is absent — the note names the missing field |
+| Pill | the ladder date | age = days to **today**. `Report valid` when 0 ≤ age ≤ window; `Report expired` otherwise (future-dated is not valid); `Validity unknown` when the ladder is empty |
+| **Scope chip** | `sectionStatus.ReportType` presence | always one of three: neutral **"Full file · incl. bounced cheques"** (BC row present); amber **"Score-only · bounced cheques not requested"** (only the score product was pulled — a thinner file, §04 grades the same gap); amber **"Enquiry scope not reported"** (`sectionStatus` empty). Renders even in the unknown state |
+| Generated / Valid-until | ladder date; + window | hover on Generated (and the meter) **names which field dated the report** — full enquiry / score-only enquiry standing in for a dateless BC row / DataPullDate fallback |
 | Window | `validity_days` in [config/bands.json](config/bands.json) (30) | FH policy, not payload |
-| Generated / Valid-until fields | pull date; pull date + window | relative age reads "today / N days / N months / N years ago" |
 | Meter | age ÷ window | marker clamped to 100% so an old report pins at the track's end |
 
 The logo is whatever image sits in `resources/` (base64-inlined; "FH" monogram

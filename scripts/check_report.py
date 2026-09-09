@@ -152,6 +152,16 @@ def check(path):
             problems.append("payload value missing from page: contractsSummary."
                             "%s is non-zero but %r never renders" % (field, label))
 
+    # The top bar must always state the enquiry scope.
+    kinds = [str(r.get("ReportType") or "").lower()
+             for r in ctx.rows("sectionStatus")]
+    if any("bounced cheque" in k for k in kinds):
+        if "incl. bounced cheques" not in html:
+            problems.append("top bar does not state the full-file enquiry scope")
+    elif any("scoreonly" in k.replace(" ", "") for k in kinds):
+        if "Score-only" not in html:
+            problems.append("top bar does not state the score-only enquiry scope")
+
     # Section 07's rows are drawn client-side, so its only-when-delivered
     # signals are asserted against the window.__AECB blob rather than markup
     # (the chip wording lives verbatim in report.js and would always match).

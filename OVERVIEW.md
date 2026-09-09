@@ -115,12 +115,15 @@ saw. It needs no companion assets, no network, and no software beyond a browser.
 The application interface is deliberately thin — a sidebar of payload controls,
 and the report filling the rest of the window.
 
-1. **Choose a payload.** Either select one of the anonymized bureau files
-   bundled with the app, or upload a new one. An upload renders only in the
-   session that supplied it — nothing is written to disk, and no other session
-   can see or list it. (The upload path is also where a direct connection to
-   AECB's systems will plug in later; until that exists, the picker and
-   uploader stand in for it.)
+1. **Enter a CB subject id.** The app asks for the subject id, queries the
+   bank's internal bureau-report API, checks the response really is an AECB
+   payload, and renders it. The payload lives only in that session's memory —
+   nothing is written to disk, and no other session can see it. If the
+   returned payload identifies a different subject than the one requested,
+   the report still renders but under a prominent warning naming both ids.
+   (A development version of the app keeps the older workflow — picking one
+   of the bundled anonymized files, or uploading one — for testing without
+   the API.)
 2. **Read the report.** The full screen is the deliverable.
 3. **Download it** as a standalone HTML file, to file against the application.
 

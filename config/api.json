@@ -1,0 +1,18 @@
+{
+  "_comment": [
+    "Bureau-report API endpoint for the app_api.py entry. The endpoint returns",
+    "the AECB payload document itself (the same seventeen-array JSON the",
+    "renderer consumes) for a POSTed {\"cbSubjectId\": \"...\"}.",
+    "",
+    "base_url is the full endpoint URL, exactly as in the integration Postman",
+    "collection. It is an INTERNAL host on the deployment network -- never a",
+    "public one; bureau subject ids must not be routable off the estate.",
+    "This file is the ONLY place the endpoint lives -- no environment",
+    "override; changing environments means editing this file.",
+    "",
+    "A missing or malformed file fails loudly in the app -- an API entry that",
+    "silently pointed nowhere would read as 'subject not found' and mislead."
+  ],
+  "base_url": "http://172.17.16.41/historyapi/api/bureau-report",
+  "timeout_seconds": 30
+}

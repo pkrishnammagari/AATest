@@ -31,8 +31,18 @@ Figures we computed are tagged `derived`; bureau figures are tagged `delivered`.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m streamlit run app.py
+.venv/bin/python -m streamlit run app_api.py   # production entry: CB subject id -> live API -> report
+.venv/bin/python -m streamlit run app.py       # dev harness: fixture picker + uploader
 ```
+
+`app_api.py` asks for a CB subject id, POSTs it to the bureau-report API
+(endpoint in `config/api.json` — the URL from the integration Postman
+collection, and the only place it lives), validates the response exactly as
+the uploader does, and renders through the same pipeline. The payload lives
+in session memory only. A subject-id mismatch between request and response
+renders the report under a prominent warning naming both ids. Off the bank
+network the entry screen still renders; a Display click reports the API as
+not reachable, which is the expected result there.
 
 ## How it fits together
 
@@ -124,6 +134,12 @@ Design decisions worth knowing before changing anything:
   `01..08`. The module files carry names, not numbers (`identity.py` …
   `applications.py`), precisely so a filename cannot drift from the position
   the registry assigns it. Never hard-code a number.
+- **The top-bar validity ages the enquiry, not the pull** (9 Sep 2026):
+  `sectionStatus`'s bounced-cheque `Last EnquiryDate` → the ConsumerScoreOnly
+  date → `score.DataPullDate` as last resort, with an always-on scope chip
+  (*Full file · incl. bounced cheques* / amber *Score-only* / amber *scope not
+  reported*) and the dating field disclosed on hover. `ctx.report_date` — the
+  window anchor — stays on `DataPullDate`. See `PayLoadRead.md`.
 - **`tokens.py` is the only place a colour is defined.** `report.css` refers to
   `var(--*)` throughout; `js.py` passes the few tokens the SVG charts need.
 - **One brand colour, and it is Finance House blue.** Every branded element
@@ -736,7 +752,7 @@ Copy `wheels.tgz` and the source tree to the server, then:
 ```bash
 tar xzf wheels.tgz
 bash scripts/install_offline.sh       # --no-index; never touches the network
-.venv/bin/python -m streamlit run app.py --server.address 0.0.0.0 --server.headless true
+.venv/bin/python -m streamlit run app_api.py --server.address 0.0.0.0 --server.headless true
 ```
 
 ### Fonts

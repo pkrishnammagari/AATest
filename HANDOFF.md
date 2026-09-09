@@ -39,6 +39,17 @@ rolled out to **all eight sections**, the teal → FH blue token pass, the
 §03/§04 chart-width fix, the §02 gauge fix, and the brief rail made
 closed-on-load.
 
+**The API entry exists (9 Sep 2026).** `app_api.py` is the production
+entrypoint: CB subject id → POST to the bureau-report API (`aecb/api.py`;
+`config/api.json` is the single source of the endpoint — the Postman
+collection URL, no env override, at the user's instruction) → the same
+validation as the uploader → the unchanged render pipeline. Session-only
+payloads, subject-id mismatch warns-and-displays, "Query another subject"
+resets. app.py is untouched and remains the fixture/upload dev harness.
+Client/flow logic was verified with in-process tests + AppTest; the live
+endpoint (172.17.16.41) is only reachable on the bank network, where the
+first real test is subject G03929019.
+
 **Every section is now designed and wired.** §05's 36-month worst status —
 long the one deliberately unbuilt panel — was **built 9 Sep 2026** with the
 RRM defaults (see *Next task* at the end of this file, now marked done, for
@@ -478,7 +489,7 @@ gained the confirmation states after these numbers were captured).
 
 | § | module | state |
 |---|---|---|
-| top bar | `shell.py` | brand, validity strip, AI Analysis button — **LOCKED, don't change** |
+| top bar | `shell.py` | brand, validity strip, AI Analysis button. **Reworked 9 Sep**: validity now ages the sectionStatus enquiry ladder (BC Last EnquiryDate → ScoreOnly → DataPullDate) with an always-on enquiry-scope chip (`.tb-scope`); windows stay on ctx.report_date |
 | 01 Identity & demographics | `identity.py` | done · 305 / 301 · size + **density** (4-up row) |
 | 02 Score & Bureau History | `score.py` | done · 162 / 156 · size |
 | 03 Income & employment | `income.py` | done · 560 / 502 open (loads collapsed) · size · heights predate the confirmation model — re-measure |

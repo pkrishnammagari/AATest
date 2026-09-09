@@ -69,6 +69,6 @@ PY
 
 echo
 echo "==> Done. Start with:"
-echo "    ${VENV}/bin/python -m streamlit run app.py --server.port 8501 \\"
+echo "    ${VENV}/bin/python -m streamlit run app_api.py --server.port 8501 \\"
 echo "        --server.address 0.0.0.0 --server.headless true \\"
 echo "        --browser.gatherUsageStats false"

@@ -18,9 +18,13 @@ There is no database, no server-side state, no session, no cache beyond file
 reads, and no mutation of the input. Streamlit is a thin host around that
 function: choose a payload, display the string, offer it as a download. An
 uploaded payload renders through the same function, session-scoped — nothing
-is written to disk, no other session can see it, and the upload path is
-deliberately the seam a future AECB API integration will plug into
-(`context.from_bytes()` renders a payload wherever the bytes came from).
+is written to disk, no other session can see it. That seam is now **realised**
+(9 Sep 2026): `app_api.py` — the production entry — asks for a CB subject id,
+POSTs it to the internal bureau-report API (`aecb/api.py`, endpoint in
+`config/api.json`), validates the response exactly as the uploader does, and
+renders it through the same `context.from_bytes()` path with the same
+session-only guarantee. `app.py` remains the development harness with the
+fixture picker and uploader, unchanged.
 
 Two hard constraints drive nearly every design decision:
 
@@ -38,12 +42,15 @@ opened years later on an unknown machine, so the CSS floor is roughly Chrome 88
 ## 2. Repository map
 
 ```
-app.py                     Streamlit host — deliberately thin; uploads render
+app_api.py                 PRODUCTION entry — CB subject id → bureau-report
+                           API → validate → render; payload session-only
+app.py                     dev harness — fixture picker + uploader; renders
                            session-scoped, nothing written to disk
 requirements.txt           streamlit==1.50.0, pinned with reasoning
 requirements.lock          wheel-bundle manifest, written by build_wheels.sh
 
 aecb/                      the renderer package
+├── api.py                 bureau-report API client (urllib; config/api.json)
 ├── loader.py              parse + normalise the payload
 ├── dates.py               the three date formats, and date arithmetic
 ├── context.py             ReportContext — the object every section receives
@@ -73,7 +80,9 @@ config/                    policy and vocabularies (JSON, heavily commented)
 ├── bands.json             score scale, FH bands, AECB ranges, vintage, validity
 ├── providers.json         provider code → name/kind   (STUB)
 ├── income.json            currency, placeholder floor, confirmation window
-└── returns.json           instrument types, severity tones, review window
+├── returns.json           instrument types, severity tones, review window
+└── api.json               bureau-report API endpoint + timeout (app_api.py
+                           only; not loaded by ReportContext)
 
 assets/fonts/              vendored woff2 + fonts_inline.css (~930 KB base64)
                            + OFL.txt (font licence and attribution)
@@ -185,6 +194,15 @@ silently misstates every window on it. A payload without a `DataPullDate` has
 no resolvable report date: the top bar shows *Validity unknown* and every
 windowed section falls back to its own no-report-date state (unanchored
 returns window, offset heatmap month labels, no application timeline).
+
+**The top-bar validity verdict ages a different date** (9 Sep 2026, RRM):
+`scoring.enquiry_anchor()` ladders `sectionStatus` — the bounced-cheque row's
+`Last EnquiryDate` first, the ConsumerScoreOnly row's second, `DataPullDate`
+as last resort — and the bar always states the **enquiry scope** (full file /
+score-only / not reported) plus, on hover, which field dated the verdict. The
+windows stay on `ctx.report_date`: on the reference fixture the enquiry date
+post-dates the contract data by ten months, and anchoring windows to it would
+misstate every one of them.
 
 Everything windowed hangs off it: the 36-month conduct grid, the 90-day
 application window, the 6-month returns window and closure window, report
@@ -591,6 +609,7 @@ All five files carry `_comment` blocks explaining what they are and why.
 | `providers.json` | **Registry (STUB)** | Provider code → `{name, kind}`. Names are currently the codes themselves. `kind` drives the badge: `bank` / `tel` / `onus` (set `onus` for FH's own code to mark our facilities). |
 | `income.json` | **FH policy** | `currency: AED` (assumed — the payload carries none); `placeholder_floor: 1200`; `confirmation_window_months: 12` — how recently a provider must have touched an employment row for an open-ended "still employed" claim to count as confirmed rather than unrefreshed. |
 | `returns.json` | **Vocabulary + policy** | `window_months: 6`; instrument type labels; severity → tone (Single→amber, Multiple→red, Reported→neutral pending a business definition). |
+| `api.json` | **Deployment** | Bureau-report API `base_url` + `timeout_seconds`, for `app_api.py` only — the single source of the endpoint (the Postman-collection URL); no environment override. Not loaded by `ReportContext`; missing → the API entry fails loud on screen. |
 
 The **rank thresholds** are the load-bearing part of `status_codes.json`:
 `rank ≤ 60` severe (red), `65–95` adverse (amber), `100` normal (grey/green),
@@ -795,9 +814,10 @@ bash scripts/build_wheels.sh          # cp39 / manylinux / x86_64, ~103 MB
 # Copy wheels.tgz + source to the server, then
 tar xzf wheels.tgz
 bash scripts/install_offline.sh
-.venv/bin/python -m streamlit run app.py \
+.venv/bin/python -m streamlit run app_api.py \
     --server.address 0.0.0.0 --server.headless true \
     --browser.gatherUsageStats false
+# app.py remains runnable the same way as the fixture/upload dev harness
 ```
 
 `build_wheels.sh` uses `--only-binary=:all:` (a source archive would try to

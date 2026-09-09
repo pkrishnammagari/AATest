@@ -40,18 +40,55 @@ def topbar(ctx) -> str:
 """.format(mark=branding.brand_mark(), name=APP_NAME, validity=_validity_strip(ctx))
 
 
+# What dated the validity verdict, for the Generated and meter hovers. The
+# ladder is RRM policy (9 Sep 2026): the full enquiry's own date first, the
+# score-only enquiry's second, the warehouse pull date as a last resort only.
+_BASIS_TEXT = {
+    "bounced": "Dated by the bounced-cheque enquiry — sectionStatus "
+               "'ConsumerLong with Bounced Cheques', Last EnquiryDate.",
+    "score_only": "Dated by the ConsumerScoreOnly enquiry's Last EnquiryDate "
+                  "— the bounced-cheque row delivered no date of its own.",
+    "pull": "Dated by score.DataPullDate — sectionStatus delivered no usable "
+            "enquiry date, so the warehouse pull date is the last resort.",
+}
+
+
+def _scope_chip(v):
+    """The enquiry scope, always stated: what the bureau was actually asked.
+
+    A score-only pull is a materially thinner file -- section 04 can only say
+    'unchecked' -- and an RRM must see that before reading anything below.
+    """
+    if v["bc_present"]:
+        return ('<span class="tb-scope" data-info="sectionStatus lists the '
+                'ConsumerLong with Bounced Cheques product — the bounced-cheque '
+                'section was pulled with this enquiry.">Full file · incl. '
+                'bounced cheques</span>')
+    if v["so_present"]:
+        return ('<span class="tb-scope warn" data-info="sectionStatus carries '
+                'no bounced-cheque product for this enquiry, so the absence of '
+                'returns is not evidence of a clean record — section 04 grades '
+                'the same gap.">Score-only · bounced cheques not requested</span>')
+    return ('<span class="tb-scope warn" data-info="sectionStatus is empty — '
+            'which products were pulled cannot be established.">Enquiry scope '
+            'not reported</span>')
+
+
 def _validity_strip(ctx):
-    """Status pill, pull date, window meter, lapse date -- one row."""
+    """Status pill, enquiry scope, enquiry date, window meter, lapse date."""
     v = scoring.validity(ctx)
-    if v is None:
+    scope = _scope_chip(v)
+
+    if v["report_date"] is None:
         return ('<div class="tb-valid-strip">'
                 '<span class="tb-valid unknown"><span class="pd"></span>'
-                'Validity unknown</span>'
-                '<span class="tv-note">score.DataPullDate absent — report age '
-                'cannot be established</span></div>')
+                'Validity unknown</span>%s'
+                '<span class="tv-note">No enquiry date or pull date delivered '
+                '— report age cannot be established</span></div>' % scope)
 
     valid = v["valid"]
     age, window = v["age_days"], v["window"]
+    basis = _BASIS_TEXT.get(v["basis"], "")
 
     pill = ('<span class="tb-valid"><span class="pd"></span>Report valid</span>'
             if valid else
@@ -70,7 +107,8 @@ def _validity_strip(ctx):
     return """
   <div class="tb-valid-strip">
     {pill}
-    <div class="tv-field">
+    {scope}
+    <div class="tv-field" data-info="{basis}">
       <span class="tv-k">Generated</span>
       <span class="tv-v">{generated}</span>
       <span class="tv-rel">{age}</span>
@@ -85,7 +123,8 @@ def _validity_strip(ctx):
       <span class="tv-v{lapse_cls}">{expires}</span>
     </div>
   </div>
-""".format(pill=pill,
+""".format(pill=pill, scope=scope,
+           basis=c.attr(basis),
            generated=dates.fmt_short(v["report_date"]),
            age=_age_phrase(age),
            fill_cls=fill_cls, pct=pct, marker=marker,
@@ -93,11 +132,11 @@ def _validity_strip(ctx):
            lapse_cls="" if valid else " lapsed",
            expires=dates.fmt_short(v["expires"]),
            tip=c.attr(
-               "Bureau pull %s · look-back window %d days · %s %s · report is "
-               "%s old."
+               "Enquiry date %s · look-back window %d days · %s %s · report "
+               "is %s old. %s"
                % (dates.fmt_short(v["report_date"]), window,
                   "valid until" if valid else "lapsed",
-                  dates.fmt_short(v["expires"]), _days_label(age))))
+                  dates.fmt_short(v["expires"]), _days_label(age), basis)))
 
 
 def _age_phrase(n) -> str:
