@@ -17,6 +17,7 @@ downloads) reuse the cached bytes.
 from __future__ import annotations
 
 import logging
+import os
 import re
 
 import streamlit as st
@@ -27,6 +28,24 @@ from aecb.render import branding
 from aecb.render.page import clear_cache, render_page
 
 _LOG = logging.getLogger("aecb.app_api")
+
+# Everything the aecb.* loggers emit -- above all the API client's full
+# HTTP-error dumps (status, every response header, untruncated body) -- also
+# lands in a file next to the app, so a truncated terminal or st.error box is
+# never the only record of what the API actually said. Error paths only:
+# successful payloads are never logged. Guarded so Streamlit reruns do not
+# stack duplicate handlers.
+LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "aecb_api.log")
+_aecb_logger = logging.getLogger("aecb")
+if not any(getattr(h, "baseFilename", None) == LOG_PATH
+           for h in _aecb_logger.handlers):
+    _handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+    _handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    _aecb_logger.addHandler(_handler)
+    if _aecb_logger.level > logging.INFO or _aecb_logger.level == 0:
+        _aecb_logger.setLevel(logging.INFO)
 
 st.set_page_config(
     page_title="AECB Analyzer",

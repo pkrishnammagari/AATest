@@ -14,17 +14,25 @@ memory, the same guarantee the uploader gives.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import urllib.error
 import urllib.request
 
+# app_api.py attaches a file handler to the "aecb" logger, so everything
+# logged here lands in aecb_api.log next to the app as well as the terminal.
+_LOG = logging.getLogger("aecb.api")
+
 _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(os.path.dirname(_HERE), "config", "api.json")
 
-# How much of an HTTP error body to quote back. Enough to carry an API error
-# message, not enough to dump a stack trace into the sidebar.
+# How much of an HTTP error body to quote back ON SCREEN. Enough to carry an
+# API error message, not enough to dump a stack trace into the sidebar. The
+# log gets the full picture (up to _LOG_BODY) -- diagnosis must never depend
+# on what fits in an st.error box.
 _BODY_SNIPPET = 300
+_LOG_BODY = 16000
 
 
 class ApiError(Exception):
@@ -80,12 +88,21 @@ def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
             return response.read()
     except urllib.error.HTTPError as exc:
         try:
-            body = exc.read(_BODY_SNIPPET * 4).decode("utf-8", "replace")
+            raw_body = exc.read(_LOG_BODY).decode("utf-8", "replace")
         except Exception:
-            body = ""
+            raw_body = ""
+        # The FULL response goes to the log: every header (WWW-Authenticate
+        # included) and the untruncated body. Error bodies carry no bureau
+        # data -- successful payloads are never logged.
+        _LOG.warning(
+            "Bureau API HTTP %d for subject %r\nURL: %s\n"
+            "--- response headers ---\n%s"
+            "--- response body (first %d chars) ---\n%s\n"
+            "--- end of response ---",
+            exc.code, subject_id, url, exc.headers, _LOG_BODY, raw_body)
         # IIS error bodies are HTML; strip the markup so the human-readable
-        # sentence survives instead of a snippet of doctype.
-        body = re.sub(r"<[^>]+>", " ", body)
+        # sentence survives on screen instead of a snippet of doctype.
+        body = re.sub(r"<[^>]+>", " ", raw_body)
         body = re.sub(r"\s+", " ", body).strip()[:_BODY_SNIPPET]
         detail = (" -- %s" % body) if body else ""
         # A 401 means the API wants credentials the request did not carry.
