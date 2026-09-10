@@ -40,35 +40,44 @@ def topbar(ctx) -> str:
 """.format(mark=branding.brand_mark(), name=APP_NAME, validity=_validity_strip(ctx))
 
 
-# What dated the validity verdict, for the Generated and meter hovers. The
-# ladder is RRM policy (9 Sep 2026): the full enquiry's own date first, the
-# score-only enquiry's second, the warehouse pull date as a last resort only.
-_BASIS_TEXT = {
-    "bounced": "Dated by the bounced-cheque enquiry — sectionStatus "
-               "'ConsumerLong with Bounced Cheques', Last EnquiryDate.",
-    "score_only": "Dated by the ConsumerScoreOnly enquiry's Last EnquiryDate "
-                  "— the bounced-cheque row delivered no date of its own.",
-    "pull": "Dated by score.DataPullDate — sectionStatus delivered no usable "
-            "enquiry date, so the warehouse pull date is the last resort.",
-}
+def _basis_text(v):
+    """What dated the report, for the Generated and meter hovers.
+
+    The ladder (10 Sep 2026): the latest-dated sectionStatus enquiry first,
+    the warehouse pull date as a last resort only.
+    """
+    if v["basis"] == "enquiry":
+        return ("Dated by the latest sectionStatus enquiry — %s, Last "
+                "EnquiryDate." % (v["report_type"] or "type not reported"))
+    if v["basis"] == "pull":
+        return ("Dated by score.DataPullDate — sectionStatus delivered no "
+                "usable enquiry date, so the warehouse pull date is the last "
+                "resort.")
+    return ""
 
 
 def _scope_chip(v):
     """The enquiry scope, always stated: what the bureau was actually asked.
 
-    A score-only pull is a materially thinner file -- section 04 can only say
-    'unchecked' -- and an RRM must see that before reading anything below.
+    The latest-dated sectionStatus row's ReportType and EnquiryType render
+    verbatim as chips -- no hard-coded product vocabulary (10 Sep 2026), so
+    a product the bureau adds later reaches the bar without a code change.
+    An empty sectionStatus still warns: which products were pulled cannot be
+    established, and the absence of a bounced-cheque product is graded by
+    section 04, not here.
     """
-    if v["bc_present"]:
-        return ('<span class="tb-scope" data-info="sectionStatus lists the '
-                'ConsumerLong with Bounced Cheques product — the bounced-cheque '
-                'section was pulled with this enquiry.">Full file · incl. '
-                'bounced cheques</span>')
-    if v["so_present"]:
-        return ('<span class="tb-scope warn" data-info="sectionStatus carries '
-                'no bounced-cheque product for this enquiry, so the absence of '
-                'returns is not evidence of a clean record — section 04 grades '
-                'the same gap.">Score-only · bounced cheques not requested</span>')
+    chips = []
+    if v["report_type"]:
+        chips.append('<span class="tb-scope" data-info="sectionStatus '
+                     'ReportType of the latest enquiry — the product the '
+                     'bureau was asked for.">%s</span>'
+                     % c.esc(v["report_type"]))
+    if v["enquiry_type"]:
+        chips.append('<span class="tb-scope" data-info="sectionStatus '
+                     'EnquiryType of the latest enquiry.">%s</span>'
+                     % c.esc(v["enquiry_type"]))
+    if chips:
+        return "".join(chips)
     return ('<span class="tb-scope warn" data-info="sectionStatus is empty — '
             'which products were pulled cannot be established.">Enquiry scope '
             'not reported</span>')
@@ -88,7 +97,7 @@ def _validity_strip(ctx):
 
     valid = v["valid"]
     age, window = v["age_days"], v["window"]
-    basis = _BASIS_TEXT.get(v["basis"], "")
+    basis = _basis_text(v)
 
     pill = ('<span class="tb-valid"><span class="pd"></span>Report valid</span>'
             if valid else

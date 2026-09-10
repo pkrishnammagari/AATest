@@ -16,11 +16,6 @@ from . import dates, loader
 _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR = os.path.join(os.path.dirname(_HERE), "config")
 
-# sectionStatus.ReportType markers for the report-date ladder. BC matches as
-# a lowercase substring ("ConsumerLong with Bounced Cheques"); SO matches with
-# spaces stripped ("ConsumerScoreOnly").
-_BC_MARKER = "bounced cheque"
-_SO_MARKER = "scoreonly"
 
 
 def _load_config(name: str) -> dict:
@@ -88,53 +83,52 @@ class ReportContext:
     # --- resolved report date ----------------------------------------------
 
     def enquiry_anchor(self) -> dict:
-        """The report's anchor date, and the enquiry scope behind it.
+        """The report's anchor date, and the enquiry behind it.
 
-        One ladder for the whole page (user decision, 10 Sep 2026 -- this
-        supersedes both the 8 Sep "DataPullDate only" rule and the 9 Sep
-        split that kept the ladder for the validity strip alone):
+        One ladder for the whole page, read generically (user decision,
+        10 Sep 2026 -- no hard-coded ReportType vocabulary, so a product the
+        bureau adds later, e.g. plain "ConsumerLong", dates the report
+        without a code change):
 
-            1. the sectionStatus row for the full product ("ConsumerLong with
-               Bounced Cheques") and its 'Last EnquiryDate' (the field name
-               carries the internal space);
-            2. failing that row or its date, the ConsumerScoreOnly row's
-               'Last EnquiryDate';
-            3. failing both, score.DataPullDate -- a fallback only, never
-               first;
-            4. nothing at all -> date None.
+            1. every sectionStatus row is a candidate; the one with the
+               LATEST parseable 'Last EnquiryDate' (the field name carries
+               the internal space) wins. Array order breaks ties, since
+               parse_any truncates the timestamp to a date;
+            2. no row with a usable date -> score.DataPullDate, a fallback
+               only, never first;
+            3. nothing at all -> date None.
 
-        Returns {'date', 'basis' ('bounced' | 'score_only' | 'pull' | None),
-                 'bc_present', 'so_present'}. The presence flags describe the
-        sectionStatus rows regardless of which date won -- the top bar's
-        scope chip renders from them, its date disclosure from 'basis'.
+        Returns {'date', 'basis' ('enquiry' | 'pull' | None), 'report_type',
+                 'enquiry_type'}. The type strings come verbatim from the
+        winning row -- or from the first row when rows exist but none is
+        dated, so the top bar can still chip the scope while the pull date
+        does the dating -- and are "" when sectionStatus is empty.
 
         On stale archive payloads the enquiry date can post-date the pull by
         months (reference fixture: enquiry 2024-08-20 vs pull 2023-10-26),
         which shifts every window on the page forward accordingly -- accepted
         explicitly as part of the 10 Sep decision.
         """
-        bc_row = so_row = None
-        for row in self.rows("sectionStatus"):
-            kind = str(row.get("ReportType") or "").lower()
-            if _BC_MARKER in kind and bc_row is None:
-                bc_row = row
-            elif _SO_MARKER in kind.replace(" ", "") and so_row is None:
-                so_row = row
+        rows = self.rows("sectionStatus")
+        best_row = best_date = None
+        for row in rows:
+            parsed = dates.parse_any(row.get("Last EnquiryDate"))
+            if parsed and (best_date is None or parsed > best_date):
+                best_row, best_date = row, parsed
 
-        out = {"date": None, "basis": None,
-               "bc_present": bc_row is not None,
-               "so_present": so_row is not None}
+        scope_row = best_row if best_row is not None else \
+            (rows[0] if rows else None)
+        out = {
+            "date": None, "basis": None,
+            "report_type": (str(scope_row.get("ReportType") or "").strip()
+                            if scope_row else ""),
+            "enquiry_type": (str(scope_row.get("EnquiryType") or "").strip()
+                             if scope_row else ""),
+        }
 
-        if bc_row is not None:
-            parsed = dates.parse_any(bc_row.get("Last EnquiryDate"))
-            if parsed:
-                out["date"], out["basis"] = parsed, "bounced"
-                return out
-        if so_row is not None:
-            parsed = dates.parse_any(so_row.get("Last EnquiryDate"))
-            if parsed:
-                out["date"], out["basis"] = parsed, "score_only"
-                return out
+        if best_date is not None:
+            out["date"], out["basis"] = best_date, "enquiry"
+            return out
         parsed = dates.parse_any(self.score.get("DataPullDate"))
         if parsed:
             out["date"], out["basis"] = parsed, "pull"

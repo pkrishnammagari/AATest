@@ -128,10 +128,11 @@ def enquiry_anchor(ctx):
     Since 10 Sep 2026 this IS ctx.report_date's ladder -- the windows and the
     validity strip age the same date. The ladder lives on ReportContext
     (context.enquiry_anchor); this wrapper keeps scoring's public surface so
-    shell.py and validity() are untouched by the unification.
+    shell.py and validity() need no knowledge of the move.
 
-    Returns {'date', 'basis' ('bounced' | 'score_only' | 'pull' | None),
-             'bc_present', 'so_present'}.
+    Returns {'date', 'basis' ('enquiry' | 'pull' | None), 'report_type',
+             'enquiry_type'} -- the type strings verbatim from the winning
+    (latest-dated) sectionStatus row, for the top-bar chips.
     """
     return ctx.enquiry_anchor()
 
@@ -143,12 +144,12 @@ def validity(ctx):
     ladder that resolves ctx.report_date, so the validity verdict and the
     windows age one date. Returns
     {'report_date', 'age_days', 'window', 'valid', 'expires', 'pct',
-     'basis', 'bc_present', 'so_present'} -- pct is the marker position on
+     'basis', 'report_type', 'enquiry_type'} -- pct is the marker position on
     the meter, clamped to 100 so an old report pins at the end rather than
     running off the track.
 
     When no date on the ladder resolves, every date-shaped key is None but
-    the scope flags still return, so the bar can state what was pulled even
+    the scope strings still return, so the bar can state what was pulled even
     while saying the age cannot be established.
     """
     anchor = enquiry_anchor(ctx)
@@ -159,8 +160,8 @@ def validity(ctx):
             "report_date": None, "age_days": None, "window": window,
             "valid": None, "expires": None, "pct": None,
             "basis": None,
-            "bc_present": anchor["bc_present"],
-            "so_present": anchor["so_present"],
+            "report_type": anchor["report_type"],
+            "enquiry_type": anchor["enquiry_type"],
         }
     # Freshness is measured against today, not against anything in the payload:
     # the question is whether this report is still usable now.
@@ -173,6 +174,6 @@ def validity(ctx):
         "expires": report_date + datetime.timedelta(days=window),
         "pct": max(0.0, min(100.0, age / float(window) * 100.0)) if window else 0.0,
         "basis": anchor["basis"],
-        "bc_present": anchor["bc_present"],
-        "so_present": anchor["so_present"],
+        "report_type": anchor["report_type"],
+        "enquiry_type": anchor["enquiry_type"],
     }

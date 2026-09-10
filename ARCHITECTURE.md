@@ -193,23 +193,28 @@ It carries:
 #### `report_date` — the most load-bearing derived value
 
 ```python
-sectionStatus BC row 'Last EnquiryDate'   # bounced-cheque product first
--> ConsumerScoreOnly row's date           # then the score-only enquiry
+latest sectionStatus 'Last EnquiryDate'   # any row; latest date wins,
+                                          # array order breaks ties
 -> score.DataPullDate                     # last resort, never first
 -> None                                   # nothing delivered
 ```
 
-**One ladder, everywhere** (user decision, 10 Sep 2026 — supersedes both the
-8 Sep "`DataPullDate` only" rule and the 9 Sep split that reserved the ladder
-for the validity strip). The ladder lives on `ReportContext.enquiry_anchor()`
-(`context.py`); `scoring.enquiry_anchor()` delegates to it, so the validity
-verdict, the windows, and the `__AECB` blob's `reportDate` all age the same
-date. The bar still states the **enquiry scope** (full file / score-only /
-not reported) plus, on hover, which field dated the report. The former
-`ArchiveDate` fallbacks stay removed. When the whole ladder is empty the top
-bar shows *Validity unknown* and every windowed section falls back to its own
-no-report-date state (unanchored returns window, offset heatmap month labels,
-no application timeline).
+**One ladder, everywhere, read generically** (user decision, 10 Sep 2026 —
+supersedes both the 8 Sep "`DataPullDate` only" rule and the 9 Sep split that
+reserved a hard-coded BC→ScoreOnly ladder for the validity strip). No
+`ReportType` vocabulary is hard-coded: every `sectionStatus` row is a
+candidate and the latest-dated one dates the report, so a product the bureau
+adds later (e.g. plain `ConsumerLong`) works without a code change. The
+ladder lives on `ReportContext.enquiry_anchor()` (`context.py`);
+`scoring.enquiry_anchor()` delegates to it, so the validity verdict, the
+windows, and the `__AECB` blob's `reportDate` all age the same date. The bar
+chips the winning row's **`ReportType` and `EnquiryType` verbatim** (amber
+*Enquiry scope not reported* when `sectionStatus` is empty) plus, on hover,
+which field dated the report. The former `ArchiveDate` fallbacks stay
+removed. When the whole ladder is empty the top bar shows *Validity unknown*
+and every windowed section falls back to its own no-report-date state
+(unanchored returns window, offset heatmap month labels, no application
+timeline).
 
 Accepted consequence, decided explicitly: on stale archive payloads the
 enquiry date can post-date the contract data (reference fixture: enquiry

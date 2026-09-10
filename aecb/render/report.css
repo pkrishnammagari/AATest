@@ -36,9 +36,10 @@ button{font-family:inherit; cursor:pointer; border:none; background:none; color:
   color:var(--green-ink); background:var(--green-wash); border:1px solid var(--green-line);
   padding:4px 11px; border-radius:20px; white-space:nowrap; flex:none}
 .tb-valid .pd{width:7px; height:7px; border-radius:50%; background:var(--green)}
-/* Enquiry scope: what the bureau was actually asked for. Neutral for the full
-   file (a fact, not a verdict); amber when the pull was score-only or the
-   scope cannot be established -- those change how every section reads. */
+/* Enquiry scope: what the bureau was actually asked for. Neutral chips carry
+   the latest enquiry's ReportType and EnquiryType verbatim (facts, not
+   verdicts); amber only when sectionStatus is empty and the scope cannot be
+   established -- that changes how every section reads. */
 .tb-scope{font-size:11px; font-weight:600; color:var(--ink-2);
   background:var(--surface-3); border:1px solid var(--line);
   padding:4px 10px; border-radius:20px; white-space:nowrap; flex:none;

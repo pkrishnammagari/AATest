@@ -496,7 +496,7 @@ gained the confirmation states after these numbers were captured).
 
 | § | module | state |
 |---|---|---|
-| top bar | `shell.py` | brand, validity strip, AI Analysis button. **Reworked 9 Sep**: validity ages the sectionStatus enquiry ladder (BC Last EnquiryDate → ScoreOnly → DataPullDate) with an always-on enquiry-scope chip (`.tb-scope`). **Since 10 Sep** the same ladder resolves ctx.report_date, so the windows age it too |
+| top bar | `shell.py` | brand, validity strip, AI Analysis button. **Reworked 10 Sep**: the generic sectionStatus ladder (latest Last EnquiryDate across all rows → DataPullDate) resolves ctx.report_date, so validity and the windows age one date; the winning row's ReportType + EnquiryType render verbatim as `.tb-scope` chips (amber "not reported" when the array is empty) |
 | 01 Identity & demographics | `identity.py` | done · 305 / 301 · size + **density** (4-up row) |
 | 02 Score & Bureau History | `score.py` | done · 162 / 156 · size |
 | 03 Income & employment | `income.py` | done · 560 / 502 open (loads collapsed) · size · heights predate the confirmation model — re-measure |
@@ -835,20 +835,31 @@ assets/fonts/OFL.txt        font licence and attribution
 
 Nothing in flight.
 
-**10 September 2026 — ctx.report_date is now the enquiry ladder.** The
-sectionStatus ladder that dated only the validity strip (9 Sep) now resolves
-`ctx.report_date` itself: BC row `Last EnquiryDate` → ConsumerScoreOnly row →
-`score.DataPullDate` → None. The ladder moved into
-`context.ReportContext.enquiry_anchor()`; `scoring.enquiry_anchor()` delegates
-to it, so `validity()` and `shell.py` are untouched and every window, the
+**10 September 2026 — ctx.report_date is now the enquiry ladder, read
+generically.** The sectionStatus ladder that dated only the validity strip
+(9 Sep) now resolves `ctx.report_date` itself, and in the same batch the
+hard-coded BC→ScoreOnly precedence was replaced (user-directed — a third
+product row, e.g. plain `ConsumerLong`, can appear): **every** sectionStatus
+row is a candidate and the one with the latest parseable `Last EnquiryDate`
+wins (array order breaks ties, since parsing truncates to a date), then
+`score.DataPullDate`, then None. The ladder lives in
+`context.ReportContext.enquiry_anchor()`; `scoring.enquiry_anchor()`
+delegates to it, so `validity()` keeps its surface and every window, the
 heatmap month arithmetic, age/ID-expiry checks, the brief, and the blob's
-`reportDate` all age one date. This **supersedes** the 8 Sep "DataPullDate
-only" decision (user-directed); the user explicitly accepted that on stale
-archives (reference fixture: enquiry 2024-08-20 vs pull 2023-10-26) every
-window shifts forward ~10 months — live API pulls carry near-identical dates.
-`check_report.py` now gates the blob's `reportDate` against an independently
-recomputed ladder, so a revert to pull-only fails the build on the archive
-fixture. The `ArchiveDate` fallbacks stay dead.
+`reportDate` all age one date. The top-bar scope chip was reworked with it:
+the winning row's **ReportType and EnquiryType render verbatim** as two
+neutral `.tb-scope` chips (no product vocabulary in `shell.py`; a dateless
+sectionStatus still chips its first row while the pull date dates the
+report; empty array → amber "Enquiry scope not reported"). §04's
+bounced-cheque-requested tri-state (`returns.py _section_requested`) keeps
+its own BC marker — that question is intrinsically about the BC product.
+This **supersedes** the 8 Sep "DataPullDate only" decision; the user
+explicitly accepted that on stale archives (reference fixture: enquiry
+2024-08-20 vs pull 2023-10-26) every window shifts forward ~10 months — live
+API pulls carry near-identical dates. `check_report.py` gates both the chips
+and the blob's `reportDate` against an independently recomputed ladder, so a
+revert fails the build on the archive fixture. The `ArchiveDate` fallbacks
+stay dead.
 
 **10 September 2026 — API responses are archived as reference copies.**
 `app_api.py` now saves each *successful* API response verbatim via the new

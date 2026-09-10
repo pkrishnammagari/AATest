@@ -64,20 +64,23 @@ except per-contract `OriginalCurrency`, which §07 guards; see there).
 
 **The report date is a ladder, and it dates everything** (since 10 Sep 2026
 this ladder *is* `ctx.report_date`: validity, every window, the heatmap month
-arithmetic, and age/expiry checks all age the same date):
+arithmetic, and age/expiry checks all age the same date). `sectionStatus` is
+read **generically** — no `ReportType` vocabulary is hard-coded, so any
+product row (*ConsumerLong with Bounced Cheques*, *ConsumerScoreOnly*, plain
+*ConsumerLong*, or one the bureau adds later) participates:
 
-1. The `sectionStatus` row whose `ReportType` is the full product
-   (*ConsumerLong with Bounced Cheques*) → its **`Last EnquiryDate`**.
-2. That row absent, or present without a date → the **ConsumerScoreOnly**
-   row's `Last EnquiryDate`.
-3. Neither → `score.DataPullDate` — a last resort only, never first.
-4. Nothing → **Validity unknown** ("no enquiry date or pull date delivered").
+1. Every `sectionStatus` row is a candidate; the one with the **latest**
+   parseable **`Last EnquiryDate`** wins (array order breaks ties — the
+   parse truncates the timestamp to a date).
+2. No row with a usable date → `score.DataPullDate` — a last resort only,
+   never first. The first row still names the scope chips.
+3. Nothing → **Validity unknown** ("no enquiry date or pull date delivered").
 
 | element | source | rule |
 |---|---|---|
 | Pill | the ladder date | age = days to **today**. `Report valid` when 0 ≤ age ≤ window; `Report expired` otherwise (future-dated is not valid); `Validity unknown` when the ladder is empty |
-| **Scope chip** | `sectionStatus.ReportType` presence | always one of three: neutral **"Full file · incl. bounced cheques"** (BC row present); amber **"Score-only · bounced cheques not requested"** (only the score product was pulled — a thinner file, §04 grades the same gap); amber **"Enquiry scope not reported"** (`sectionStatus` empty). Renders even in the unknown state |
-| Generated / Valid-until | ladder date; + window | hover on Generated (and the meter) **names which field dated the report** — full enquiry / score-only enquiry standing in for a dateless BC row / DataPullDate fallback |
+| **Scope chips** | winning row's `ReportType` + `EnquiryType` | two neutral chips carrying the values **verbatim** (a missing field simply drops its chip); amber **"Enquiry scope not reported"** when `sectionStatus` is empty. Render even in the unknown state. §04 still grades the absence of the bounced-cheque product itself |
+| Generated / Valid-until | ladder date; + window | hover on Generated (and the meter) **names which field dated the report** — the winning enquiry's `Last EnquiryDate`, or the DataPullDate fallback |
 | Window | `validity_days` in [config/bands.json](config/bands.json) (30) | FH policy, not payload |
 | Meter | age ÷ window | marker clamped to 100% so an old report pins at the track's end |
 

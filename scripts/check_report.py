@@ -152,34 +152,39 @@ def check(path):
             problems.append("payload value missing from page: contractsSummary."
                             "%s is non-zero but %r never renders" % (field, label))
 
-    # The top bar must always state the enquiry scope.
-    kinds = [str(r.get("ReportType") or "").lower()
-             for r in ctx.rows("sectionStatus")]
-    if any("bounced cheque" in k for k in kinds):
-        if "incl. bounced cheques" not in html:
-            problems.append("top bar does not state the full-file enquiry scope")
-    elif any("scoreonly" in k.replace(" ", "") for k in kinds):
-        if "Score-only" not in html:
-            problems.append("top bar does not state the score-only enquiry scope")
+    # The top bar must always state the enquiry scope: the latest-dated
+    # sectionStatus row's ReportType and EnquiryType render verbatim as chips
+    # (no hard-coded product vocabulary), an empty array as the amber
+    # not-reported chip. The winner is recomputed here independently --
+    # latest parseable 'Last EnquiryDate' first, array order breaking ties,
+    # first row standing in when no row is dated.
+    ss_rows = ctx.rows("sectionStatus")
+    winner = winner_date = None
+    for r in ss_rows:
+        parsed = dates.parse_any(r.get("Last EnquiryDate"))
+        if parsed and (winner_date is None or parsed > winner_date):
+            winner, winner_date = r, parsed
+    scope_row = winner if winner is not None else \
+        (ss_rows[0] if ss_rows else None)
+    if scope_row is not None:
+        for field in ("ReportType", "EnquiryType"):
+            value = str(scope_row.get(field) or "").strip()
+            if value and value not in html:
+                problems.append("top bar scope chip missing: sectionStatus."
+                                "%s %r never renders" % (field, value))
+    elif "Enquiry scope not reported" not in html:
+        problems.append("top bar does not state that the enquiry scope is "
+                        "unreported")
 
     # ctx.report_date is the enquiry ladder (decision, 10 Sep 2026): the
-    # bounced-cheque row's 'Last EnquiryDate', else the scoreonly row's, else
-    # score.DataPullDate. Recomputed here from the raw arrays -- not via
+    # latest-dated sectionStatus row's 'Last EnquiryDate', else
+    # score.DataPullDate. Recomputed above from the raw arrays -- not via
     # ctx.report_date -- so a regression in context.py cannot certify itself.
     # Asserted against the __AECB blob's reportDate (json.dumps writes
     # '"reportDate": "YYYY-MM-DD"'), which is what report.js actually anchors
     # to. On the archive fixture this only passes at the enquiry date, never
     # at the ten-months-earlier pull date.
-    ss_rows = ctx.rows("sectionStatus")
-    bc = next((r for r in ss_rows
-               if "bounced cheque" in str(r.get("ReportType") or "").lower()),
-              None)
-    so = next((r for r in ss_rows
-               if "scoreonly" in str(r.get("ReportType") or "")
-               .lower().replace(" ", "")), None)
-    expected = dates.parse_any(bc.get("Last EnquiryDate")) if bc else None
-    if expected is None and so is not None:
-        expected = dates.parse_any(so.get("Last EnquiryDate"))
+    expected = winner_date
     if expected is None:
         expected = dates.parse_any(ctx.score.get("DataPullDate"))
     if expected is not None:

@@ -145,13 +145,14 @@ Design decisions worth knowing before changing anything:
   `applications.py`), precisely so a filename cannot drift from the position
   the registry assigns it. Never hard-code a number.
 - **One report date, everywhere** (10 Sep 2026): `ctx.report_date` resolves
-  the `sectionStatus` enquiry ladder — the bounced-cheque row's
-  `Last EnquiryDate` → the ConsumerScoreOnly date → `score.DataPullDate` as
-  last resort, never first. Validity, every window, age/expiry checks and the
-  `__AECB` blob all age this one date; the always-on scope chip (*Full file ·
-  incl. bounced cheques* / amber *Score-only* / amber *scope not reported*)
-  and the hover disclosure of the dating field are unchanged. See
-  `PayLoadRead.md`.
+  the `sectionStatus` enquiry ladder, read generically — the latest
+  `Last EnquiryDate` across all rows (no hard-coded `ReportType`
+  vocabulary; array order breaks ties) → `score.DataPullDate` as last
+  resort, never first. Validity, every window, age/expiry checks and the
+  `__AECB` blob all age this one date. The top bar chips the winning row's
+  `ReportType` and `EnquiryType` verbatim (amber *Enquiry scope not
+  reported* when `sectionStatus` is empty) and discloses the dating field
+  on hover. See `PayLoadRead.md`.
 - **`tokens.py` is the only place a colour is defined.** `report.css` refers to
   `var(--*)` throughout; `js.py` passes the few tokens the SVG charts need.
 - **One brand colour, and it is Finance House blue.** Every branded element
