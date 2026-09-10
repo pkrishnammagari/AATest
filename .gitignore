@@ -15,3 +15,8 @@ assets/fonts/*.woff2
 .DS_Store
 node_modules/
 aecb_api.log
+
+# Live API captures written by app_api.py via aecb/archive.py -- real bureau
+# data, never commit. The anonymized fixtures at ReferenceJSON/ top level ARE
+# committed.
+ReferenceJSON/api_responses/

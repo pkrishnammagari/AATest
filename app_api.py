@@ -8,10 +8,11 @@ dev uploader does, and renders it through the unchanged pipeline
 with the fixture picker and uploader; nothing in it or in the renderer is
 modified by this entry.
 
-Session guarantees match the uploader's: the fetched payload lives in this
-session's memory only -- never written to disk, never visible to another
-session. Fetch happens once per Display click; reruns (brief generation,
-downloads) reuse the cached bytes.
+The fetched payload lives in this session's memory for rendering, and each
+successful response is also archived verbatim to ReferenceJSON/api_responses/
+(gitignored -- real bureau data; see aecb/archive.py) as a timestamped
+reference copy. Fetch happens once per Display click; reruns (brief
+generation, downloads) reuse the cached bytes.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 
-from aecb import api, brief, context
+from aecb import api, archive, brief, context
 from aecb.render import branding
 from aecb.render.page import clear_cache, render_page
 
@@ -142,6 +143,7 @@ def _landing() -> None:
                 _LOG.warning("Bureau API fetch failed for %r: %s", subject_id, exc)
                 st.error(str(exc))
                 return
+            archive.save_response(raw, subject_id)
             st.session_state["_api_payload"] = raw
             st.session_state["_api_subject"] = subject_id
             st.rerun()

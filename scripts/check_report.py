@@ -21,7 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from aecb import context                      # noqa: E402
+from aecb import context, dates               # noqa: E402
 from aecb.derive import identity as derive_identity  # noqa: E402
 from aecb.render.page import render_page      # noqa: E402
 
@@ -161,6 +161,32 @@ def check(path):
     elif any("scoreonly" in k.replace(" ", "") for k in kinds):
         if "Score-only" not in html:
             problems.append("top bar does not state the score-only enquiry scope")
+
+    # ctx.report_date is the enquiry ladder (decision, 10 Sep 2026): the
+    # bounced-cheque row's 'Last EnquiryDate', else the scoreonly row's, else
+    # score.DataPullDate. Recomputed here from the raw arrays -- not via
+    # ctx.report_date -- so a regression in context.py cannot certify itself.
+    # Asserted against the __AECB blob's reportDate (json.dumps writes
+    # '"reportDate": "YYYY-MM-DD"'), which is what report.js actually anchors
+    # to. On the archive fixture this only passes at the enquiry date, never
+    # at the ten-months-earlier pull date.
+    ss_rows = ctx.rows("sectionStatus")
+    bc = next((r for r in ss_rows
+               if "bounced cheque" in str(r.get("ReportType") or "").lower()),
+              None)
+    so = next((r for r in ss_rows
+               if "scoreonly" in str(r.get("ReportType") or "")
+               .lower().replace(" ", "")), None)
+    expected = dates.parse_any(bc.get("Last EnquiryDate")) if bc else None
+    if expected is None and so is not None:
+        expected = dates.parse_any(so.get("Last EnquiryDate"))
+    if expected is None:
+        expected = dates.parse_any(ctx.score.get("DataPullDate"))
+    if expected is not None:
+        needle = '"reportDate": "%s"' % expected.isoformat()
+        if needle not in html:
+            problems.append("report date is not the enquiry-ladder date: "
+                            "expected %s in the __AECB blob" % needle)
 
     # Section 07's rows are drawn client-side, so its only-when-delivered
     # signals are asserted against the window.__AECB blob rather than markup

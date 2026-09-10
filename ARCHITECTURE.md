@@ -22,8 +22,10 @@ is written to disk, no other session can see it. That seam is now **realised**
 (9 Sep 2026): `app_api.py` — the production entry — asks for a CB subject id,
 POSTs it to the internal bureau-report API (`aecb/api.py`, endpoint in
 `config/api.json`), validates the response exactly as the uploader does, and
-renders it through the same `context.from_bytes()` path with the same
-session-only guarantee. `app.py` remains the development harness with the
+renders it through the same `context.from_bytes()` path. Each successful API
+response is also archived verbatim (10 Sep 2026, `aecb/archive.py`) as a
+timestamped reference copy in `ReferenceJSON/api_responses/` — gitignored,
+outside the picker's view. `app.py` remains the development harness with the
 fixture picker and uploader, unchanged.
 
 Two hard constraints drive nearly every design decision:
@@ -43,7 +45,8 @@ opened years later on an unknown machine, so the CSS floor is roughly Chrome 88
 
 ```
 app_api.py                 PRODUCTION entry — CB subject id → bureau-report
-                           API → validate → render; payload session-only
+                           API → validate → render; archives each response
+                           to ReferenceJSON/api_responses/ (gitignored)
 app.py                     dev harness — fixture picker + uploader; renders
                            session-scoped, nothing written to disk
 requirements.txt           streamlit==1.50.0, pinned with reasoning
@@ -54,6 +57,8 @@ aecb/                      the renderer package
 │                          handshake on one connection; config/api.json)
 ├── ntlm.py                NTLMv2 messages + crypto (MS-NLMP, stdlib only,
 │                          spec-vector self-test: python3 -m aecb.ntlm)
+├── archive.py             saves each successful API response verbatim to
+│                          ReferenceJSON/api_responses/ (app_api.py only)
 ├── loader.py              parse + normalise the payload
 ├── dates.py               the three date formats, and date arithmetic
 ├── context.py             ReportContext — the object every section receives
@@ -91,7 +96,9 @@ assets/fonts/              vendored woff2 + fonts_inline.css (~930 KB base64)
                            + OFL.txt (font licence and attribution)
 resources/                 optional logo (any name; auto-discovered)
 ReferenceJSON/             committed anonymized fixtures the sidebar offers
-                           (incl. a synthetic delinquent payload)
+                           (incl. a synthetic delinquent payload);
+                           api_responses/ under it holds gitignored live-API
+                           captures — real data, invisible to the picker
 scripts/
 ├── check_report.py        the correctness gate
 ├── make_synthetic_payload.py  seeded generator of the delinquent fixture
@@ -186,26 +193,29 @@ It carries:
 #### `report_date` — the most load-bearing derived value
 
 ```python
-score.DataPullDate    # and nothing else
+sectionStatus BC row 'Last EnquiryDate'   # bounced-cheque product first
+-> ConsumerScoreOnly row's date           # then the score-only enquiry
+-> score.DataPullDate                     # last resort, never first
+-> None                                   # nothing delivered
 ```
 
-`DataPullDate` (when AECB was actually queried) is the **only** source, by
-decision (8 Sep 2026). The former fallbacks — `score.ArchiveDate`, then
-`customerInfo.ArchiveDate` — were removed: both are warehouse write timestamps
-that can post-date the contract data by months, and anchoring the page to one
-silently misstates every window on it. A payload without a `DataPullDate` has
-no resolvable report date: the top bar shows *Validity unknown* and every
-windowed section falls back to its own no-report-date state (unanchored
-returns window, offset heatmap month labels, no application timeline).
+**One ladder, everywhere** (user decision, 10 Sep 2026 — supersedes both the
+8 Sep "`DataPullDate` only" rule and the 9 Sep split that reserved the ladder
+for the validity strip). The ladder lives on `ReportContext.enquiry_anchor()`
+(`context.py`); `scoring.enquiry_anchor()` delegates to it, so the validity
+verdict, the windows, and the `__AECB` blob's `reportDate` all age the same
+date. The bar still states the **enquiry scope** (full file / score-only /
+not reported) plus, on hover, which field dated the report. The former
+`ArchiveDate` fallbacks stay removed. When the whole ladder is empty the top
+bar shows *Validity unknown* and every windowed section falls back to its own
+no-report-date state (unanchored returns window, offset heatmap month labels,
+no application timeline).
 
-**The top-bar validity verdict ages a different date** (9 Sep 2026, RRM):
-`scoring.enquiry_anchor()` ladders `sectionStatus` — the bounced-cheque row's
-`Last EnquiryDate` first, the ConsumerScoreOnly row's second, `DataPullDate`
-as last resort — and the bar always states the **enquiry scope** (full file /
-score-only / not reported) plus, on hover, which field dated the verdict. The
-windows stay on `ctx.report_date`: on the reference fixture the enquiry date
-post-dates the contract data by ten months, and anchoring windows to it would
-misstate every one of them.
+Accepted consequence, decided explicitly: on stale archive payloads the
+enquiry date can post-date the contract data (reference fixture: enquiry
+2024-08-20 vs pull 2023-10-26), shifting every window forward — on live API
+pulls the two dates are effectively the same. `check_report.py` gates the
+blob's `reportDate` against an independently recomputed ladder.
 
 Everything windowed hangs off it: the 36-month conduct grid, the 90-day
 application window, the 6-month returns window and closure window, report

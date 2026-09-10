@@ -122,61 +122,26 @@ def vintage_band(ctx):
     return {"code": None, "all": codes}
 
 
-_BC_MARKER = "bounced cheque"
-_SO_MARKER = "scoreonly"
-
-
 def enquiry_anchor(ctx):
     """The date the VALIDITY verdict ages, and the enquiry scope behind it.
 
-    This is deliberately not ctx.report_date. The windows on the page stay
-    anchored to score.DataPullDate, which the contract data is consistent
-    with; the validity question -- "is this report still usable" -- ages the
-    enquiry itself, on an RRM-decided ladder (9 Sep 2026):
-
-        1. the sectionStatus row for the full product ("ConsumerLong with
-           Bounced Cheques") and its 'Last EnquiryDate';
-        2. failing that row or its date, the ConsumerScoreOnly row's date;
-        3. failing both, score.DataPullDate -- a fallback only, never first;
-        4. nothing at all -> date None, and the bar says not reported.
+    Since 10 Sep 2026 this IS ctx.report_date's ladder -- the windows and the
+    validity strip age the same date. The ladder lives on ReportContext
+    (context.enquiry_anchor); this wrapper keeps scoring's public surface so
+    shell.py and validity() are untouched by the unification.
 
     Returns {'date', 'basis' ('bounced' | 'score_only' | 'pull' | None),
-             'bc_present', 'so_present'}. The presence flags describe the
-    sectionStatus rows regardless of which date won -- the scope chip renders
-    from them, the date disclosure from 'basis'.
+             'bc_present', 'so_present'}.
     """
-    bc_row = so_row = None
-    for row in ctx.rows("sectionStatus"):
-        kind = str(row.get("ReportType") or "").lower()
-        if _BC_MARKER in kind and bc_row is None:
-            bc_row = row
-        elif _SO_MARKER in kind.replace(" ", "") and so_row is None:
-            so_row = row
-
-    out = {"date": None, "basis": None,
-           "bc_present": bc_row is not None, "so_present": so_row is not None}
-
-    if bc_row is not None:
-        parsed = dates.parse_any(bc_row.get("Last EnquiryDate"))
-        if parsed:
-            out["date"], out["basis"] = parsed, "bounced"
-            return out
-    if so_row is not None:
-        parsed = dates.parse_any(so_row.get("Last EnquiryDate"))
-        if parsed:
-            out["date"], out["basis"] = parsed, "score_only"
-            return out
-    parsed = dates.parse_any(ctx.score.get("DataPullDate"))
-    if parsed:
-        out["date"], out["basis"] = parsed, "pull"
-    return out
+    return ctx.enquiry_anchor()
 
 
 def validity(ctx):
     """Report freshness against the configured look-back window.
 
-    The aged date comes from enquiry_anchor() -- see its ladder -- NOT from
-    ctx.report_date, which keeps anchoring the windows. Returns
+    The aged date comes from enquiry_anchor() -- since 10 Sep 2026 the same
+    ladder that resolves ctx.report_date, so the validity verdict and the
+    windows age one date. Returns
     {'report_date', 'age_days', 'window', 'valid', 'expires', 'pct',
      'basis', 'bc_present', 'so_present'} -- pct is the marker position on
     the meter, clamped to 100 so an old report pins at the end rather than

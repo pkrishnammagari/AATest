@@ -62,9 +62,9 @@ except per-contract `OriginalCurrency`, which §07 guards; see there).
 
 ## Top bar — report validity and enquiry scope
 
-**The validity date has its own ladder** (it is *not* `ctx.report_date`, which
-keeps anchoring every window — the contract data is consistent with the pull
-date, while the enquiry date can post-date it):
+**The report date is a ladder, and it dates everything** (since 10 Sep 2026
+this ladder *is* `ctx.report_date`: validity, every window, the heatmap month
+arithmetic, and age/expiry checks all age the same date):
 
 1. The `sectionStatus` row whose `ReportType` is the full product
    (*ConsumerLong with Bounced Cheques*) → its **`Last EnquiryDate`**.

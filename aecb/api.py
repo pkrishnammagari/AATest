@@ -15,8 +15,9 @@ handshake must travel on one socket, which is why this module speaks
 http.client directly instead of urllib -- urllib does not guarantee
 connection reuse.
 
-Nothing here touches disk: the payload lives only in the caller's session
-memory, the same guarantee the uploader gives. Error responses are logged in
+Nothing in this module touches disk: it returns the payload bytes to the
+caller, and app_api.py archives a reference copy of each successful response
+via aecb/archive.py. Error responses are logged in
 full (status, headers, body) to the "aecb.api" logger -- app_api.py routes
 that to aecb_api.log; successful payloads are never logged.
 """

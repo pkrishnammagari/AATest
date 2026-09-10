@@ -144,12 +144,14 @@ Design decisions worth knowing before changing anything:
   `01..08`. The module files carry names, not numbers (`identity.py` …
   `applications.py`), precisely so a filename cannot drift from the position
   the registry assigns it. Never hard-code a number.
-- **The top-bar validity ages the enquiry, not the pull** (9 Sep 2026):
-  `sectionStatus`'s bounced-cheque `Last EnquiryDate` → the ConsumerScoreOnly
-  date → `score.DataPullDate` as last resort, with an always-on scope chip
-  (*Full file · incl. bounced cheques* / amber *Score-only* / amber *scope not
-  reported*) and the dating field disclosed on hover. `ctx.report_date` — the
-  window anchor — stays on `DataPullDate`. See `PayLoadRead.md`.
+- **One report date, everywhere** (10 Sep 2026): `ctx.report_date` resolves
+  the `sectionStatus` enquiry ladder — the bounced-cheque row's
+  `Last EnquiryDate` → the ConsumerScoreOnly date → `score.DataPullDate` as
+  last resort, never first. Validity, every window, age/expiry checks and the
+  `__AECB` blob all age this one date; the always-on scope chip (*Full file ·
+  incl. bounced cheques* / amber *Score-only* / amber *scope not reported*)
+  and the hover disclosure of the dating field are unchanged. See
+  `PayLoadRead.md`.
 - **`tokens.py` is the only place a colour is defined.** `report.css` refers to
   `var(--*)` throughout; `js.py` passes the few tokens the SVG charts need.
 - **One brand colour, and it is Finance House blue.** Every branded element

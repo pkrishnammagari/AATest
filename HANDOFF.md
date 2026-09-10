@@ -496,7 +496,7 @@ gained the confirmation states after these numbers were captured).
 
 | § | module | state |
 |---|---|---|
-| top bar | `shell.py` | brand, validity strip, AI Analysis button. **Reworked 9 Sep**: validity now ages the sectionStatus enquiry ladder (BC Last EnquiryDate → ScoreOnly → DataPullDate) with an always-on enquiry-scope chip (`.tb-scope`); windows stay on ctx.report_date |
+| top bar | `shell.py` | brand, validity strip, AI Analysis button. **Reworked 9 Sep**: validity ages the sectionStatus enquiry ladder (BC Last EnquiryDate → ScoreOnly → DataPullDate) with an always-on enquiry-scope chip (`.tb-scope`). **Since 10 Sep** the same ladder resolves ctx.report_date, so the windows age it too |
 | 01 Identity & demographics | `identity.py` | done · 305 / 301 · size + **density** (4-up row) |
 | 02 Score & Bureau History | `score.py` | done · 162 / 156 · size |
 | 03 Income & employment | `income.py` | done · 560 / 502 open (loads collapsed) · size · heights predate the confirmation model — re-measure |
@@ -834,6 +834,35 @@ assets/fonts/OFL.txt        font licence and attribution
 ## Recently landed
 
 Nothing in flight.
+
+**10 September 2026 — ctx.report_date is now the enquiry ladder.** The
+sectionStatus ladder that dated only the validity strip (9 Sep) now resolves
+`ctx.report_date` itself: BC row `Last EnquiryDate` → ConsumerScoreOnly row →
+`score.DataPullDate` → None. The ladder moved into
+`context.ReportContext.enquiry_anchor()`; `scoring.enquiry_anchor()` delegates
+to it, so `validity()` and `shell.py` are untouched and every window, the
+heatmap month arithmetic, age/ID-expiry checks, the brief, and the blob's
+`reportDate` all age one date. This **supersedes** the 8 Sep "DataPullDate
+only" decision (user-directed); the user explicitly accepted that on stale
+archives (reference fixture: enquiry 2024-08-20 vs pull 2023-10-26) every
+window shifts forward ~10 months — live API pulls carry near-identical dates.
+`check_report.py` now gates the blob's `reportDate` against an independently
+recomputed ladder, so a revert to pull-only fails the build on the archive
+fixture. The `ArchiveDate` fallbacks stay dead.
+
+**10 September 2026 — API responses are archived as reference copies.**
+`app_api.py` now saves each *successful* API response verbatim via the new
+`aecb/archive.py` to `ReferenceJSON/api_responses/<subject>_<YYYYMMDD_HHMMSS>.json`
+— one timestamped file per fetch, never overwritten (same-second collisions
+get `_1`, `_2`, … via `O_EXCL`). This is **not** a return of the reverted
+19 Aug upload-archiving flow (see the 2 Sep entry below): captures land in a
+subfolder the fixture picker, `check_report.py`, and `install_offline.sh`
+never scan (all glob `ReferenceJSON/*.json` non-recursively), they hold real
+bureau data and are gitignored, and the save happens only after
+`_validated_context()` accepts the payload. A save failure logs to
+`aecb_api.log` (`aecb.archive` logger) and never blocks the render; payload
+contents are still never logged. The dev harness `app.py` does not import
+`archive` and still writes nothing.
 
 **2 September 2026 — the documentation-drift audit fix batch.** An external
 audit read all four documents against the code; the findings were fixed, code
