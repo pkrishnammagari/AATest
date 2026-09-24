@@ -9,7 +9,7 @@ omitted or set to null, and report.js returns early rather than inventing a
 series -- section 08 emits no `applications` key when no application row
 carries a usable date.
 
-The section 03 and 04 timelines are not here: they are inline SVG built in
+The income and returns timelines are not here: they are inline SVG built in
 their section modules, because whether a timeline can be drawn at all depends
 on which dates the payload carries and that decision belongs beside the data.
 """
@@ -237,10 +237,25 @@ def _facility_row(ctx, facility) -> dict:
     if facility.closed and not facility.closed_on:
         row["closedUndated"] = True
 
+    # Delivered values the config cannot read are shown as delivered rather
+    # than defaulted: an unknown role is not main holder, an unknown
+    # frequency is not absent.
+    if facility.role_text:
+        row["roleText"] = facility.role_text
+    if facility.frequency_text:
+        row["freqText"] = facility.frequency_text
+
+    # The contract's own numbers, for the name hover -- what someone needs to
+    # raise this facility with AECB or the lender.
+    ids = {}
+    if raw.get("CBContractId"):
+        ids["cb"] = str(raw.get("CBContractId"))
+    if raw.get("ProviderContractNo"):
+        ids["lender"] = str(raw.get("ProviderContractNo"))
+    if ids:
+        row["ids"] = ids
+
     return row
-
-
-CLOSED_WINDOW_MONTHS = 6
 
 
 def _in_arrears(facility) -> bool:
@@ -275,8 +290,8 @@ def _closed_recently(ctx, facility) -> bool:
     """
     if not facility.closed_on or not ctx.report_date:
         return False
-    return facility.closed_on >= dates.add_months(ctx.report_date,
-                                                  -CLOSED_WINDOW_MONTHS)
+    return facility.closed_on >= dates.add_months(
+        ctx.report_date, -ctx.bands["closed_window_months"])
 
 
 def _heatmap(ctx) -> dict:
@@ -299,7 +314,8 @@ def _heatmap(ctx) -> dict:
     recent = [f for f in closed if _closed_recently(ctx, f)]
     older = [f for f in closed if not _closed_recently(ctx, f)]
 
-    window = CLOSED_WINDOW_MONTHS
+    # config/bands.json, validated as a positive whole number at load.
+    window = ctx.bands["closed_window_months"]
     blocks = [
         _block(ctx, "facActive", "Active facilities", live, False),
         _block(ctx, "facClosed6", "Closed · last %d months" % window, recent, True),
@@ -309,6 +325,7 @@ def _heatmap(ctx) -> dict:
 
     data = {
         "months": facilities.WINDOW_MONTHS,
+        "closedWindow": window,
         "reportDate": _iso(ctx.report_date),
         "blocks": [b for b in blocks if b],
     }

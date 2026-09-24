@@ -433,7 +433,7 @@ def main():
     EMPLOYERS = ["EMIRATES NBD", "DU TELECOM", "GULF LOGISTICS LLC",
                  "AL FUTTAIM GROUP", "DUBAI HOLDING"]
     # Employment is written out explicitly rather than generated, because the point
-    # of these rows is WHICH OF THE THREE DATES each one carries. §03 reads
+    # of these rows is WHICH OF THE THREE DATES each one carries. the income section reads
     # DateOfEmployment (S), DateOfTermination (E) and DateOfLastUpdate (U), and its
     # whole reading turns on the combination -- S and E describe the job, U only
     # describes the record, so U may qualify a claim but never establish one.
@@ -477,7 +477,7 @@ def main():
         "DateOfTermination": E and "%sT00:00:00" % E,
         "ProviderNo": prov,
         "DateOfLastUpdate": U and "%sT00:00:00" % U,
-        # Reported by one provider only -- §03 must still surface it, since a
+        # Reported by one provider only -- the income section must still surface it, since a
         # dispute raised with any single provider is a dispute.
         "FlagOpenDispute": True if name == "DU TELECOM" else None,
     } for (name, income, S, E, U), kind, prov in zip(

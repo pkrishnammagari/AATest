@@ -18,6 +18,25 @@ CONFIG_DIR = os.path.join(os.path.dirname(_HERE), "config")
 
 
 
+def _require_positive(cfg: dict, key: str, fname: str, what: str,
+                      integer: bool = True):
+    """A policy number with no safe default: present, numeric, above zero.
+
+    Silent fallbacks here once made a deleted validity window read as 30 days
+    and a deleted placeholder floor switch the check off entirely -- the
+    report stayed plausible while its policy was gone. Loud, like a missing
+    config file.
+    """
+    value = cfg.get(key)
+    ok_type = int if integer else (int, float)
+    if isinstance(value, bool) or not isinstance(value, ok_type) or value <= 0:
+        raise ValueError(
+            "config/%s %s must be %s above zero (got %r) -- %s"
+            % (fname, key, "a whole number" if integer else "a number",
+               value, what))
+    return value
+
+
 def _load_config(name: str) -> dict:
     """Parsed config/<name>. A missing or unreadable file RAISES.
 
@@ -44,12 +63,42 @@ class ReportContext:
         self.providers = _load_config("providers.json")
         self.status_codes = _load_config("status_codes.json")
         self.bands = _load_config("bands.json")
+        # Policy numbers with no safe default are validated at load, so a
+        # deleted or malformed key stops the render instead of degrading it.
+        _require_positive(self.bands, "validity_days", "bands.json",
+                          "report validity cannot be graded without it.")
+        _require_positive(self.bands, "closed_window_months", "bands.json",
+                          "recently closed facilities cannot be told from "
+                          "older closures without it.")
+        red = _require_positive(self.bands, "applications_90d_red",
+                                "bands.json", "the applications pill cannot "
+                                "be graded without it.")
+        amber = _require_positive(self.bands, "applications_90d_amber",
+                                  "bands.json", "the applications pill "
+                                  "cannot be graded without it.")
+        if amber > red:
+            raise ValueError("config/bands.json applications_90d_amber (%d) "
+                             "must not exceed applications_90d_red (%d)."
+                             % (amber, red))
         # How to read GrossAnnualIncome: currency, the placeholder floor and
         # the confirmation window. All three are policy, not payload.
         self.income_cfg = _load_config("income.json")
+        _require_positive(self.income_cfg, "placeholder_floor", "income.json",
+                          "placeholder income figures cannot be told from "
+                          "real ones without it.", integer=False)
+        _require_positive(self.income_cfg, "confirmation_window_months",
+                          "income.json", "stale employment records cannot "
+                          "be recognised without it.")
+        currency = self.income_cfg.get("currency")
+        if not isinstance(currency, str) or not currency.strip():
+            raise ValueError("config/income.json currency must be a non-empty "
+                             "string (got %r)." % (currency,))
         # paymentOrder vocabularies: Type text -> instrument kind, Severity
         # text -> display tone. Policy, since AECB delivers bare display text.
         self.returns_cfg = _load_config("returns.json")
+        _require_positive(self.returns_cfg, "window_months", "returns.json",
+                          "recent returns cannot be told from earlier ones "
+                          "without it.")
 
         # Reverse map: the payload delivers contract status as display text
         # ('Active Payments') while the heatmap works in letter codes ('U').
@@ -99,10 +148,12 @@ class ReportContext:
             3. nothing at all -> date None.
 
         Returns {'date', 'basis' ('enquiry' | 'pull' | None), 'report_type',
-                 'enquiry_type'}. The type strings come verbatim from the
-        winning row -- or from the first row when rows exist but none is
-        dated, so the top bar can still chip the scope while the pull date
-        does the dating -- and are "" when sectionStatus is empty.
+                 'enquiry_type', 'enquiry_no', 'scope_source'}. The type
+        strings and EnquiryNo come verbatim from the winning row -- or from
+        the first row when rows exist but none is dated, so the top bar can
+        still chip the scope while the pull date does the dating -- and are
+        "" when sectionStatus is empty. scope_source says which: 'dated'
+        (the winning row), 'first' (no row dated) or None (no rows).
 
         On stale archive payloads the enquiry date can post-date the pull by
         months (reference fixture: enquiry 2024-08-20 vs pull 2023-10-26),
@@ -124,6 +175,10 @@ class ReportContext:
                             if scope_row else ""),
             "enquiry_type": (str(scope_row.get("EnquiryType") or "").strip()
                              if scope_row else ""),
+            "enquiry_no": (str(scope_row.get("EnquiryNo") or "").strip()
+                           if scope_row else ""),
+            "scope_source": ("dated" if best_row is not None else
+                             "first" if scope_row is not None else None),
         }
 
         if best_date is not None:
@@ -156,9 +211,30 @@ class ReportContext:
         return self.data.get("_unknownArrays") or []
 
     @property
+    def cb_subject_id(self):
+        """The bureau's subject id, or None when the payload carries none.
+
+        customerInfo first; sectionStatus rows carry the same bureau id, so
+        they stand in when customerInfo omits it. Never a warehouse key --
+        callers that display this label it as the CB subject id.
+        """
+        value = self.customer.get("CBSubjectId")
+        if value:
+            return str(value)
+        for row in self.rows("sectionStatus"):
+            if row.get("CBSubjectId"):
+                return str(row["CBSubjectId"])
+        return None
+
+    @property
     def subject_id(self) -> str:
+        """Best available identifier for titles, file names and logs.
+
+        The bureau id when delivered; the warehouse PKSubjectId only as a
+        last resort; "unknown" when neither arrived.
+        """
         return str(
-            self.customer.get("CBSubjectId")
+            self.cb_subject_id
             or self.customer.get("PKSubjectId")
             or self.summary.get("PKSubjectId")
             or "unknown"

@@ -49,7 +49,7 @@ _DOC = """<!DOCTYPE html>
 def render_page(ctx, title: str = "") -> str:
     """Full standalone HTML document for one AECB report."""
     if not title:
-        title = "AECB Analyzer — %s" % (ctx.subject_id or "report")
+        title = "%s — %s" % (branding.APP_NAME, ctx.subject_id)
     return _DOC.format(
         # The subject id inside the title is payload data -- the ONE payload
         # string that does not pass through a section renderer's esc(), so it

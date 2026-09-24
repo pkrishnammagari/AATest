@@ -16,11 +16,12 @@ a zero, never green.
 
 ## 0. Cross-cutting rules (read these first — every section relies on them)
 
-**The report date** anchors every window on the page. It is
-`score.DataPullDate` and **nothing else** — no fallback. If the payload does
-not carry it, the top bar says *Validity unknown* and every date-windowed
-element degrades to its own unanchored state (no returns-window split, offset
-heatmap month labels, no application timeline).
+**The report date** anchors every window on the page. It is the latest
+parseable `sectionStatus."Last EnquiryDate"` across all rows, falling back to
+`score.DataPullDate` only when no row carries one (full rules under *Top bar*
+below). If neither arrives, the top bar says *Validity unknown* and every
+date-windowed element degrades to its own unanchored state (no returns-window
+split, offset heatmap month labels, no application timeline).
 
 **Normalisation** (before anything is read): every string is stripped and empty
 strings become null (the payload carries trailing spaces on enum values —
@@ -78,19 +79,20 @@ product row (*ConsumerLong with Bounced Cheques*, *ConsumerScoreOnly*, plain
 
 | element | source | rule |
 |---|---|---|
-| Pill | the ladder date | age = days to **today**. `Report valid` when 0 ≤ age ≤ window; `Report expired` otherwise (future-dated is not valid); `Validity unknown` when the ladder is empty |
-| **Scope chips** | winning row's `ReportType` + `EnquiryType` | two neutral chips carrying the values **verbatim** (a missing field simply drops its chip); amber **"Enquiry scope not reported"** when `sectionStatus` is empty. Render even in the unknown state. §04 still grades the absence of the bounced-cheque product itself |
-| Generated / Valid-until | ladder date; + window | hover on Generated (and the meter) **names which field dated the report** — the winning enquiry's `Last EnquiryDate`, or the DataPullDate fallback |
-| Window | `validity_days` in [config/bands.json](config/bands.json) (30) | FH policy, not payload |
-| Meter | age ÷ window | marker clamped to 100% so an old report pins at the track's end |
+| Pill | the ladder date | age = days to **today**. `Report valid` (green) when 0 ≤ age ≤ window; `Report expired` (red) when age > window; `Future-dated` (amber) when the date is after today — ungradable, so the end date stays neutral *Valid until* and the meter sits at zero; `Validity unknown` (grey) when the ladder is empty. Every state carries a hover stating its rule, with the window read from config |
+| **Scope chips** | winning row's `ReportType` + `EnquiryType` (+ `EnquiryNo` in the hover) | two neutral chips carrying the values **verbatim** from the single winning row; a blank `ReportType` renders an amber **"Report type not reported"** chip, a blank `EnquiryType` simply drops its chip; amber **"Enquiry scope not reported"** when `sectionStatus` is empty. The `ReportType` hover carries "Enquiry no. *n*" and the EnquiryType when delivered (the EnquiryType chip itself hides below 1440 px; the dates below 1280 px; the meter below 1110 px — measured breakpoints, see report.css); when no row is dated, both hovers say the scope came from the first row while `DataPullDate` dated the report. Render even in the unknown state. §05 still grades the absence of the bounced-cheque product itself |
+| Enquiry date (or Pull date) / Valid until | ladder date; + window (the last valid day — always labelled *Valid until*, the date red once expired) | the date field is labelled after its source — *Enquiry date*, or *Pull date* when the DataPullDate fallback dated the report — and its age reads days (< 60), then calendar months (`dates.months_between`), then years; its hover (and the meter's) **names which field dated the report** — the winning enquiry's `Last EnquiryDate`, or the DataPullDate fallback |
+| Window | `validity_days` in [config/bands.json](config/bands.json) (30) | FH policy, not payload. **Required**: a missing, zero, negative or non-integer value stops the render with an error — no silent default |
+| Meter | age ÷ window | two colours only: fill (days elapsed) and marker green while valid, red when not; plain grey track = days remaining; marker clamped to 0–100% so an expired report pins at the far end and a future-dated one at the start |
 
-The logo is whatever image sits in `resources/` (base64-inlined; "FH" monogram
-fallback). Validity lives in the bar, not a section, because it qualifies every
+The logo is `resources/logo.svg` (base64-inlined; "FH" monogram fallback).
+The product name "FH AECB Analyzer" comes from one constant,
+`branding.APP_NAME`, for the bar, browser tab, sidebars and document title. Validity lives in the bar, not a section, because it qualifies every
 section below it.
 
 ---
 
-## §01 Identity & demographics
+## §01 Identity & Demographics
 
 **Arrays: `customerInfo` (single row), `identification`, `contacts`,
 `addresses`.**
@@ -98,31 +100,53 @@ section below it.
 ### The name line
 - Headline: `customerInfo.FullNameEN`; when absent, composed from
   `FirstName + LastName` (whichever parts arrived). Em dash only when nothing
-  arrived at all.
+  arrived at all. When both parts and the full name arrived and the parts
+  spell it differently (case/spacing ignored), an amber `!` follows the name:
+  hover *Name parts reported as: …*.
 - `Title` (MR/MRS…) renders verbatim ahead of the name, de-emphasised, whenever
   delivered.
 - Arabic: `FullNameAR`, falling back to `FirstnameAR + LastnameAR`. Either way
   a **mojibake guard** applies: a name with no actual Arabic codepoints (the
-  `??? ????…` encoding-loss shape) is suppressed — rendering it is worse than
-  rendering nothing.
+  `??? ????…` encoding-loss shape) is never rendered as a name — instead a
+  quiet grey *Arabic name unreadable in payload* takes its place, raw value in
+  the hover, so an upstream encoding loss is not disguised as "none sent".
 - Traits line: `Gender` verbatim · age computed from `DOB` **at the report
-  date** (DOB in brackets) · `Nationality` titlecased.
-- Header pill: `ResidentFlag` → *Resident* / *Non-resident* / *Residency not
-  reported* — in **brand blue**, because residency is a fact, not a risk grade.
+  date** (DOB in brackets; *age unknown — no report date*, *DOB x — unreadable
+  date* or *DOB not reported* say exactly which part is missing) ·
+  `Nationality` titlecased (and/of/the stay lower case) · **CB Subject ID** —
+  `customerInfo.CBSubjectId`, else `sectionStatus.CBSubjectId`; never the
+  warehouse `PKSubjectId`. Absent → *CB Subject ID not reported*.
+- Header pill: `ResidentFlag` (booleans, or true/false · Y/N · yes/no · 1/0
+  as text) → *Resident* / *Non-resident* in **brand blue**, because residency
+  is a fact, not a risk grade; any other value → grey *Residency: value*;
+  nothing → *Residency not reported*.
+- Empty `customerInfo` empties the name line only (*No customer record*); the
+  tiles below still render from their own arrays.
 
 ### Emirates ID, Passport, Mobile, E-mail — the dedupe rules
 The bureau repeats each fact once per reporting provider and marks superseded
 values with a `(Historical)` suffix on the type string
 (`identification.InfoType`, `contacts.ContactType`). For each type:
 
-1. Rows are grouped **by value** (`Info` / `Contact`). Each distinct value
-   remembers every reporting provider, its latest `DateOfLastUpdate`, and
-   extras (passport `ExpiryDate` — first non-null wins).
-2. A value seen both current and historical counts as **current** (a later
-   re-confirmation outranks an older supersede).
+1. Rows are grouped **by value** (`Info` / `Contact`). Document numbers
+   (`Info`) group on letters and digits only — dashes, spaces and case
+   ignored — displaying the most recently reported spelling, others in the
+   hover (*Also reported as: …*). Each distinct value remembers every
+   reporting provider with **that provider's own** latest `DateOfLastUpdate`,
+   and extras (document `ExpiryDate` — the most recent reporter's).
+2. Current vs historical is decided **per provider** (decision, 24 Sep
+   2026): `(Historical)` marks one provider's copy of one spelling — the
+   archive shows C11 re-submitting `971525881200` as `+971525881200` on the
+   same day, the old spelling marked historical. Each provider's **own
+   latest** report is its verdict (same-day tie → current); the value is
+   **current** when at least one provider's verdict is current, historical
+   only when every provider's latest report says so.
 3. Values sort newest-updated first. The newest **current** value is the tile
-   headline, with the first provider as a chip and the rest behind `+N`
-   (hover lists them).
+   headline, with the **most recent reporter** as a chip and the rest behind
+   `+N` (hover lists them, most recent first). Folded rows read
+   *provider · Mon YYYY* — that provider's own date, never the newest date
+   from some other provider (this ordering also applies to §04's employer
+   provider badges).
 4. **Nothing is dropped.** Every other value — historical ones *and* any
    surplus current ones — folds behind the chevron, flagged `Historical` or
    `Also current`. The chevron reads *N prior* when the fold is entirely
@@ -130,14 +154,31 @@ values with a `(Historical)` suffix on the type string
    is promoted to the headline flagged *Historical only*.
 5. Mobile differs in one way: **all** current numbers render in the tile (a
    person legitimately has several); only priors fold.
+6. Mobile numbers also group **across prefix spellings**
+   (`identity.mobile_key`): digits only, then a leading `00`, `971` and one
+   `0` come off; a remaining UAE mobile (9 digits starting `5`) keys as
+   `971…`, so `0525881200` / `971525881200` / `+971525881200` / `525881200`
+   are one number. Anything else keys on its raw digits — never merged by
+   guesswork. The most recently reported spelling shows; the others sit in
+   its hover (archive: 15 spellings → 1 current + 10 prior). A number that
+   is not a UAE mobile under these rules keeps its delivered form but carries
+   a grey *not a valid UAE mobile* flag (archive: `97150000000`,
+   `971999999999`).
+7. E-mails group **ignoring letter case** and surrounding spaces
+   (`identity.email_key`), most recent spelling shown, others in the hover. A
+   value not shaped like an e-mail (one `@`, a dotted domain) keeps its
+   delivered form with a grey *not a valid e-mail* flag. The E-mail tile is
+   **always present** — *Not reported* when no e-mail arrived, rather than
+   vanishing (row two is always E-mail + Address).
 
-**Passport expiry** (`identification.ExpiryDate`): sub-line under the number —
+**Document expiry** — passport **and Emirates ID** (`identification.ExpiryDate`),
+one builder for both: on the value line —
 *Expires 26 May 2027*, or red *Expired …* when the expiry precedes the
 **report date** (the question is whether the document was valid when the bureau
 was pulled). No expiry → *Expiry not reported*. Folded passports carry
 `· expired 2023` / `· expires 2030` graded the same way (neutral `expiry` when
-no report date). Emirates ID expiries are captured but not rendered (AECB has
-never delivered one).
+no report date). When providers disagree on a document's expiry, the most
+recent reporter's date is shown with an amber `!` naming the others.
 
 ### Addresses
 - A row is empty **only when `Address`, `Emirate`, `PoBox` and `PlotNo` are
@@ -145,41 +186,111 @@ never delivered one).
 - A row with no `Address` but a location renders as **"Address not provided —
   Emirate"** (plus PO Box / Plot when present).
 - **Two dedup rules by shape**: addressed rows collapse on
-  `(Address, Emirate)` wherever they repeat; address-less rows collapse only
-  when **consecutive in payload order** with the same emirate — the same
-  emirate reappearing after any other entry stays separate (it may be a move
-  away and back).
-- Extras (emirate, PO Box, plot) merge first-non-null across a group's rows,
-  so a PO Box any provider delivered survives.
-- The array carries no type or historical marker, so the newest
-  `DateOfLastUpdate` is current and the rest fold as prior — and the on-screen
-  hint says so. Display: `ADDRESS — Emirate · PO Box N · Plot N`.
+  `(address, emirate)` wherever they repeat, the address compared ignoring
+  case, punctuation and repeated spaces (single spaces kept, so digit runs
+  never fuse); the most recent spelling displays, others in the hover. The
+  same address in two emirates stays two addresses. Address-less rows
+  collapse only when **consecutive in payload order** with the same emirate —
+  the same emirate reappearing after any other entry stays separate (it may be
+  a move away and back).
+- Extras (emirate, PO Box, plot, `AddressType`, `ArabicAddress`) take the
+  **most recent reporter's** non-null value, so a PO Box any provider
+  delivered survives.
+- The array carries no current/historical marker, so the tile is labelled
+  **Latest address**: the newest `DateOfLastUpdate` is latest, shown as
+  *Updated Mon YYYY* on the value line, and the rest fold as prior — the
+  on-screen hint says so. Display: `ADDRESS — Emirate · PO Box N · Plot N`,
+  plus `AddressType` as a small grey tag and a real-Arabic `ArabicAddress` in
+  the hover, each only when delivered.
 
-**Known gap**: `Phone Number` contacts (landlines) have no tile — open item.
+**Landlines** (`contacts` *Phone Number*): in the same tile — now labelled
+**Phone** — behind their own *N landline* chevron (collapsed, zero height).
+Grouped like mobiles (`identity.phone_key`: the prefix rules, accepting a UAE
+landline — area code 2/3/4/6/7/9 + 7 digits — or a mobile), each flagged
+*Current* / *Historical*. A Phone Number that reads as a UAE mobile stays where
+the bureau filed it with a grey *mobile number* note (archive: all three do);
+neither shape → *not a valid UAE number*.
 `ArchiveDate` on every row is never read, anywhere.
 
 ---
 
-## §02 Score & bureau history
+## §02 Score & Bureau History
 
-**Arrays: `score` (single row), `contractsTotalSummary`.**
+**Arrays: `score` (single row), `contractsTotalSummary`.** A **half-width
+card** sharing a row with §03 Worst statuses (stacked below 1180 px): a
+semicircular dial on the left, the chips and bureau history on the right.
+**Colour follows the FH bands throughout** (decision, 24 Sep 2026).
 
 | element | source | rule |
 |---|---|---|
-| Score figure | `score.DataIndex` | printed verbatim |
-| FH band chip | `score.FHScoreBand` (fallback `FHScoreBand1`) | the **delivered band is authoritative** — the code is matched to its label/tone in `bands.json` `fh_bands` (HR red / MR "Medium risk" amber / LR green-mid / VLR green); it is *never* recomputed from the number. An unconfigured band code renders neutral — an unknown risk band has earned no colour |
-| AECB band chip | `score.DataRange` (a letter, A–L) | mapped to a descriptive label via `aecb_ranges` (A "Very poor" … L "Excellent"; provisional — confirm against the AECB scorecard). Both chips carry **one** tone, taken from the FH band — two colours against one score would read as two opinions |
-| Gauge | config cut-offs only | zones and ticks at true proportions of the 300–900 scale; geometry, not verdicts |
-| Bureau history | `contractsTotalSummary.OldestContractOpenDate` → report date | whole calendar months (day-of-month aware) — **derived**; AECB delivers no file length, and the hover says so |
-| Vintage bar | that month count → `vintage_bands` | B1 0–11 · B2 12–47 · B3 48–95 · B4 96+ months — configured policy |
+| Dial | config cut-offs + `score.DataIndex` | a 300–900 semicircle; each FH band is a zone from its `from` to the next band's `from`, coloured by its configured tone; tick values at the scale ends and each boundary; the marker at the score, capped to the ends. Geometry, not verdicts. The zones draw even with no score. Hover lists the real ranges (HR 300–619 · MR 620–678 · LR 679–729 · VLR 730–900) |
+| Score figure | `score.DataIndex` | in the dial's centre, verbatim; numeric text counts. No score → *Score not reported*, plus the bureau's own reason under the dial — *Score not returned — `ErrorDescription` (error `ErrorNumber`)* — or *No score and no error reason delivered* |
+| Band mismatch `!` | configured zone vs `score.FHScoreBand` | amber, on the dial's shoulder, **only** when the cut-offs put the score in a different band from the delivered one; the hover names both and says to check `bands.json`. The delivered band always wins (the archive shows it today: 732 → configured VLR, delivered LR) |
+| FH band chip | `score.FHScoreBand` (fallback `FHScoreBand1`) | the **delivered band is authoritative** — the code is matched to its label/tone in `bands.json` `fh_bands` (HR red / MR amber / LR light green with dark text / VLR green — each chip matches its dial zone); it is *never* recomputed from the number. If `FHScoreBand` and `FHScoreBand1` both arrive and differ, an amber `!` names both. An unconfigured band code renders neutral — an unknown risk band has earned no colour |
+| AECB band chip | `score.DataRange` (a letter, A–L) | the delivered **letter first**, then its `aecb_ranges` label (*J · Good*; provisional — the hover says so). Carries the **FH** band's tone — one score, one verdict |
+| Vintage bar | bureau-history months → `vintage_bands` | B1 0–11 · B2 12–47 · B3 48–95 · B4 96+ months — configured policy, brand blue |
+| Bureau history | `contractsTotalSummary.OldestContractOpenDate` → report date | whole calendar months (day-of-month aware) — **derived**; AECB delivers no file length, and the hover says so. *since Mon YYYY* = that date. Not computable → the line says why (*unknown — no report date (since …)*, *oldest contract date x is unreadable*, or *not reported*). `summary.MostOldest_InMonth_Total` stays unread (meaning unconfirmed; decision 24 Sep 2026) |
 
-Config note: the configured cut-offs place the reference score 732 in VLR while
-AECB delivered LR — the delivered band wins; reconciling the cut-offs against
-the FH scorecard is an open config item.
+A missing score no longer blanks the card — the chips and the bureau history
+still render. `score.FraudContractFlag` and `score.PaymentOrderFlag` are
+deliberately unread (decision, 24 Sep 2026).
 
 ---
 
-## §03 Income & employment
+## §03 Worst Statuses
+
+Three panels. FH policy assesses some employer segments over 24 months and
+some over 36, so both windows sit side by side, plus the lifetime count.
+
+**Panel 1 — Worst status · last 24 months (delivered, verbatim).**
+`contractsTotalSummary.WorstStatus24M` — `summary`'s same-named field (a
+letter code, other vocabulary) is never displayed, but when it names a
+different status an amber `!` after the headline names both. Colour only is derived: the
+text resolves strictly against the status table and grades by rank
+(≤60 red / <100 amber / 100 green / unresolvable **uncoloured**). Sub-line:
+`MaxPaymentDelay24M` — a delivered 0 prints "0 days" (never late — a fact);
+missing prints *Not reported*; non-numeric prints as delivered, ungraded.
+
+**Panel 2 — Worst status · last 36 months (derived — always marked so).**
+AECB delivers no 36-month figure; this panel computes one from delivered
+evidence (`facilities.worst_in_window`):
+
+- **Whole book**: every contract — closed ones and every role included; a
+  closure inside the window does not erase the conduct preceding it.
+- **Two evidence sources**: `contractsHistory` rows inside the window, plus
+  each contract's **dated lifetime worst fields** (`WorstStatus`/
+  `WorstStatusDate`, `MaxDaysPaymentDelay`+date) when their date falls inside
+  it — so a closure the monthly rows never covered still grades the window.
+- A clean book names no facility; a **severe status outranks a raw DPD
+  number** when naming what happened; a status the config cannot rank makes
+  the window **unknown, never clean** (uncoloured, reason on hover).
+- Headline: the worst ranked status's label, graded by rank. Sub-line: *Max
+  payment delay · 36m* — "0 days" only when a zero was actually reported;
+  no delay figure anywhere → *Not reported*.
+- **Never milder than the delivered 24 months** (decision, 24 Sep 2026): the
+  36 months include the 24, so when the calculation comes out milder than
+  `WorstStatus24M` / `MaxPaymentDelay24M` (or finds no evidence), the
+  **delivered** figure is shown and the calculated one sits behind an amber
+  `!` on hover. Delivered wins; the calculation never overrules it.
+- The `derived` chip renders **always** — even over the *Not derivable* empty
+  state — with method and coverage (rows across N of K contracts) in its
+  hover; the figure's hover names the worst event (facility, provider, month,
+  closed or not).
+
+**Panel 3 — Life-time worst status count · non-services (delivered,
+verbatim).** `summary.Worststatus` — a *count*, not a status: 0 → green;
+non-zero → **amber, never red** (a count says how many, never how deep — depth
+is §07's job); non-numeric → verbatim, ungraded.
+
+**Header pill**: red *Severe status on file* / amber *Adverse history* /
+*Partly reported* when anything is absent or ungradable / green *No adverse
+status on file* only when all three panels resolved clean. It grades the
+delivered **statuses** only — delays are shown, not cross-checked against
+them (decision, 24 Sep 2026).
+
+---
+
+## §04 Income & Employment
 
 **Arrays: `employment`, `incomes`.** Left half: the records verbatim. Right
 half: what can honestly be drawn. AECB delivers **one `GrossAnnualIncome` per
@@ -209,7 +320,9 @@ re-resolved across the raw rows with its own direction:
 - **Header figure** follows the current employer (*Current salary* /
   *Current employer* when it has no usable figure) → falls back to the newest
   bureau-dated figure (*Latest salary*) → then any usable one (*Salary on
-  file*). It never borrows another employer's figure.
+  file*). It never borrows another employer's figure. When that employer's
+  record is disputed, the header line carries an amber *Open dispute* tag —
+  the section loads folded, so the header is all a reader sees at first.
 - **Chart states**: ≥2 datable figures → `trend` (line); 1 → `single`
   (marker + "a trend needs two"); 0 but dated employment → `spans` (bars only,
   with a reason line that is true of the payload that produced it); nothing →
@@ -234,12 +347,19 @@ re-resolved across the raw rows with its own direction:
   **termination before hire** → no bar at all, both dates shown with a `!`
   (a data error must not draw as a plausible short job).
 - Undated/unusable figures list in a *Not on the chart* tray with the reason.
-- **Other income**: `incomes` rows with a `Source` render as lines (source,
-  provider, date, amount or *Amount not reported*).
+- **Other income**: every `incomes` row carrying a `Source` **or** an amount
+  renders as a line (source or *Source not reported*, provider, date, amount;
+  a delivered 0 reads *AED 0/yr · reported as zero*; a missing amount reads
+  *Amount not reported*). check_report asserts every delivered amount.
+- **Currency**: AED is **assumed** (`income.json`) — the payload carries no
+  currency field; the header figure's and the chart unit label's hovers say so.
+- The `delivered` chip on the employers list covers names, dates and figures;
+  its hover says the *Current* / *Prior* badges and *last confirmed* notes are
+  inferred from the dates.
 
 ---
 
-## §04 Cheque & direct-debit returns
+## §05 Cheque & Direct-Debit Returns
 
 **Array: `paymentOrder` — and deliberately nothing else.** Each row is one
 returned instrument — an event, not a balance — so there is **no dedupe and no
@@ -261,8 +381,18 @@ omitted — "none earlier" is not one.
 
 **Empty ≠ unchecked**: with `paymentOrder` empty, `sectionStatus.ReportType`
 decides the message — contains "bounced cheque" → green *Checked · none
-reported* (a positive finding); doesn't → amber *Section not requested* (a gap
-in the file); `sectionStatus` absent → *Unverified*.
+reported* (a positive finding; its hover names the confirming row's report
+type, enquiry number and date, since any row counts — not only the top bar's
+winning one); doesn't → amber *Section not requested* (a gap in the file);
+`sectionStatus` absent → *Unverified*.
+
+**`score.PaymentOrderFlag`** is read for one thing only: an amber `!` on the
+pill when it **contradicts** the rows — flag true with no `paymentOrder` rows,
+or false with rows. Silent when they agree or the flag is absent.
+
+**Currency**: amounts render as AED, **assumed** — `paymentOrder` carries no
+currency; the `delivered` chips' hovers and each timeline marker's hover say
+so.
 
 The timeline (Python SVG) plots each dated return as a C/D/? marker filled in
 its severity tone; the amber window band draws **only when the window holds
@@ -271,52 +401,7 @@ recent count red → "on file · none in 6m" amber → *Checked* green.
 
 ---
 
-## §05 Worst statuses
-
-Three panels. FH policy assesses some employer segments over 24 months and
-some over 36, so both windows sit side by side, plus the lifetime count.
-
-**Panel 1 — Worst status · last 24 months (delivered, verbatim).**
-`contractsTotalSummary.WorstStatus24M` — never `summary`'s same-named field,
-which is in the other vocabulary (a letter code). Colour only is derived: the
-text resolves strictly against the status table and grades by rank
-(≤60 red / <100 amber / 100 green / unresolvable **uncoloured**). Sub-line:
-`MaxPaymentDelay24M` — a delivered 0 prints "0 days" (never late — a fact);
-missing prints *Not reported*; non-numeric prints as delivered, ungraded.
-
-**Panel 2 — Worst status · last 36 months (derived — always marked so).**
-AECB delivers no 36-month figure; this panel computes one from delivered
-evidence (`facilities.worst_in_window`):
-
-- **Whole book**: every contract — closed ones and every role included; a
-  closure inside the window does not erase the conduct preceding it.
-- **Two evidence sources**: `contractsHistory` rows inside the window, plus
-  each contract's **dated lifetime worst fields** (`WorstStatus`/
-  `WorstStatusDate`, `MaxDaysPaymentDelay`+date) when their date falls inside
-  it — so a closure the monthly rows never covered still grades the window.
-- A clean book names no facility; a **severe status outranks a raw DPD
-  number** when naming what happened; a status the config cannot rank makes
-  the window **unknown, never clean** (uncoloured, reason on hover).
-- Headline: the worst ranked status's label, graded by rank. Sub-line: *Max
-  payment delay · 36m* — "0 days" only when a zero was actually reported;
-  no delay figure anywhere → *Not reported*.
-- The `derived` chip renders **always** — even over the *Not derivable* empty
-  state — with method and coverage (rows across N of K contracts) in its
-  hover; the figure's hover names the worst event (facility, provider, month,
-  closed or not).
-
-**Panel 3 — Life-time worst status count · non-services (delivered,
-verbatim).** `summary.Worststatus` — a *count*, not a status: 0 → green;
-non-zero → **amber, never red** (a count says how many, never how deep — depth
-is §07's job); non-numeric → verbatim, ungraded.
-
-**Header pill**: red *Severe status on file* / amber *Adverse history* /
-*Partly reported* when anything is absent or ungradable / green *No adverse
-status on file* only when all three panels resolved clean.
-
----
-
-## §06 Active credit facilities — overview
+## §06 Active Credit Facilities — Overview
 
 **Arrays: `contractsFinancialSummary` (figures, per category × role),
 `contractsSummary` (emptiness test + outcome counters), `contractsTotalSummary`
@@ -327,7 +412,10 @@ status on file* only when all three panels resolved clean.
   facility's **full credit limit**, not its drawn balance (verified: 331,420
   instalment balance + 59,600 card *limit* = the delivered 391,020) — so the
   header total is not the sum of the balances beneath it, deliberately.
-- **Newest facility** ← `NewestContractOpenDate`.
+  The chip's hover says so (and that the currency is assumed AED); a missing
+  figure reads *Total exposure not reported* rather than vanishing.
+- **Newest facility** ← `NewestContractOpenDate` (an unreadable value reads
+  *unreadable date x*).
 - **Guaranteed** (amber) ← `TotalBalanceGuaranteed`, only when non-zero.
 - **Guaranteed overdue** (red) ← `TotalOverdueGuaranteed`, only when non-zero
   — guaranteed exposure already overdue is the guarantee being called.
@@ -368,7 +456,7 @@ explains (RRM, Aug 2026).
 
 ---
 
-## §07 Credit facilities — detail & 36-month conduct
+## §07 Credit Facilities — Detail & 36-Month Conduct
 
 **Arrays: `contracts` × `contractsHistory`, joined by `CBContractId`.** History
 rows index by months-before-report-date; anything at month 36+ is dropped at
@@ -378,7 +466,8 @@ the join, so the window holds by construction.
 1. **Active facilities** — everything `ActiveFlag: Active` except quiet
    services. Closure is **`ActiveFlag`'s business alone** — on an active
    instalment, `ClosedDate` is the *scheduled maturity*.
-2. **Closed · last 6 months** — `ClosedDate` inside the window.
+2. **Closed · last 6 months** — `ClosedDate` inside the window (`bands.json`
+   `closed_window_months`, required).
 3. **Closed · beyond 6 months** — the rest, **including undated closures**
    (claiming recency the payload doesn't support is the worse error; the row
    says *Closed · date not reported*).
@@ -402,7 +491,7 @@ omitted — §06 is where absence is a finding.
 ### The row label — stats and chips (each renders only when delivered)
 | item | source |
 |---|---|
-| Name · provider badge | `ContractType`, `ProviderNo` |
+| Name · provider badge | `ContractType`, `ProviderNo` — the provider name prints only when it differs from the code; the name's hover carries `CBContractId` and `ProviderContractNo` when delivered |
 | Limit / OS / Payment | `Current_CreditLimit`, `Current_Balance` (hover: **as at** `Current_ReferenceDate` — the snapshot can lag the report date), `PaymentAmount` |
 | Amount | `TotalAmount` — original principal, paydown context beside OS |
 | Tenor `paid/total` | `NoOfInstallments` − `NoOfRemainingInstallments` |
@@ -413,13 +502,14 @@ omitted — §06 is where absence is a finding.
 | **Open dispute / Holder not liable / non-AED currency** | `FlagOpenDispute`, `HolderIsNotLiable`, `OriginalCurrency` ≠ AED — amber chips |
 | Reported n/m | n = months filed; **m = months the facility was open inside the window** (closure-aware), so a 3-month-old loan reported 3/3 is complete; flagged thin only when n < 6 *and* n < m |
 | Closed · Final | `ClosedDate`; Final status from **the closing month's own history row** — none reported → *Final · not reported* (the lifetime worst is not a stand-in) |
-| Frequency / Role | `PaymentFrequency` matched to its config letter, only when delivered (cards/services carry none — no gap to report); `Role` only when **not** main holder |
+| Frequency / Role | `PaymentFrequency` matched to its config letter, only when delivered (cards/services carry none — no gap to report); `Role` only when **not** main holder. A delivered frequency or role the config cannot read shows **as delivered** (role in a grey chip) — an unknown role is never assumed to be main holder |
 | OVER LIMIT / Overdue now | utilisation > 100; `Current_OverdueAmount` |
 
 **Coverage line**: facility-months reported over months-open (same honest
-denominator), with *"absence is not a clean record."* **Status legend**: codes
-present in this report first, full table behind an expander; `?` joins only
-when an unknown status actually occurred.
+denominator), with *"absence is not a clean record."* **Status legend**: only
+codes present in this report, full table behind an expander; `?` joins only
+when an unknown status actually occurred. A reported month with no status code
+paints `?`, never a clean default.
 
 **Deliberately unread**: `PaymentBehaviour` (undocumented `'0'/'1'` coding —
 unknown vocabularies need a config under MRM, not a guess) and the sparse
@@ -428,7 +518,7 @@ card-activity fields (`AmountSpent`, `CardUsedFlag`, `MinimumPaymentFlag`,
 
 ---
 
-## §08 Recent applications
+## §08 Recent Applications
 
 **Arrays: `applications`; `contractsTotalSummary.Applications90D` for the
 pill.** One chart.
@@ -442,22 +532,31 @@ pill.** One chart.
   outside — to signal the scales differ. When everything falls inside 90 days
   there is no compressed zone and no break is drawn.
 - **Markers**: hollow = `Requested`, filled = `Disbursed` — the only two
-  delivered phases; no approved/rejected/NTU vocabulary is invented. Glyph
+  delivered phases; no approved/rejected/NTU vocabulary is invented. Any
+  other delivered phase draws **dashed** (text in the hover; an *Other phase*
+  key entry only when present) — never passed off as Requested. Glyph
   I/C/S keyword-matched from `ContractType`; unmatched types get no glyph
   rather than a guessed one. Colliding markers stack **upward** into lanes
   (max 4), never sideways.
 - **Exception marks, delivered-only**: a truthy `FlagOpenDispute` rings the
   marker amber; a non-main-holder `Role` letters the provider label
-  (`B04 · G`, the A/C/G vocabulary). Each has a legend entry that renders only
+  (`B04 · G`, the A/C/G vocabulary; a delivered role the config cannot read
+  letters `?` and is named in the hover — never assumed main holder). Each has a legend entry that renders only
   when the payload contains the exception. Hover names the dispute state both
   ways (a delivered `False` reads *No dispute*; absent says nothing).
 - **Hover line**: date + days-ago, contract type, provider, phase, and — when
-  delivered — amount, limit sought, instalment count, role, dispute.
-- **Header pill**: the delivered `Applications90D` graded ≥4 red / ≥2 amber /
+  delivered — amount, limit sought (both marked *currency assumed*),
+  instalment count, role, dispute, and the `CBApplicationId` /
+  `ProviderApplicationNo` numbers.
+- **Header pill**: the delivered `Applications90D` graded ≥ `bands.json`
+  `applications_90d_red` (4) red / ≥ `applications_90d_amber` (2) amber /
   else green (one application is not adverse; a cluster is). The section also
   counts rows itself — **strictly** under 90 days, which reconciles exactly
   with AECB's own counter — and a mismatch surfaces as a second small tag
-  ("N rows in window"): one line, not a banner.
+  ("N rows in window"): one line, not a banner. Its hover explains the
+  difference when a recount at `score.DataPullDate` reproduces AECB's figure
+  — AECB computes the counter at its own pull date while the report is dated
+  by the enquiry (archive: 5 at 26 Oct 2023, 0 at 20 Aug 2024).
 - **Empty states** distinguish "no applications reported" (empty array) from
   "cannot be placed in time" (rows exist, none datable).
 
@@ -467,22 +566,27 @@ pill.** One chart.
 
 | file | kind | drives |
 |---|---|---|
-| `status_codes.json` | bureau-published | status codes/labels/ranks (§05, §07), roles A/C/G (§06, §07, §08), payment frequencies (§07), DPD buckets (§07) |
-| `bands.json` | FH policy | score scale + FH band cut-offs and tones (§02), AECB letter→label map (§02), vintage bands (§02), `validity_days` (top bar) |
+| `status_codes.json` | bureau-published | status codes/labels/ranks (§03, §07), roles A/C/G (§06, §07, §08), payment frequencies (§07), DPD buckets (§07) |
+| `bands.json` | FH policy | score scale + FH band cut-offs and tones (§02), AECB letter→label map (§02), vintage bands (§02), `validity_days` (top bar), `closed_window_months` (§07), `applications_90d_red` / `_amber` (§08) |
 | `providers.json` | registry (stub) | provider code → name/kind everywhere a provider shows |
-| `income.json` | FH policy | currency label, placeholder floor 1,200, confirmation window 12m (§03) |
-| `returns.json` | vocabulary + policy | instrument type labels, severity tones, review window 6m (§04) |
+| `income.json` | FH policy | currency label, placeholder floor 1,200, confirmation window 12m (§04) |
+| `returns.json` | vocabulary + policy | instrument type labels, severity tones, review window 6m (§05) |
 
 Policy changes are config edits, not code changes. A missing config file
-**raises** — a silently empty one once rendered every status as clean.
+**raises** — a silently empty one once rendered every status as clean. So do
+the policy numbers with no safe default (validated when the report context
+loads, 24 Sep 2026): `bands.json` `validity_days`, `income.json`
+`placeholder_floor`, `confirmation_window_months` and `currency`,
+`returns.json` `window_months`, and `bands.json` `closed_window_months` and
+`applications_90d_red` / `_amber` (amber no higher than red) — missing, zero, negative or the wrong type
+stops the render with an error naming the key.
 
 ## Known gaps (open, by decision or awaiting data)
 
-- `Phone Number` contacts: no tile (§01).
 - `providers.json` is a stub — codes render as names.
 - `MaxCurrentPaymentDelay` held off screen until AECB explains it (§06).
-- Severity `Reported` renders neutral pending a business definition (§04).
-- §05 refinements: a derived 24-month reconciliation against the delivered
+- Severity `Reported` renders neutral pending a business definition (§05).
+- §03 refinements: a derived 24-month reconciliation against the delivered
   figure; flagging guarantor conduct distinctly in the 36-month derivation.
 - Score cut-offs need reconciling against the FH scorecard (§02).
 
@@ -490,9 +594,10 @@ Policy changes are config edits, not code changes. A missing config file
 
 `scripts/check_report.py` renders every payload in `ReferenceJSON/` and fails
 if: any delivered value it tracks is missing from the page (name, title, score,
-subject id, every identification value, mobile/e-mail contact, address —
+the CB subject id — visible in §01, not merely in `<title>` — every
+identification value, mobile/landline/e-mail contact, address —
 including the *Address not provided* statement — employment income, return
 amount, non-zero guaranteed-overdue or outcome counter, and §07/§08's
 only-when-delivered blob keys); if a verbatim figure is not in the exact
-element meant to carry it (§05's delivered panels, §06's utilisation); or if
+element meant to carry it (§03's delivered panels, §06's utilisation); or if
 any external URL appears in the output. Run it after every change.

@@ -6,7 +6,7 @@ describe a list that reaches back years, and whether their figure is an amount
 or a count is unverified. RRM decision, Aug 2026: the section is built from
 the returns themselves.
 
-Two halves over one card, the same grammar as section 03: the returns as
+Two halves over one card, the same grammar as the income section: the returns as
 delivered on the left, the same events on a timeline on the right. Severity
 arrives as display text (Single / Multiple / Reported per RRM); its screen
 tone is a config mapping, and unknown values render neutral rather than being
@@ -27,7 +27,7 @@ from .. import svgtime
 from .. import tokens
 
 META = {
-    "title": "Cheque &amp; direct-debit returns",
+    "title": "Cheque &amp; Direct-Debit Returns",
 }
 
 _CHEQUE_MARKER = "bounced cheque"
@@ -90,35 +90,48 @@ _COL_W = 706.0
 _TONE_FILL = {"red": "red", "amber": "amber", "neutral": "ink-3"}
 
 
+_CURRENCY_NOTE = ("Amounts in AED -- assumed: paymentOrder carries no "
+                  "currency field.")
+
+
 def render(ctx, meta) -> str:
     model = returns.build(ctx)
-    requested = _section_requested(ctx)
+    requested, confirming = _section_requested(ctx)
 
+    aside = (_aside(model, requested, confirming)
+             + _flag_conflict(ctx, bool(model["records"])))
     if not model["records"]:
-        return c.section_card(body=_no_records(requested),
-                              aside=_aside(model, requested), **meta)
+        return c.section_card(body=_no_records(requested), aside=aside, **meta)
 
     body = ('<div class="inc-split"><div class="inc-detail">%s</div>'
             '<div class="inc-vis">%s</div></div>'
             % (_records(model), _chart_block(ctx, model)))
-    return c.section_card(body=body, aside=_aside(model, requested), **meta)
+    return c.section_card(body=body, aside=aside, **meta)
 
 
 def _section_requested(ctx):
-    """Whether the bounced-cheque product appears in sectionStatus.
+    """(requested?, the sectionStatus row that confirms it).
 
-    None when sectionStatus is absent entirely -- we then cannot tell.
+    Whether the bounced-cheque product appears in ANY sectionStatus row --
+    deliberately all rows, not the top bar's single winning one. The row is
+    returned so the verdict can name the enquiry it rests on. (None, None)
+    when sectionStatus is absent entirely -- we then cannot tell.
     """
     rows = ctx.rows("sectionStatus")
     if not rows:
-        return None
+        return None, None
     for row in rows:
         if _CHEQUE_MARKER in str(row.get("ReportType") or "").lower():
-            return True
-    return False
+            return True, row
+    return False, None
 
 
-def _aside(model, requested):
+def _pill(text, kind, info) -> str:
+    return '<span class="tag %s" data-info="%s">%s</span>' % (
+        kind, c.attr(info), text)
+
+
+def _aside(model, requested, confirming):
     count = len(model["records"])
     if count:
         # The window verdict leads: a return this half-year is the acute
@@ -134,10 +147,48 @@ def _aside(model, requested):
                          % (recent, "" if recent == 1 else "s", months), "bad")
         return c.tag("%d on file · none in %dm" % (count, months), "warn")
     if requested is True:
-        return c.tag("Checked · none reported", "good")
+        # Names the enquiry the clean verdict rests on: it may not be the one
+        # the top bar chips (this reads every sectionStatus row).
+        return _pill("Checked · none reported", "good",
+                     "Confirmed by sectionStatus: %s, enquiry no. %s, Last "
+                     "EnquiryDate %s. AECB returned no paymentOrder rows."
+                     % (confirming.get("ReportType") or "type not reported",
+                        confirming.get("EnquiryNo") or "not reported",
+                        dates.fmt_short(confirming.get("Last EnquiryDate"))))
     if requested is False:
         return c.tag("Section not requested", "warn")
     return c.tag("Unverified", "warn")
+
+
+def _as_flag(value):
+    """True / False / None for a delivered flag, text spellings included."""
+    if isinstance(value, bool) or value is None:
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "y", "yes", "1"):
+        return True
+    if text in ("false", "n", "no", "0"):
+        return False
+    return None
+
+
+def _flag_conflict(ctx, has_rows) -> str:
+    """Amber '!' when score.PaymentOrderFlag contradicts the rows delivered.
+
+    Read ONLY for this: two delivered fields disagreeing about whether
+    returns exist. Silent when they agree or the flag is absent -- the
+    section itself is built from paymentOrder alone.
+    """
+    flag = _as_flag(ctx.score.get("PaymentOrderFlag"))
+    if flag is None or flag == has_rows:
+        return ""
+    if flag:
+        text = ("score.PaymentOrderFlag is true -- the bureau flags returned "
+                "payment orders -- but paymentOrder delivered no rows.")
+    else:
+        text = ("score.PaymentOrderFlag is false, but paymentOrder delivered "
+                "returned instruments. The rows are shown as delivered.")
+    return ' <span class="attn" data-info="%s">!</span>' % c.attr(text)
 
 
 # --- empty states -----------------------------------------------------------
@@ -176,7 +227,7 @@ def _records(model) -> str:
     badge = c.delivered_mark("Each entry is one returned instrument as AECB "
                              "delivered it in paymentOrder. Nothing is "
                              "aggregated, and the window grouping is ours, "
-                             "anchored to the report date.")
+                             "anchored to the report date. " + _CURRENCY_NOTE)
 
     # No resolvable window: one flat section, no split claimed.
     if model["window_start"] is None:
@@ -348,7 +399,7 @@ def _provenance(model) -> str:
         return ""
     return c.delivered_mark("Every event sits at the ReturnDate AECB "
                             "delivered with it; amounts and severities are "
-                            "the bureau's own.")
+                            "the bureau's own. " + _CURRENCY_NOTE)
 
 
 def _svg(ctx, model) -> str:
@@ -511,8 +562,8 @@ def _event(rec, sx, y) -> str:
 
     tip = "%s · %s · %s · severity %s%s" % (
         rec.type_text or "Type not reported",
-        ("AED %s" % c.format_number(rec.amount)) if rec.amount is not None
-        else "amount not reported",
+        ("AED %s (currency assumed)" % c.format_number(rec.amount))
+        if rec.amount is not None else "amount not reported",
         dates.fmt_short(rec.date),
         rec.severity or "not reported",
         (" · reported by %s" % rec.provider) if rec.provider else "")

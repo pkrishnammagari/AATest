@@ -545,7 +545,7 @@ def _flag(value) -> bool:
 def _income_story(ctx, facts):
     """B1: the income figures against the employment timeline.
 
-    Reuses derive/income.build -- the same resolution section 03 renders, so
+    Reuses derive/income.build -- the same resolution the income section renders, so
     the brief and the report cannot disagree about which employer is current
     or which figure is usable.
     """
@@ -1281,7 +1281,7 @@ def _reporting_gaps(ctx, facts, labelled_active):
 
 def _income_corroboration(ctx, facts):
     """E2: can this file support an income figure at all? Reuses the same
-    income resolution as section 03, so 'no usable figure' here means exactly
+    income resolution as the income section, so 'no usable figure' here means exactly
     what the income section shows."""
     story = income.build(ctx)
     latest = story["latest"]

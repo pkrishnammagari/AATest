@@ -26,16 +26,16 @@ FIELDS = ["idx", "sec", "tag", "class", "fontSize", "padding", "gap",
 RENDERED = [4, 5, 6, 7, 8]      # what decides "renders differently"
 HEIGHT = 8
 
-SECTION_NAME = {"s1": "01 identity", "s2": "02 score", "s3": "03 income",
-                "s4": "04 returns", "s5": "05 worst status",
+SECTION_NAME = {"s1": "01 identity", "s2": "02 score", "s3": "03 worst status",
+                "s4": "04 income", "s5": "05 returns",
                 "s6": "06 facilities", "s7": "07 detail", "s8": "08 applications"}
 
 # Witnesses for the one place CSS is mirrored by Python constants:
 # sections/returns.py _TILE_BASE / _TILE_ENTRY / _TILE_GAP / _COL_W track these boxes.
-# Scoped to #s4 because the bare selectors resolve to section 03's, which
-# loads collapsed and therefore measures zero.
-MIRRORS = ("#s4 .rec", "#s4 .rec-item", "#s4 .rec-list", "#s4 .rec-t",
-           "#s4 .ret-amt", "#s4 .inc-vis")
+# Scoped to #s5 (returns) because the bare selectors resolve to income's
+# (#s4), which loads collapsed and therefore measures zero.
+MIRRORS = ("#s5 .rec", "#s5 .rec-item", "#s5 .rec-list", "#s5 .rec-t",
+           "#s5 .ret-amt", "#s5 .inc-vis")
 
 
 def load(directory, state, width):
@@ -160,7 +160,7 @@ def main() -> int:
         print("   %-16s %4s / %-4s%s%s"
               % (SECTION_NAME.get(sid, sid), ao.get(sid), an.get(sid), arrow, mark))
 
-    print("\nSection 04 mirror witnesses at 1560, rail closed")
+    print("\nReturns (§05) mirror witnesses at 1560, rail closed")
     print("   (sections/returns.py _TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W track these):")
     for sel in MIRRORS:
         rb, ra = b1560["watch"].get(sel), a1560["watch"].get(sel)

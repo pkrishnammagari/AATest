@@ -48,7 +48,7 @@ class Return:
 
 
 def build(ctx) -> dict:
-    """Everything section 04 needs.
+    """Everything the returns section needs.
 
     `chart` is 'timeline' when at least one return carries a date, else
     'none'. Records without a date stay in `undated` -- listed, never plotted.
@@ -71,7 +71,8 @@ def build(ctx) -> dict:
     dated = [r for r in records if r.date]
     undated = [r for r in records if not r.date]
 
-    window_months = cfg.get("window_months") or 6
+    # Validated as a positive whole number when the context loads.
+    window_months = cfg["window_months"]
     window_start = (dates.add_months(ctx.report_date, -window_months)
                     if ctx.report_date else None)
     if window_start:

@@ -6,6 +6,12 @@ together. Nothing carries a hard-coded '03' -- which is also why the module
 files carry NAMES, not numbers: a numbered filename can only drift from the
 position this tuple assigns it.
 
+A nested tuple is a ROW: its sections render side by side as half-width cards
+(.sec-pair), numbered in order like any other. Score and worst statuses share
+one (user decision, 24 Sep 2026) -- the score dial and the worst conduct read
+as one risk-at-a-glance row and measure about the same height; income stays
+full width because it loads collapsed and its chart needs the width.
+
 Each module supplies META (title, purpose) and a render(ctx, meta) that passes
 meta straight through to components.section_card.
 """
@@ -27,14 +33,23 @@ from . import (
 # two dates say everything a full section card was spending a card on.
 SECTIONS = (
     identity,
-    score,
+    (score, worst_status),
     income,
     returns,
-    worst_status,
     facilities,
     detail,
     applications,
 )
+
+
+def flat_sections():
+    """Every section module in display order, rows unpacked -- the order that
+    assigns numbers. Anything numbering sections must walk this, never
+    SECTIONS itself (a row is a tuple)."""
+    out = []
+    for item in SECTIONS:
+        out.extend(item if isinstance(item, tuple) else (item,))
+    return out
 
 
 def _meta(index, module):
@@ -46,9 +61,19 @@ def _meta(index, module):
 
 
 def render_all(ctx) -> str:
-    """Every section card, in order."""
-    return "\n".join(module.render(ctx, _meta(i, module))
-                     for i, module in enumerate(SECTIONS, start=1))
+    """Every section card, in order; a row's cards wrapped side by side."""
+    parts, index = [], 1
+    for item in SECTIONS:
+        if isinstance(item, tuple):
+            cards = []
+            for module in item:
+                cards.append(module.render(ctx, _meta(index, module)))
+                index += 1
+            parts.append('<div class="sec-pair">%s</div>' % "".join(cards))
+        else:
+            parts.append(item.render(ctx, _meta(index, item)))
+            index += 1
+    return "\n".join(parts)
 
 
 def nav_items():
@@ -58,7 +83,7 @@ def nav_items():
     hover instead of leaving the reader to decode a number.
     """
     return [("s%d" % i, "%02d" % i, _plain_title(m))
-            for i, m in enumerate(SECTIONS, start=1)]
+            for i, m in enumerate(flat_sections(), start=1)]
 
 
 def _plain_title(module) -> str:

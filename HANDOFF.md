@@ -7,6 +7,18 @@ the last context ended. Then **stop and wait for direction** — the *Next task*
 section at the end says what is next and what is deliberately still undecided
 about it.
 
+> **Note (24 September 2026) — sections renumbered; label-by-label review.**
+> Score and worst statuses now share one row of half-width cards (a nested
+> tuple in `sections/__init__.SECTIONS`), which moved **worst statuses up to
+> §03** — so **income is §04 and returns §05**. Dated entries below keep the old
+> numbers (income 03, returns 04, worst statuses 05); README, ARCHITECTURE,
+> PayLoadRead and the measure scripts use the new ones. §02 became a
+> semicircular dial. The same day's review (`LowLevelArchitecture.md`, a
+> label-by-label reference) changed the header and §01 substantially — see
+> PayLoadRead for final behaviour. `scripts/measure/synthetic.py` was brought
+> back to green: its passport/e-mail probes and the reference case's stale
+> 36-month and report-date expectations were updated.
+
 > **Note (18 August 2026) — the design mockup has been removed.** `Mockup/` and
 > every reference to it are gone: the report is now its own reference. Two
 > consequences for reading the dated entries below. First, **`check_no_mock.py`

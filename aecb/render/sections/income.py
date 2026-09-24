@@ -34,7 +34,7 @@ from .. import svgtime
 from .. import tokens
 
 META = {
-    "title": "Income &amp; employment",
+    "title": "Income &amp; Employment",
 }
 
 # --- chart geometry (user units; the viewBox scales to its column) ----------
@@ -115,7 +115,8 @@ def _latest_label(model) -> str:
     # different employer's row would state a salary for this one that the
     # payload never reported.
     if rec.income_usable:
-        value = "%s<small>/yr</small>" % c.aed(rec.income)
+        value = ('<span data-info="%s">%s<small>/yr</small></span>'
+                 % (c.attr(_currency_note(model)), c.aed(rec.income)))
     elif rec.placeholder:
         value = '<span class="na">No usable figure</span>'
     else:
@@ -139,13 +140,24 @@ def _latest_label(model) -> str:
     if rec.stale:
         bits.append("last confirmed %s" % dates.fmt_month_year(rec.updated))
 
+    # The section loads folded, so this line is all a reader sees until they
+    # open it: a dispute on the record behind the figure has to be here too.
+    dispute = (' <span class="tag warn inc-latest-flag">Open dispute</span>'
+               if rec.disputed else "")
+
     providers = ", ".join(rec.providers) or "provider not named"
     return ('<div class="inc-latest" data-info="%s">'
             '<span class="inc-latest-k">%s</span>'
             '<span class="inc-latest-v">%s</span>'
-            '<span class="inc-latest-s">%s</span></div>'
+            '<span class="inc-latest-s">%s</span>%s</div>'
             % (c.attr("%s, reported by %s. %s" % (rec.name, providers, basis)),
-               key, value, " · ".join(bits)))
+               key, value, " · ".join(bits), dispute))
+
+
+def _currency_note(model) -> str:
+    """The currency is config, not payload -- said wherever a figure's unit is."""
+    return ("Currency assumed %s (config/income.json): the payload carries no "
+            "currency field on employment or income rows." % model["currency"])
 
 
 def _short(text, limit):
@@ -244,8 +256,9 @@ def _grid(model, axis_y) -> str:
                    'font-family="IBM Plex Mono" font-size="8.5" fill="%s">%s</text>'
                    % (_PAD_L - 6, y + 3, tokens.token("ink-4"), _k(value)))
     out.append('<text x="%.1f" y="%.1f" font-family="IBM Plex Mono" '
-               'font-size="8" fill="%s">%s /yr</text>'
-               % (2, _PAD_T - 5, tokens.token("ink-4"), c.esc(model["currency"])))
+               'font-size="8" fill="%s" data-info="%s">%s /yr</text>'
+               % (2, _PAD_T - 5, tokens.token("ink-4"),
+                  c.attr(_currency_note(model)), c.esc(model["currency"])))
     return "".join(out)
 
 
@@ -470,9 +483,11 @@ def _undated(model) -> str:
 def _records(model) -> str:
     head = ('<div class="trend-head"><span class="trend-title">Employers</span>'
             '%s</div>'
-            % c.delivered_mark("Every value below is as AECB delivered it, "
-                               "collapsed only where providers repeated the "
-                               "same employer."))
+            % c.delivered_mark("Names, dates and figures are as AECB delivered "
+                               "them, collapsed only where providers repeated "
+                               "the same employer. The Current / Prior badges "
+                               "and 'last confirmed' notes are inferred from "
+                               "the dates."))
     return ('%s<div class="rec-list">%s</div>'
             % (head, "".join(_employer(model, r) for r in model["records"])))
 
@@ -572,19 +587,33 @@ def _income_cell(model, rec) -> str:
 
 
 def _other_income(ctx) -> str:
-    rows = [r for r in ctx.rows("incomes") if r.get("Source")]
+    """Every incomes row that carries a source or an amount -- a row with an
+    amount and no Source used to be dropped, figure and all (24 Sep 2026).
+    A delivered 0 is a fact, stated as one; only a missing amount is absent."""
+    rows = [r for r in ctx.rows("incomes")
+            if r.get("Source") or r.get("GrossAnnualIncome") is not None]
     if not rows:
         return ""
     items = []
     for row in rows:
         amount = row.get("GrossAnnualIncome")
         when = dates.fmt_month_year(row.get("DateOfLastUpdate"), dash="")
+        source = (c.esc(row.get("Source")) if row.get("Source")
+                  else '<span class="na">Source not reported</span>')
+        if amount is None:
+            shown = '<span class="na">Amount not reported</span>'
+        else:
+            try:
+                zero = float(amount) == 0
+            except (TypeError, ValueError):
+                zero = False
+            shown = (('%s/yr <span class="histflag">reported as zero</span>'
+                      % c.aed(amount)) if zero else "%s/yr" % c.aed(amount))
         items.append(
             '<div class="oi-line"><span>%s%s</span><span>%s</span></div>'
-            % (c.esc(row.get("Source")),
+            % (source,
                (' <span class="when">%s · %s</span>'
                 % (c.esc(row.get("ProviderNo")), when)) if when else "",
-               ("%s/yr" % c.aed(amount)) if amount
-               else '<span class="na">Amount not reported</span>'))
+               shown))
     return ('<div class="other-inc"><div class="trend-title">Other income</div>'
             '%s</div>' % "".join(items))

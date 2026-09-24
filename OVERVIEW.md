@@ -1,4 +1,4 @@
-# FH AECB Analyser — How It Works
+# FH AECB Analyzer — How It Works
 
 *A non-technical description of the product, the workflow and the pipeline.
 For the engineering view, see [ARCHITECTURE.md](ARCHITECTURE.md).*
@@ -19,7 +19,7 @@ repeats the same fact many times over, mixes three different date formats, and
 buries the two or three things that actually decide a case among everything
 else.
 
-**The AECB Analyser turns that file into one scannable underwriting screen.**
+**The AECB Analyzer turns that file into one scannable underwriting screen.**
 Its single purpose is to collapse the time it takes a Risk & Relationship
 Manager (RRM) to reach a decision on one customer.
 
@@ -152,14 +152,16 @@ different payload simply re-renders the page.
 
 | # | Section | The question it answers |
 |---|---|---|
-| **01** | Identity & demographics | Who is this person, and what identifiers have they used over time? Emirates ID, passport (with expiry), mobile numbers, e-mail, addresses — each showing which banks reported it and what earlier values are on file. |
-| **02** | Score & bureau history | How does the bureau grade them, and how long is their credit file? The score, both the AECB and FH risk bands, a proportional gauge showing where the score sits, and how many months of history exist. |
-| **03** | Income & employment | What do they earn, where do they work, and how confident can we be in that figure? Employers with their tenure, salaries as delivered, and a timeline plotting the two together — but only where the bureau supplied a date to plot against. |
-| **04** | Cheque & direct-debit returns | Have they bounced anything? In the UAE this is a first-order adverse signal. Each returned instrument as delivered, split into a recent 6-month review window and everything earlier, with a matching timeline. |
-| **05** | Worst statuses | What is the worst thing on their file? Three windows side by side — the bureau's delivered 24-month worst status with its maximum payment delay, a 36-month window derived from the delivered conduct evidence (marked as derived, with its own maximum delay), and a lifetime adverse count. |
-| **06** | Active credit facilities — overview | What is the total exposure, and how is it split? Four category cards (instalments, credit cards, non-instalments, services), each split between what they hold as *main borrower*, any *co-held* share the bureau reports, and what they *guarantee for someone else* — because Finance House lends against those differently. Guaranteed exposure already overdue, and any bureau-recorded declined or rejected applications, surface only when present. |
-| **07** | Credit facilities — detail & 36-month conduct | How have they actually behaved, month by month? A heatmap of every facility across 36 months, colour-coded by how many days past due, grouped into active facilities, recent closures, older closures and quiet services. |
-| **08** | Recent applications | How much credit have they been seeking elsewhere? A timeline where the last 90 days — the window that matters for underwriting — is deliberately stretched to occupy most of the width, and the years behind it are compressed into the remainder. |
+| **01** | Identity & Demographics | Who is this person, and what identifiers have they used over time? Emirates ID, passport (with expiry), mobile numbers, e-mail, addresses — each showing which banks reported it and what earlier values are on file. |
+| **02** | Score & Bureau History | How does the bureau grade them, and how long is their credit file? The score, both the AECB and FH risk bands, a proportional gauge showing where the score sits, and how many months of history exist. |
+| **03** | Worst Statuses | What is the worst thing on their file? Three windows side by side — the bureau's delivered 24-month worst status with its maximum payment delay, a 36-month window derived from the delivered conduct evidence (marked as derived, with its own maximum delay), and a lifetime adverse count. |
+| **04** | Income & Employment | What do they earn, where do they work, and how confident can we be in that figure? Employers with their tenure, salaries as delivered, and a timeline plotting the two together — but only where the bureau supplied a date to plot against. |
+| **05** | Cheque & Direct-Debit Returns | Have they bounced anything? In the UAE this is a first-order adverse signal. Each returned instrument as delivered, split into a recent 6-month review window and everything earlier, with a matching timeline. |
+| **06** | Active Credit Facilities — Overview | What is the total exposure, and how is it split? Four category cards (instalments, credit cards, non-instalments, services), each split between what they hold as *main borrower*, any *co-held* share the bureau reports, and what they *guarantee for someone else* — because Finance House lends against those differently. Guaranteed exposure already overdue, and any bureau-recorded declined or rejected applications, surface only when present. |
+| **07** | Credit Facilities — Detail & 36-Month Conduct | How have they actually behaved, month by month? A heatmap of every facility across 36 months, colour-coded by how many days past due, grouped into active facilities, recent closures, older closures and quiet services. |
+| **08** | Recent Applications | How much credit have they been seeking elsewhere? A timeline where the last 90 days — the window that matters for underwriting — is deliberately stretched to occupy most of the width, and the years behind it are compressed into the remainder. |
+
+§02 and §03 share one row of half-width cards: the score dial beside the worst statuses.
 
 Throughout, hovering anything explains it: where the figure came from, what
 window it covers, and what an absence means.

@@ -60,8 +60,29 @@ def _delivered_24m(ctx):
 
     status = _known_status(ctx, value)
     tone, state = _grade(status)
-    return _panel(label, _tag_delivered(), c.esc(value), sub=_delay_line(ctx),
-                  tone=tone, state=state)
+    return _panel(label, _tag_delivered(),
+                  c.esc(value) + _summary_conflict(ctx, value, status),
+                  sub=_delay_line(ctx), tone=tone, state=state)
+
+
+def _summary_conflict(ctx, value, status):
+    """Amber '!' when summary.WorstStatus24M names a different status.
+
+    summary carries the same 24-month fact as a letter code ('U'); the panel
+    shows contractsTotalSummary's text. They should agree -- when they do not
+    (or the letter is one the config cannot read), both are named rather
+    than one silently winning.
+    """
+    code = ctx.summary.get("WorstStatus24M")
+    if code is None or not str(code).strip():
+        return ""
+    other = _known_status(ctx, code)
+    if other is not None and status is not None and other is status:
+        return ""
+    other_txt = ("%s (%s)" % (code, other["label"])) if other else str(code)
+    return _attn("contractsTotalSummary.WorstStatus24M is %s but "
+                 "summary.WorstStatus24M is %s. The panel shows the "
+                 "contractsTotalSummary value." % (value, other_txt))
 
 
 def _delay_line(ctx):
@@ -105,45 +126,89 @@ def _derived_36m(ctx):
     label = "Worst status &middot; last 36 months"
     worst = facilities.worst_in_window(ctx, facilities.WINDOW_MONTHS)
 
-    if worst is None:
+    # The last 36 months INCLUDE the last 24, so the 36-month worst can never
+    # be milder than what AECB delivered for 24 months. When the calculation
+    # comes out milder -- sparse monthly rows can miss what the bureau saw --
+    # the delivered figure is shown and the calculated one moves to the
+    # hover of an amber '!' (user decision, 24 Sep 2026: show what is
+    # delivered; the calculation never overrules it).
+    d_value = ctx.totals.get("WorstStatus24M")
+    d_status = _known_status(ctx, d_value) if d_value else None
+
+    calc = worst["status"] if worst else None
+    floor = (d_status is not None and d_status.get("rank") is not None
+             and (calc is None or calc["rank"] > d_status["rank"]))
+
+    if worst is None and not floor:
         return _panel(label, _tag_derived(worst),
                       c.empty_state("Not derivable",
                                     "No monthly conduct row and no dated "
                                     "contract worst falls inside the window."),
                       state="absent")
 
-    status = worst["status"]
-    if status is not None:
-        headline = c.esc(status["label"])
-        tone, state = _grade(status)
+    if floor:
+        headline = c.esc(d_value) + _attn(
+            "Calculated from the monthly conduct and dated contract worsts, "
+            "the 36-month worst is %s. AECB delivered %s for the last 24 "
+            "months, which the 36 months include, so the delivered status is "
+            "shown.%s" % (
+                calc["label"] if calc else
+                ("no ranked status" if worst else "not derivable — no "
+                 "evidence falls in the window"),
+                d_value,
+                (" Calculated detail: " + _event_info(worst)) if worst else ""))
+        tone, state = _grade(d_status)
+        info = ""
+    elif calc is not None:
+        headline = c.esc(calc["label"])
+        tone, state = _grade(calc)
+        info = _event_info(worst)
     else:
         # Delays may still exist without a single rankable status; the
         # sub-line carries them, and the headline claims nothing.
         headline = "Status not reported"
         tone, state = "", "unknown"
+        info = _event_info(worst)
 
     # A window that looks clean but carries statuses the config cannot rank
     # is not provably clean -- unknown, never green.
-    if state == "clean" and worst["unknown"]:
+    if state == "clean" and worst and worst["unknown"]:
         tone, state = "", "unknown"
 
     return _panel(label, _tag_derived(worst), headline,
-                  sub=_delay_line_36(worst), tone=tone, state=state,
-                  info=_event_info(worst))
+                  sub=_delay_line_36(ctx, worst), tone=tone, state=state,
+                  info=info)
 
 
-def _delay_line_36(worst):
+def _delay_line_36(ctx, worst):
     """The window's deepest delay, mirroring the 24-month panel's sub-line.
 
     None means no delay figure was delivered anywhere in the window -- which
     is "Not reported", never zero. Zero renders only when a zero was reported.
+
+    Same floor as the status: when the delivered 24-month delay is deeper
+    than the calculated 36-month one, the delivered figure shows, with the
+    calculated one in an amber '!'.
     """
-    days = worst["max_dpd"]
+    days = worst["max_dpd"] if worst else None
+    try:
+        d_days = int(ctx.totals.get("MaxPaymentDelay24M"))
+    except (TypeError, ValueError):
+        d_days = None
+    mark = ""
+    if d_days is not None and (days is None or d_days > days):
+        mark = _attn("Calculated from the monthly conduct and dated contract "
+                     "worsts, the deepest 36-month delay is %s. AECB delivered "
+                     "%s days for the last 24 months, which the 36 months "
+                     "include, so the delivered delay is shown."
+                     % ("%s days" % c.format_number(days) if days is not None
+                        else "not reported", c.format_number(d_days)))
+        days = d_days
     if days is None:
         value = '<span class="na">Not reported</span>'
     else:
-        value = ('<span class="v%s">%s days</span>'
-                 % (" red" if days else "", c.format_number(days)))
+        value = ('<span class="v%s">%s days</span>%s'
+                 % (" red" if days else "", c.format_number(days), mark))
     return ('<div class="wsx-sub"><span class="k">Max payment delay '
             '&middot; 36m</span>%s</div>' % value)
 
@@ -296,6 +361,11 @@ def _panel(window_label, provenance, headline, sub="", tone="", state="clean",
     }
 
 
+def _attn(info) -> str:
+    """The amber '!' with its explanation on hover."""
+    return ' <span class="attn" data-info="%s">!</span>' % c.attr(info)
+
+
 def _tag_delivered():
     return c.delivered_mark("Delivered by AECB and shown verbatim. "
                             "Not computed here.")
@@ -310,7 +380,10 @@ def _tag_derived(worst):
             "contract's dated lifetime worst fields, across every contract "
             "whose evidence falls in the window -- closed contracts and all "
             "roles included. Graded by the bureau's own severity ranking; a "
-            "severe status outranks a raw delay when naming what happened.")
+            "severe status outranks a raw delay when naming what happened. "
+            "Never shown milder than AECB's delivered 24-month figure: when "
+            "the calculation comes out milder, the delivered figure shows "
+            "with the calculated one behind an amber '!'.")
     if worst is not None:
         info += (" Coverage: %d monthly row(s) across %d of %d contract(s); "
                  "unreported months carry no information."

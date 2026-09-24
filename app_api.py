@@ -49,7 +49,7 @@ if not any(getattr(h, "baseFilename", None) == LOG_PATH
         _aecb_logger.setLevel(logging.INFO)
 
 st.set_page_config(
-    page_title="AECB Analyzer",
+    page_title=branding.APP_NAME,
     page_icon=branding.favicon_data_uri(),
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -121,9 +121,10 @@ def _landing() -> None:
     left, mid, right = st.columns([1, 2, 1])
     with mid:
         st.markdown(
-            "<h2 style='margin-bottom:0'>FH AECB Analyser</h2>"
+            "<h2 style='margin-bottom:0'>%s</h2>"
             "<p style='color:#5B6B7C; margin-top:4px'>Enter a CB subject id to "
-            "pull the live bureau report and render the underwriting screen.</p>",
+            "pull the live bureau report and render the underwriting screen.</p>"
+            % branding.APP_NAME,
             unsafe_allow_html=True,
         )
         with st.form("subject_form"):
@@ -216,7 +217,7 @@ except api.ApiError as exc:
     st.stop()
 
 with st.sidebar:
-    st.markdown("### AECB Analyzer")
+    st.markdown("### %s" % branding.APP_NAME)
     st.caption("Live bureau report via the history API")
     if st.button("Query another subject", use_container_width=True):
         st.session_state.pop("_api_payload", None)

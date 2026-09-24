@@ -1,4 +1,4 @@
-# FH AECB Analyser — Architecture & Design
+# FH AECB Analyzer — Architecture & Design
 
 *Medium-detail technical companion to [OVERVIEW.md](OVERVIEW.md). Covers the
 components, the data flow, the design rules and why they are what they are.
@@ -76,7 +76,7 @@ aecb/                      the renderer package
     ├── branding.py        logo/favicon as base64 data URIs
     ├── components.py      shared HTML primitives (section card, tags, esc)
     ├── shell.py           top bar, spine nav, brief rail
-    ├── svgtime.py         shared linear time axis for §03 and §04
+    ├── svgtime.py         shared linear time axis for §04 and §05
     ├── js.py              builds window.__AECB, emits the script block
     ├── report.js          client behaviour + the two JS-drawn charts
     ├── report.css         refers only to var(--*), hard-codes no colour
@@ -314,7 +314,7 @@ counts (closed ones and every role included), evidence is the in-window
 two original rules survive — a clean book must not attribute a "worst" to
 whichever contract iterated first, and a severe *status* outranks a raw DPD
 number when naming what happened. A status the config cannot rank is counted
-separately and keeps the window from grading clean. §05's 36-month panel is
+separately and keeps the window from grading clean. §03's 36-month panel is
 its caller, always marked `derived`.
 
 #### `scoring.py` — bands, gauge, vintage, validity
@@ -463,15 +463,18 @@ renumbers the report and the spine nav together. Nothing hard-codes `03`.
 > eight sections. The module files carry **names, not numbers** (renamed
 > 2 Sep 2026 — the old `s02..s09` filenames could only drift from the position
 > the registry assigns, and had). Docstrings inside the section modules use
-> the *displayed* number. The mapping:
+> the *displayed* number. A nested tuple in `SECTIONS` is a **row** of
+> half-width cards (`.sec-pair`): score and worst statuses share one since
+> 24 Sep 2026, which moved worst statuses up to 03. Anything that numbers
+> sections walks `flat_sections()`. The mapping:
 >
 > | module | displayed | dev id |
 > |---|---|---|
 > | `identity.py` | 01 | `s1` |
 > | `score.py` | 02 | `s2` |
-> | `income.py` | 03 | `s3` |
-> | `returns.py` | 04 | `s4` |
-> | `worst_status.py` | 05 | `s5` |
+> | `worst_status.py` | 03 | `s3` |
+> | `income.py` | 04 | `s4` |
+> | `returns.py` | 05 | `s5` |
 > | `facilities.py` | 06 | `s6` |
 > | `detail.py` | 07 | `s7` |
 > | `applications.py` | 08 | `s8` |
@@ -495,7 +498,7 @@ message and a detail so the caller can distinguish *nothing to report* from
 
 | Drawn where | Used by | Why |
 |---|---|---|
-| **Inline SVG built in Python** | §03 income, §04 returns | Whether a timeline can be drawn *at all* depends on which dates the payload carries. That decision belongs beside the data it is made from. |
+| **Inline SVG built in Python** | §04 income, §05 returns | Whether a timeline can be drawn *at all* depends on which dates the payload carries. That decision belongs beside the data it is made from. |
 | **JS from `window.__AECB`** | §07 heatmap, §08 applications | Large repeated DOM (36 cells × 3 strips × N facilities) and interactive folds. Python still makes every payload decision — bucketing, positioning — and ships the result. |
 
 **`report.js` contains no figures.** Wiring a chart means changing what `js.py`
@@ -503,7 +506,7 @@ puts in the blob, not the JavaScript. Where the payload has no data the key is
 **omitted** and `report.js` returns early, leaving the chart empty rather than
 inventing a series.
 
-`svgtime.py` holds the shared linear axis for §03 and §04 so their two timelines
+`svgtime.py` holds the shared linear axis for §04 and §05 so their two timelines
 cannot drift. §08 deliberately does **not** use it — its scale is split by
 design and could not share it without becoming linear again.
 
@@ -631,13 +634,13 @@ All five files carry `_comment` blocks explaining what they are and why.
 
 The **rank thresholds** are the load-bearing part of `status_codes.json`:
 `rank ≤ 60` severe (red), `65–95` adverse (amber), `100` normal (grey/green),
-`None` unknown (the `.su` dashed tone). Both the heatmap and §05's grading
+`None` unknown (the `.su` dashed tone). Both the heatmap and §03's grading
 read them.
 
 One subtlety: `ctx.status()` refuses to grade what the config cannot rank —
 an unknown or missing status comes back as code `?` with rank `None`, and the
 heatmap draws it in a distinct *unknown* tone (`.su`), never green and never
-under an invented letter. §05 still carries its own **strict** resolver
+under an invented letter. §03 still carries its own **strict** resolver
 (`_known_status()`), because that panel wants the config row itself and a
 plain `None` for "unrecognised"; anything unresolved renders uncoloured — a
 green tone is a reassurance the bureau never gave.
@@ -646,18 +649,30 @@ green tone is a reassurance the bureau never gave.
 
 ## 6. Section notes worth knowing
 
-**§01 Identity** — a six-column grid with an uneven two-row split. Row two is
-sized from what is actually present: with no e-mail reported, the address takes
-the whole row rather than sitting at half width beside a gap. Two marker classes
-(`v-wide`, `r2-N`) exist because CSS could only ask this with `:has()`, which is
-above the browser floor.
+**§01 Identity** — a six-column grid with an uneven two-row split: Emirates ID,
+Passport, Phone; then E-mail and Latest address. Every tile always renders,
+stating *Not reported* when empty (the E-mail tile stopped vanishing on
+24 Sep 2026). Two marker classes (`v-wide`, `r2-N`) exist because CSS could only
+ask about row shape with `:has()`, which is above the browser floor.
 
-**§02 Score** — one horizontal strip: score → gauge → delivered bands → history.
+**§02 Score** — a half-width card beside §03: a semicircular dial (FH zones, marker, score in the bowl, amber `!` when the configured zone and the delivered band disagree) with the FH chip, the AECB chip, the vintage bar and the bureau-history line to its right.
 Both band chips carry **one** tone (taken from the FH band, which is what FH
 policy acts on) because two colours against a single position would read as two
 opinions.
 
-**§03 Income** — two halves over one card: delivered records left, what can be
+**§03 Worst statuses** — three panels because FH policy differs by employer
+segment (some assessed over 24 months, some over 36). The 24-month and
+lifetime panels are delivered figures shown verbatim; the 36-month panel is
+**derived** via `facilities.worst_in_window()` (9 Sep 2026, RRM defaults) and
+carries the `derived` chip **always** — even over its not-derivable empty
+state — with method and coverage in the chip's hover and the worst event named
+in the figure's. Its max-delay sub-line prints `0 days` only when a zero was
+reported; no delay figure at all renders *Not reported*. The 24-month panel
+reads `contractsTotalSummary.WorstStatus24M` only, never `summary`'s field of
+the same name — that one is in the *other* vocabulary (a letter code), so
+falling back would change the kind of value shown depending on the payload.
+
+**§04 Income** — two halves over one card: delivered records left, what can be
 drawn right. The left half never depends on the right. Loads collapsed; the
 header line therefore has to carry the figure, whose it is, and since when, and
 is **qualified rather than asserted** — it follows the *current* employer
@@ -666,7 +681,7 @@ is **qualified rather than asserted** — it follows the *current* employer
 "Latest salary" (the newest figure the bureau dated) and then "Salary on
 file", and it never borrows another employer's figure.
 
-**§04 Returns** — window first, instrument second. In the open "Last 6 months"
+**§05 Returns** — window first, instrument second. In the open "Last 6 months"
 section an instrument with nothing still gets a dashed tile saying so; **for an
 adverse section that absence is a finding**. Inside the "Earlier" fold, absent
 instruments are omitted — "none earlier" is not a finding.
@@ -680,18 +695,6 @@ prints them as witnesses on every run.
 Also: `sectionStatus.ReportType` distinguishes *"requested, came back clean"*
 (a positive finding) from *"never requested"* (a gap in the file). An empty
 `paymentOrder` is not the same as an unchecked one.
-
-**§05 Worst statuses** — three panels because FH policy differs by employer
-segment (some assessed over 24 months, some over 36). The 24-month and
-lifetime panels are delivered figures shown verbatim; the 36-month panel is
-**derived** via `facilities.worst_in_window()` (9 Sep 2026, RRM defaults) and
-carries the `derived` chip **always** — even over its not-derivable empty
-state — with method and coverage in the chip's hover and the worst event named
-in the figure's. Its max-delay sub-line prints `0 days` only when a zero was
-reported; no delay figure at all renders *Not reported*. The 24-month panel
-reads `contractsTotalSummary.WorstStatus24M` only, never `summary`'s field of
-the same name — that one is in the *other* vocabulary (a letter code), so
-falling back would change the kind of value shown depending on the payload.
 
 **§06 Facilities overview** — every category renders **both** main holder and
 guarantor, because they are different liabilities. A guarantor block that were
@@ -771,7 +774,7 @@ Renders every payload in `ReferenceJSON/` and fails on:
   e-mail contact, **every** delivered address (address-less location rows must
   surface as *"Address not provided"*), **every** delivered employment income
   (including placeholders
-  §03 keeps off the chart) and **every** returned-instrument amount.
+  §04 keeps off the chart) and **every** returned-instrument amount.
   Suppressing a figure the bureau sent is exactly the failure this exists to
   catch, and it would otherwise be invisible: the page would simply look
   tidier;
@@ -797,7 +800,7 @@ markup.**
 | `paths.py` | Root/work/Chrome discovery, render, rail variants, probe and screenshot primitives. Everything derived or overridable via `AECB_ROOT` / `AECB_WORK` / `AECB_PAYLOAD` / `AECB_CHROME`. |
 | `watch.py` | Which selectors belong to which section. **Add to this when a section gains a class family**, or the comparator silently stops watching what you changed. |
 | `harness.py` | Captures 10 widths × both rail states to JSON: computed styles, rendered geometry, and a page-wide sweep of every element tagged with its section. |
-| `compare.py` | Asserts a change stayed inside the sections you named; everything else must be identical in both rail states. Prints the §04 mirror witnesses. |
+| `compare.py` | Asserts a change stayed inside the sections you named; everything else must be identical in both rail states. Prints the §05 mirror witnesses. |
 | `synthetic.py` | Payload variants the reference customer doesn't produce — no e-mail, long address, expired passport, no vintage band, no FH band. Each case asserts the shape it meant to create. |
 | `shots.py` | Per-section rail-closed vs rail-open images. Needs Pillow (deliberately *not* in `requirements.txt`, which is the air-gapped runtime bundle). |
 
@@ -873,7 +876,7 @@ family to `scripts/measure/watch.py`.
 **Add a chart:**
 
 - Does whether it can be drawn at all depend on which fields the payload
-  carries? → inline SVG in the section module (like §03/§04), sharing
+  carries? → inline SVG in the section module (like §04/§05), sharing
   `svgtime.axis()` if it is a linear calendar axis.
 - Is it large repeated DOM or interactive? → compute everything in `js.py`, add
   a key to the blob, draw it in `report.js`. **Omit the key** when there is no
@@ -895,20 +898,20 @@ payload.
 
 | Item | Status |
 |---|---|
-| §05 36-month worst status | **Built 9 Sep 2026** (RRM defaults: whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD; always marked `derived`). Remaining refinements from the original six questions: a derived 24-month reconciliation against the delivered figure, and flagging guarantor conduct distinctly. |
+| §03 36-month worst status | **Built 9 Sep 2026** (RRM defaults: whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD; always marked `derived`). Remaining refinements from the original six questions: a derived 24-month reconciliation against the delivered figure, and flagging guarantor conduct distinctly. |
 | `MaxCurrentPaymentDelay` | Delivered as `1` while `MaxPaymentDelay24M` is `0`, every `Current_DaysPaymentDelay` is `0`, and all 99 `contractsHistory` rows are 0 DPD. **Held off screen** until AECB explains it. |
 | `config/bands.json` cut-offs | Place 732 in `VLR`; AECB delivered `LR`. Delivered band wins. Needs reconciling against the FH scorecard. |
-| `config/providers.json` | Stub — §01, §03, §04, §07's heatmap and §08's timeline show codes. |
+| `config/providers.json` | Stub — §01, §04, §05, §07's heatmap and §08's timeline show codes. |
 | DSR / application context | No payload source at all; needs a separate input path. |
 | Severity `Reported` | Renders neutral pending a business definition of what it grades. |
 | Adverse sample payload | The reference customer is entirely clean. The committed synthetic delinquent fixture (`ReferenceJSON/1_SyntheticJSONPayload_Delinquent_MultiFacility.json`, from `scripts/make_synthetic_payload.py`) now renders the DPD ramp, worst-status colours and `FlagOpenDispute` paths in the app itself; a real (anonymized) adverse payload is still the better test. |
 
 **Note on the reference payload:** `ReferenceJSON/aecb_payload_archive_170623.json`
 shipped with `paymentOrder: []`. Four synthetic returns were added (6 Aug 2026)
-so §04 renders visibly. Everything else follows the genuine AECB payload
+so §05 renders visibly. Everything else follows the genuine AECB payload
 structure with a **fully anonymized** subject — no real person's data. The
 file's `summary` return counters still read `0` and disagree with the injected
-data — harmless today because §04 does not read those counters, but do not
+data — harmless today because §05 does not read those counters, but do not
 wire them elsewhere without resolving it.
 
 ---

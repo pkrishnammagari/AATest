@@ -43,6 +43,11 @@
       {"code": "B4", "from_months": 96, "to_months": null}
     ]
   },
+  "applications_90d_red": 4,
+  "applications_90d_amber": 2,
+  "_applications_90d_comment": "Section 08 pill: the delivered contractsTotalSummary.Applications90D at or above 'red' is red, at or above 'amber' amber, otherwise green. FH credit policy, not payload. Required whole numbers, amber no higher than red.",
+  "closed_window_months": 6,
+  "_closed_window_comment": "Section 07: a closed facility whose ClosedDate falls within this many months before the report date is listed under 'Closed · last N months'; older or undated closures go to 'beyond'. FH presentation policy, not payload. Required: a missing, zero or invalid value stops the render.",
   "validity_days": 30,
   "_validity_comment": "Report look-back window in days, shown as the validity meter in the top bar (aecb/render/shell.py)."
 }

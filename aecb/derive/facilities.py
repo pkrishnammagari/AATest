@@ -189,10 +189,30 @@ class Facility:
 
     @property
     def role_code(self):
-        """Role as a letter code; the payload delivers the display text."""
+        """Role as a letter code; the payload delivers the display text.
+
+        A missing Role reads as main holder (the book's default). A DELIVERED
+        role the config does not know returns None -- it used to fall back to
+        "A" too, which hid a possibly different liability behind the one role
+        that shows no chip; see role_text.
+        """
         text = str(self.raw.get("Role") or "").strip()
+        if not text:
+            return "A"
         mapping = self.ctx.status_codes.get("role_labels") or {}
-        return mapping.get(text, "A")
+        return mapping.get(text)
+
+    @property
+    def role_text(self):
+        """The delivered Role when the config cannot read it, else None."""
+        text = str(self.raw.get("Role") or "").strip()
+        return text if text and self.role_code is None else None
+
+    @property
+    def frequency_text(self):
+        """The delivered PaymentFrequency when it matches no configured one."""
+        text = str(self.raw.get("PaymentFrequency") or "").strip()
+        return text if text and self.frequency_code is None else None
 
     @property
     def frequency_code(self):
@@ -234,7 +254,7 @@ def by_category(facilities):
     return out
 
 
-# --- section 05: the derived worst-status window -----------------------------
+# --- worst statuses: the derived worst-status window -----------------------------
 
 def worst_in_window(ctx, months=WINDOW_MONTHS):
     """Deepest delinquency across the whole book in the last `months`.

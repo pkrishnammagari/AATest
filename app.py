@@ -30,7 +30,7 @@ PAYLOAD_DIR = os.path.join(HERE, "ReferenceJSON")
 _LOG = logging.getLogger("aecb.app")
 
 st.set_page_config(
-    page_title="AECB Analyzer",
+    page_title=branding.APP_NAME,
     # The supplied resources/ logo, else the blue FH monogram -- always as a
     # data URL, which Streamlit accepts for both raster and SVG. Passing an SVG
     # file path instead would depend on its image loader handling SVG.
@@ -200,7 +200,7 @@ def attach_brief(ctx):
 
 
 with st.sidebar:
-    st.markdown("### AECB Analyzer")
+    st.markdown("### %s" % branding.APP_NAME)
     st.caption("AECB bureau report renderer")
 
     try:

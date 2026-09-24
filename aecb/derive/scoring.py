@@ -14,11 +14,21 @@ from .. import dates
 
 
 def score_value(ctx):
+    """score.DataIndex as a whole number, or None.
+
+    Numeric text is accepted ("732", "732.0") -- a score delivered as text is
+    still a score. A non-whole or non-numeric value is not.
+    """
     value = ctx.score.get("DataIndex")
     try:
         return int(value)
     except (TypeError, ValueError):
+        pass
+    try:
+        number = float(str(value).strip())
+    except (TypeError, ValueError):
         return None
+    return int(number) if number.is_integer() else None
 
 
 def fh_band(ctx):
@@ -62,11 +72,26 @@ def gauge(ctx):
     Returns None when there is no score to place.
     """
     value = score_value(ctx)
+    geo = scale_geometry(ctx)
+    if value is None or geo is None:
+        return None
+    lo, hi = geo["min"], geo["max"]
+    geo.update({"value": value,
+                "pct": max(0.0, min(100.0, (value - lo) / float(hi - lo) * 100.0))})
+    return geo
+
+
+def scale_geometry(ctx):
+    """The configured scale on its own: zones and ticks, no score.
+
+    Returns {'zones', 'ticks', 'min', 'max'}, or None for an unusable scale.
+    Split out of gauge() so the dial can draw its FH zones even when no
+    score came back -- the zones are config, not payload.
+    """
     scale = ctx.bands.get("scale") or {}
     lo, hi = scale.get("min", 300), scale.get("max", 900)
-    if value is None or hi <= lo:
+    if hi <= lo:
         return None
-
     span = float(hi - lo)
 
     def at(v):
@@ -88,9 +113,23 @@ def gauge(ctx):
     # Scale floor, each band boundary, scale ceiling -- each at its true position.
     values = [lo] + [b.get("from") for b in bands[1:]] + [hi]
     ticks = [{"value": v, "pct": at(v)} for v in values]
+    return {"zones": zones, "ticks": ticks, "min": lo, "max": hi}
 
-    return {"value": value, "pct": at(value), "zones": zones, "ticks": ticks,
-            "min": lo, "max": hi}
+
+def configured_band(ctx):
+    """The FH band code the configured cut-offs put the score in, or None.
+
+    For comparison with the DELIVERED band only -- never displayed as the
+    band, because the delivered one is authoritative.
+    """
+    value = score_value(ctx)
+    if value is None:
+        return None
+    code = None
+    for band in ctx.bands.get("fh_bands") or []:
+        if value >= band.get("from", 0):
+            code = band.get("code")
+    return code
 
 
 def history_months(ctx):
@@ -131,8 +170,9 @@ def enquiry_anchor(ctx):
     shell.py and validity() need no knowledge of the move.
 
     Returns {'date', 'basis' ('enquiry' | 'pull' | None), 'report_type',
-             'enquiry_type'} -- the type strings verbatim from the winning
-    (latest-dated) sectionStatus row, for the top-bar chips.
+             'enquiry_type', 'enquiry_no', 'scope_source'} -- the scope
+    strings verbatim from the winning (latest-dated) sectionStatus row, for
+    the top-bar chips.
     """
     return ctx.enquiry_anchor()
 
@@ -143,37 +183,54 @@ def validity(ctx):
     The aged date comes from enquiry_anchor() -- since 10 Sep 2026 the same
     ladder that resolves ctx.report_date, so the validity verdict and the
     windows age one date. Returns
-    {'report_date', 'age_days', 'window', 'valid', 'expires', 'pct',
-     'basis', 'report_type', 'enquiry_type'} -- pct is the marker position on
-    the meter, clamped to 100 so an old report pins at the end rather than
+    {'report_date', 'age_days', 'window', 'state', 'valid', 'expires', 'pct',
+     'basis', 'report_type', 'enquiry_type', 'enquiry_no', 'scope_source'}
+    -- the last four passed through from enquiry_anchor(). pct is the marker
+    position on
+    the meter, clamped to 0..100 so an old report pins at the end rather than
     running off the track.
+
+    state is 'valid' (0 <= age <= window), 'expired' (age > window),
+    'future' (report date after today -- a bad date or clock skew, which
+    cannot be graded either way) or 'unknown' (no date on the ladder).
+    valid is True only in the 'valid' state.
 
     When no date on the ladder resolves, every date-shaped key is None but
     the scope strings still return, so the bar can state what was pulled even
     while saying the age cannot be established.
     """
     anchor = enquiry_anchor(ctx)
-    window = ctx.bands.get("validity_days") or 30
+    # Validated as a positive whole number when the context loads.
+    window = ctx.bands["validity_days"]
     report_date = anchor["date"]
+    scope = {key: anchor[key] for key in
+             ("report_type", "enquiry_type", "enquiry_no", "scope_source")}
     if not report_date:
-        return {
+        out = {
             "report_date": None, "age_days": None, "window": window,
-            "valid": None, "expires": None, "pct": None,
+            "state": "unknown", "valid": None, "expires": None, "pct": None,
             "basis": None,
-            "report_type": anchor["report_type"],
-            "enquiry_type": anchor["enquiry_type"],
         }
+        out.update(scope)
+        return out
     # Freshness is measured against today, not against anything in the payload:
     # the question is whether this report is still usable now.
     age = dates.days_between(report_date, datetime.date.today())
-    return {
+    if age < 0:
+        state = "future"
+    elif age <= window:
+        state = "valid"
+    else:
+        state = "expired"
+    out = {
         "report_date": report_date,
         "age_days": age,
         "window": window,
-        "valid": 0 <= age <= window,
+        "state": state,
+        "valid": state == "valid",
         "expires": report_date + datetime.timedelta(days=window),
-        "pct": max(0.0, min(100.0, age / float(window) * 100.0)) if window else 0.0,
+        "pct": max(0.0, min(100.0, age / float(window) * 100.0)),
         "basis": anchor["basis"],
-        "report_type": anchor["report_type"],
-        "enquiry_type": anchor["enquiry_type"],
     }
+    out.update(scope)
+    return out

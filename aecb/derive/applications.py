@@ -56,7 +56,7 @@ _LANE_GAP = 3.0
 # provider label (~12) plus the gap between them, or a lower lane's label hides
 # behind the marker above it. report.js reads this from the blob rather than
 # keeping its own copy -- the section's height is computed from it too, and
-# three places holding the same number is how §04's tile mirror got out of step.
+# three places holding the same number is how the returns tile mirror got out of step.
 LANE_PITCH = 34
 
 # Height of the chart below the first lane's marker: the axis strip, the tick
@@ -87,20 +87,27 @@ def _truthy_flag(value) -> bool:
 
 
 def _role_letter(ctx, row):
-    """The row's role letter, or None for main holder / unmapped text.
+    """The row's role letter; None for main holder or no Role; '?' for a
+    delivered role the config cannot read.
 
     Main holder is the default across the book and earns no mark -- a
     guarantor or co-holder application is the exception that changes whose
-    credit hunger the marker records. Same A/C/G vocabulary as section 07.
+    credit hunger the marker records. Same A/C/G vocabulary as section 07,
+    and the same rule since 24 Sep 2026: an unrecognised role is never
+    assumed to be main holder.
     """
     text = str(row.get("Role") or "").strip()
     if not text:
         return None
-    letter = (ctx.status_codes.get("role_labels") or {}).get(text, "A")
+    letter = (ctx.status_codes.get("role_labels") or {}).get(text)
+    if letter is None:
+        return "?"
     return letter if letter != "A" else None
 
 
 def _role_label(ctx, letter):
+    if letter == "?":
+        return "Unrecognised role"
     meta = (ctx.status_codes.get("roles") or {}).get(letter) or {}
     return meta.get("label", letter)
 
@@ -125,13 +132,18 @@ def in_window(ctx, rows, days=FOCUS_DAYS):
     application sits on day 90 itself). An inclusive bound made the section
     report a conflict with the bureau that was our own off-by-one.
     """
-    report_date = ctx.report_date
-    if not report_date:
+    return in_window_at(ctx.report_date, rows, days)
+
+
+def in_window_at(anchor, rows, days=FOCUS_DAYS):
+    """in_window() against any anchor date -- used to test whether AECB's
+    delivered counter was computed at its own data pull date."""
+    if not anchor:
         return []
     out = []
     for row in rows:
         when = applied_on(row)
-        if when and 0 <= (report_date - when).days < days:
+        if when and 0 <= (anchor - when).days < days:
             out.append(row)
     return out
 
@@ -189,16 +201,18 @@ def timeline(ctx, rows):
         else:
             lane_ends[lane] = x
 
-        phase = str(row.get("Phase") or "").strip()
+        phase = str(row.get("Phase") or "").strip().lower()
         event = {
             "x": round(x, 3),
             "lane": lane,
             "days": days_ago,
             "focus": days_ago < FOCUS_DAYS,
             "glyph": _glyph(row.get("ContractType")),
-            # Two states are all AECB delivers here, so they are encoded as
-            # filled and hollow rather than pilled with invented wording.
-            "taken": phase.lower() == "disbursed",
+            # Two states are what AECB delivers here -- filled and hollow, no
+            # invented wording. Any OTHER phase is not "Requested": it draws
+            # dashed, its own text in the hover (24 Sep 2026).
+            "taken": phase == "disbursed",
+            "otherPhase": phase not in ("disbursed", "requested"),
             "provider": ctx.provider(row.get("ProviderNo"))["code"],
             "info": _info(row, when, days_ago, ctx),
         }
@@ -223,6 +237,7 @@ def timeline(ctx, rows):
         "height": BASE_HEIGHT + max(0, lanes - 1) * LANE_PITCH,
         # For the section's conditional legend -- nothing renders when empty.
         "disputed": any(e.get("disp") for e in events),
+        "otherPhase": any(e["otherPhase"] for e in events),
         "roles": [{"code": letter, "label": _role_label(ctx, letter)}
                   for letter in role_letters],
     }
@@ -278,7 +293,10 @@ def _info(row, when, days_ago, ctx):
     # that changes whose application this is), dispute state whenever the
     # bureau delivered the flag -- in either direction.
     role = _role_letter(ctx, row)
-    if role:
+    if role == "?":
+        parts.append("Role: %s (not a configured role)"
+                     % str(row.get("Role")).strip())
+    elif role:
         parts.append("Role: %s" % _role_label(ctx, role))
     flag = row.get("FlagOpenDispute")
     if flag is not None:
@@ -294,6 +312,13 @@ def _info(row, when, days_ago, ctx):
     if installments:
         parts.append("%s installments" % installments)
 
+    # The application's own numbers -- what someone needs to raise it with
+    # AECB or the lender. Delivered-only, like everything on this line.
+    if row.get("CBApplicationId"):
+        parts.append("AECB application %s" % row.get("CBApplicationId"))
+    if row.get("ProviderApplicationNo"):
+        parts.append("lender application no. %s" % row.get("ProviderApplicationNo"))
+
     return " · ".join(parts)
 
 
@@ -304,6 +329,6 @@ def _aed(value):
     hover line, not raise mid-render and take the whole report with it.
     """
     try:
-        return "AED {:,.0f}".format(float(value))
+        return "AED {:,.0f} (currency assumed)".format(float(value))
     except (TypeError, ValueError):
         return None

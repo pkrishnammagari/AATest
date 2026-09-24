@@ -1,7 +1,7 @@
 """Selector inventory, shared by the harness and the comparator."""
 
 # Per-section families. A selector may appear in more than one list where the
-# vocabulary is genuinely shared (.rec* by 03/04, .sub-wrap by 04/06/07,
+# vocabulary is genuinely shared (.rec* by 04/05, .sub-wrap by 05/06/07,
 # .prov-mark by almost everything).
 SECTIONS = {
     "s1": [".id-name-h", ".id-name-lg", ".id-name-ttl", ".id-name-ar",
@@ -9,22 +9,25 @@ SECTIONS = {
            ".id-dob", ".facts.id-grid", ".fact", ".fact.c2", ".fact .k",
            ".fact .v", ".fact .v .mono", ".v-sub", ".mob-list", ".mob .num",
            ".mob .when", ".facts.id-grid > .fact:last-child"],
-    "s2": [".score-strip", ".ss-score", ".ss-val", ".ss-k", ".ss-bands",
-           ".ss-band", ".ss-band em", ".ss-gauge", ".ss-bar", ".ss-marker",
-           ".ss-ticks", ".ss-hist", ".ss-hv", ".ss-hu", ".ss-vint", ".ss-hs"],
-    "s3": [".inc-latest", ".inc-latest-k", ".inc-latest-v", ".inc-latest-s",
+    # Rebuilt 24 Sep 2026 as a half-width card with a dial, paired with s3 in
+    # a .sec-pair row. Section numbers moved the same day: worst statuses is
+    # now s3, income s4, returns s5.
+    "s2": [".sec-pair", ".sp", ".sp-dial", ".sp-svg", ".sp-side", ".ss-bands",
+           ".ss-band", ".ss-band em", ".ss-hist", ".ss-hline", ".ss-hv",
+           ".ss-hu", ".ss-vint", ".ss-hs"],
+    "s4": [".inc-latest", ".inc-latest-k", ".inc-latest-v", ".inc-latest-s",
            ".emp-name", ".emp-cur", ".emp-prov", ".other-inc", ".oi-line",
            ".inc-legend", ".inc-lg", ".inc-tray-k", ".inc-chip", ".inc-why",
            ".inc-note", ".attn"],
-    "s4": [".ret-grp", ".rec-t", ".ret-amt", ".ret-date", ".rtype", ".sev",
+    "s5": [".ret-grp", ".rec-t", ".ret-amt", ".ret-date", ".rtype", ".sev",
            ".mk-lg", ".sub-wrap.slim .sub-bar-t"],
     # The .wsx-row* family went with the three-panel redesign (7 Aug 2026).
     # The pending 36-month panel renders an .empty-state inside a .wsx-panel,
     # which is scoped markup the bare .empty-state selector would resolve to
     # section 06's instead -- hence the scoped entries.
-    "s5": [".wsx", ".wsx-panel", ".wsx-win", ".wsx-fig", ".wsx-worst",
+    "s3": [".wsx", ".wsx-panel", ".wsx-win", ".wsx-fig", ".wsx-worst",
            ".wsx-sub", ".wsx-sub .k", ".wsx-sub .v",
-           "#s5 .empty-state", "#s5 .es-msg", "#s5 .es-detail"],
+           "#s3 .empty-state", "#s3 .es-msg", "#s3 .es-detail"],
     # Rebuilt 7 Aug 2026. Gone with the donut and the folded utilisation chart:
     # .fac-count, .fac-note, .donut*, .overlimit-flag and the whole .cb-* family.
     # New: the role split (.fac-role / .fac-nil) and the utilisation line.
@@ -52,16 +55,17 @@ SECTIONS = {
            ".tl-event", ".tl-event .mk", ".tl-event .mk.disp",
            ".tl-event .amt", ".tl-event .stem",
            ".enq-key", ".ek", ".ek-mk", ".ek-mk.disp", ".ek-role", ".ek-note"],
-    # Shared frame -- belongs to 03 and 04 jointly, and carries the Python
+    # Shared frame -- belongs to income (s4) and returns (s5) jointly (the key
+    # keeps its historical name), and carries the Python
     # mirrors in sections/returns.py (_TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W).
     "shared34": [".inc-split", ".inc-detail", ".inc-vis", ".inc-svg",
                  ".rec", ".rec-h", ".rec-meta", ".rec-list", ".rec-item",
                  ".rec-none", ".trend-head", ".trend-title", ".prov-mark",
-                 # Scoped to section 04. The bare selectors above resolve to
-                 # section 03's, which LOADS COLLAPSED and therefore measures
+                 # Scoped to returns (s5). The bare selectors above resolve to
+                 # income's (s4), which LOADS COLLAPSED and therefore measures
                  # zero -- useless as a witness for the Python mirrors.
-                 "#s4 .inc-vis", "#s4 .rec", "#s4 .rec-item", "#s4 .rec-list",
-                 "#s4 .rec-t", "#s4 .ret-amt", "#s4 .rec-meta", "#s4 .inc-svg"],
+                 "#s5 .inc-vis", "#s5 .rec", "#s5 .rec-item", "#s5 .rec-list",
+                 "#s5 .rec-t", "#s5 .ret-amt", "#s5 .rec-meta", "#s5 .inc-svg"],
     # Never changes: the top bar is locked, and the rail is chrome.
     "locked": [".topbar", ".brand-t", ".brand-mark", ".tb-valid", ".tb-scope",
                ".tv-k",

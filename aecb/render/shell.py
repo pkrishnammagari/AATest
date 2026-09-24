@@ -15,14 +15,14 @@ source in an AECB payload at all.
 
 from __future__ import annotations
 
+import datetime
+
 from .. import dates
 from ..derive import scoring
 from . import branding
 from . import brief as render_brief
 from . import components as c
 from .sections import nav_items
-
-APP_NAME = "FH AECB Analyser"
 
 
 def topbar(ctx) -> str:
@@ -37,11 +37,21 @@ def topbar(ctx) -> str:
   <div class="tb-spacer"></div>
   <button class="brief-btn" id="briefBtn"><span class="bb-ic">◧</span> AI Analysis</button>
 </header>
-""".format(mark=branding.brand_mark(), name=APP_NAME, validity=_validity_strip(ctx))
+""".format(mark=branding.brand_mark(), name=branding.APP_NAME,validity=_validity_strip(ctx))
+
+
+def _date_label(v) -> str:
+    """The name of the date that dated the report, as the bar labels it.
+
+    Named after its source rather than a generic "Generated": the pull date
+    is the ladder's weaker fallback, and the reader should see that without
+    hovering. The meter hover uses the same word.
+    """
+    return "Pull date" if v["basis"] == "pull" else "Enquiry date"
 
 
 def _basis_text(v):
-    """What dated the report, for the Generated and meter hovers.
+    """What dated the report, for the date-field and meter hovers.
 
     The ladder (10 Sep 2026): the latest-dated sectionStatus enquiry first,
     the warehouse pull date as a last resort only.
@@ -64,51 +74,114 @@ def _scope_chip(v):
     a product the bureau adds later reaches the bar without a code change.
     An empty sectionStatus still warns: which products were pulled cannot be
     established, and the absence of a bounced-cheque product is graded by
-    section 04, not here.
+    the returns section, not here. So does a row with a blank ReportType -- the one
+    fact that says what kind of report this is. A blank EnquiryType simply
+    drops its chip.
+
+    The ReportType hover carries the delivered EnquiryNo, the bureau's own
+    reference for the enquiry. When no row was dated, both hovers say the
+    scope came from the first row while DataPullDate dated the report --
+    the chips and the date may then describe different events.
     """
+    if v["scope_source"] is None:
+        return ('<span class="tb-scope warn" data-info="sectionStatus is '
+                'empty — which products were pulled cannot be established.">'
+                'Enquiry scope not reported</span>')
+
+    # Which row the chips describe: the latest-dated enquiry, or -- when no
+    # row is dated -- the first row, while DataPullDate dates the report.
+    which, note = "the latest enquiry", ""
+    if v["scope_source"] == "first":
+        which = "the first sectionStatus row"
+        note = (" No enquiry was dated, so the report is dated by "
+                "score.DataPullDate instead.")
+
+    # The EnquiryType chip is the first thing the bar sheds on a laptop-width
+    # window (report.css), so its value also rides in the ReportType hover --
+    # hidden from the bar, never lost from the page.
     chips = []
     if v["report_type"]:
-        chips.append('<span class="tb-scope" data-info="sectionStatus '
-                     'ReportType of the latest enquiry — the product the '
-                     'bureau was asked for.">%s</span>'
-                     % c.esc(v["report_type"]))
+        ref = (" Enquiry no. %s." % v["enquiry_no"]) if v["enquiry_no"] else ""
+        etype = (" Enquiry type: %s." % v["enquiry_type"]) \
+            if v["enquiry_type"] else ""
+        chips.append('<span class="tb-scope" data-info="%s">%s</span>' % (
+            c.attr("sectionStatus ReportType of %s — the product the "
+                   "bureau was asked for.%s%s%s" % (which, ref, etype, note)),
+            c.esc(v["report_type"])))
+    else:
+        chips.append('<span class="tb-scope warn" data-info="%s">Report type '
+                     'not reported</span>' % c.attr(
+                         "sectionStatus delivered an enquiry with no "
+                         "ReportType — which product was pulled cannot be "
+                         "established." + note))
     if v["enquiry_type"]:
-        chips.append('<span class="tb-scope" data-info="sectionStatus '
-                     'EnquiryType of the latest enquiry.">%s</span>'
-                     % c.esc(v["enquiry_type"]))
-    if chips:
-        return "".join(chips)
-    return ('<span class="tb-scope warn" data-info="sectionStatus is empty — '
-            'which products were pulled cannot be established.">Enquiry scope '
-            'not reported</span>')
+        chips.append('<span class="tb-scope tb-scope-et" data-info="%s">%s</span>' % (
+            c.attr("sectionStatus EnquiryType of %s.%s" % (which, note)),
+            c.esc(v["enquiry_type"])))
+    return "".join(chips)
+
+
+def _pill(cls, label, info):
+    return ('<span class="tb-valid%s" data-info="%s"><span class="pd"></span>'
+            '%s</span>' % (" " + cls if cls else "", c.attr(info), label))
+
+
+def _validity_pill(v):
+    """The status pill and its hover, one per scoring.validity state.
+
+    The window in the hover is read from config, never typed in, so the
+    explanation cannot drift from the rule it explains.
+    """
+    state, window = v["state"], v["window"]
+    source = "config/bands.json validity_days"
+    if state == "valid":
+        return _pill("", "Report valid",
+                     "Valid for %d days from the report date (%s). %s"
+                     % (window, source, _age_sentence(v)))
+    if state == "expired":
+        return _pill("expired", "Report expired",
+                     "Older than the %d-day validity window (%s) — it was "
+                     "valid until %s." % (window, source,
+                                         dates.fmt_short(v["expires"])))
+    if state == "future":
+        return _pill("future", "Future-dated",
+                     "The report date (%s) is after today, so its age cannot "
+                     "be graded. Check the enquiry date the bureau delivered."
+                     % dates.fmt_short(v["report_date"]))
+    return _pill("unknown", "Validity unknown",
+                 "No enquiry date or pull date delivered, so the report's age "
+                 "cannot be established.")
 
 
 def _validity_strip(ctx):
     """Status pill, enquiry scope, enquiry date, window meter, lapse date."""
     v = scoring.validity(ctx)
     scope = _scope_chip(v)
+    pill = _validity_pill(v)
 
     if v["report_date"] is None:
-        return ('<div class="tb-valid-strip">'
-                '<span class="tb-valid unknown"><span class="pd"></span>'
-                'Validity unknown</span>%s'
+        return ('<div class="tb-valid-strip">%s%s'
                 '<span class="tv-note">No enquiry date or pull date delivered '
-                '— report age cannot be established</span></div>' % scope)
+                '— report age cannot be established</span></div>'
+                % (pill, scope))
 
-    valid = v["valid"]
-    age, window = v["age_days"], v["window"]
+    # The meter has two colours (user decision, 24 Sep 2026): green while the
+    # report is valid, red otherwise -- expired pins the marker at the far
+    # end, future-dated sits at zero (scoring clamps pct to 0..100). The end
+    # date always reads "Valid until" -- it is the last valid day (age ==
+    # window is still valid), so calling it the day the report "lapsed" was
+    # a day early. Only an expired report paints that date red; a
+    # future-dated one is ungradable, not lapsed, so it stays neutral.
+    expired = v["state"] == "expired"
+    red = v["state"] != "valid"
+    window = v["window"]
     basis = _basis_text(v)
+    date_label = _date_label(v)
 
-    pill = ('<span class="tb-valid"><span class="pd"></span>Report valid</span>'
-            if valid else
-            '<span class="tb-valid expired"><span class="pd"></span>Report expired</span>')
-
-    # Marker position. scoring.validity clamps pct to 100, so a long-expired
-    # report pins at the end of the track instead of running off it.
     pct = v["pct"]
-    fill_cls = "tv-fill" if valid else "tv-fill over"
+    fill_cls = "tv-fill over" if red else "tv-fill"
     marker = ('<span class="tv-dot%s" style="left:%.1f%%"></span>'
-              % ("" if valid else " over", pct))
+              % (" over" if red else "", pct))
 
     # The window length is not labelled on the meter -- it is exactly the gap
     # between the two dates flanking it, so a '0 .. 30d' axis would only repeat
@@ -118,7 +191,7 @@ def _validity_strip(ctx):
     {pill}
     {scope}
     <div class="tv-field" data-info="{basis}">
-      <span class="tv-k">Generated</span>
+      <span class="tv-k">{date_label}</span>
       <span class="tv-v">{generated}</span>
       <span class="tv-rel">{age}</span>
     </div>
@@ -128,34 +201,53 @@ def _validity_strip(ctx):
       {marker}
     </div>
     <div class="tv-field">
-      <span class="tv-k">{lapse_label}</span>
+      <span class="tv-k">Valid until</span>
       <span class="tv-v{lapse_cls}">{expires}</span>
     </div>
   </div>
 """.format(pill=pill, scope=scope,
-           basis=c.attr(basis),
+           basis=c.attr(basis), date_label=date_label,
            generated=dates.fmt_short(v["report_date"]),
-           age=_age_phrase(age),
+           age=_age_phrase(v),
            fill_cls=fill_cls, pct=pct, marker=marker,
-           lapse_label="Valid until" if valid else "Lapsed",
-           lapse_cls="" if valid else " lapsed",
+           lapse_cls=" lapsed" if expired else "",
            expires=dates.fmt_short(v["expires"]),
            tip=c.attr(
-               "Enquiry date %s · look-back window %d days · %s %s · report "
-               "is %s old. %s"
-               % (dates.fmt_short(v["report_date"]), window,
-                  "valid until" if valid else "lapsed",
-                  dates.fmt_short(v["expires"]), _days_label(age), basis)))
+               "%s %s · look-back window %d days · valid until %s. %s %s"
+               % (date_label, dates.fmt_short(v["report_date"]), window,
+                  dates.fmt_short(v["expires"]), _age_sentence(v), basis)))
 
 
-def _age_phrase(n) -> str:
+def _age_sentence(v) -> str:
+    """The report's age as a sentence, for the pill and meter hovers.
+
+    Its own function because _days_label's special words do not fit a
+    "report is N old" frame ("report is today old").
+    """
+    label = _days_label(v)
+    if label == "today":
+        return "The report is from today."
+    if label == "future-dated":
+        return "The report date is in the future."
+    if label == "unknown":
+        return "The report's age is unknown."
+    return "The report is %s old." % label
+
+
+def _age_phrase(v) -> str:
     """'today' reads better than '0 days ago'; everything else takes 'ago'."""
-    label = _days_label(n)
+    label = _days_label(v)
     return label if label in ("today", "future-dated", "unknown") else label + " ago"
 
 
-def _days_label(n) -> str:
-    """Compact age: days under two months, then months, then years."""
+def _days_label(v) -> str:
+    """Compact age of a scoring.validity() result: days under 60, then
+    calendar months, then years.
+
+    Months and years come from dates.months_between -- the project's only
+    month arithmetic -- so "N months" is calendar months, not days / 30.
+    """
+    n = v["age_days"]
     if n is None:
         return "unknown"
     if n < 0:
@@ -164,10 +256,14 @@ def _days_label(n) -> str:
         return "today"
     if n < 60:
         return "%d day%s" % (n, "" if n == 1 else "s")
-    if n < 730:
-        return "%d months" % (n // 30)
-    years = n / 365.0
-    return "%.1f years" % years if years < 10 else "%d years" % int(years)
+    months = dates.months_between(v["report_date"], datetime.date.today()) or 0
+    if months < 24:
+        return "%d month%s" % (months, "" if months == 1 else "s")
+    years = months / 12.0
+    if years >= 10:
+        return "%d years" % int(years)
+    # "2 years", not "2.0 years".
+    return ("%.1f" % years).rstrip("0").rstrip(".") + " years"
 
 
 def spine(ctx) -> str:

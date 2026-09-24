@@ -49,7 +49,7 @@
 
   /* ---------- 2. charts ---------- */
 
-  /* Section 04's timeline is inline SVG built in Python, not drawn here: the
+  /* The income timeline is inline SVG built in Python, not drawn here: the
      decision of whether a chart can be drawn at all depends on which dates the
      payload carries, and that decision belongs beside the data it is made from.
      See aecb/render/sections/income.py. */
@@ -59,8 +59,8 @@
      div, so there was nothing left for JavaScript to do once the donut and the
      average-vs-peak trend chart went with the 7 Aug 2026 rebuild. */
 
-  /* Section 05's returns timeline is inline SVG built in Python, like section
-     04's -- see aecb/render/sections/returns.py. */
+  /* The returns timeline is inline SVG built in Python, like the income
+     one -- see aecb/render/sections/returns.py. */
 
   /* Section 08's application timeline.
 
@@ -97,7 +97,7 @@
            esc(e.info) + '">' +
            '<div class="amt">' + esc(e.provider || "") +
            (e.role ? " · " + esc(e.role) : "") + "</div>" +
-           '<div class="mk' + (e.taken ? " taken" : "") +
+           '<div class="mk' + (e.taken ? " taken" : "") + (e.otherPhase ? " other" : "") +
            (e.focus ? " focus" : "") + (e.disp ? " disp" : "") + '">' +
            esc(e.glyph || "") + "</div>" +
            '<div class="stem" style="height:' + stem + 'px"></div></div>';
@@ -216,8 +216,8 @@
       if (c.closedUndated) {
         stats += '<span class="closed-on na" data-info="AECB reports this ' +
                  'contract as closed but delivers no ClosedDate, so it cannot ' +
-                 'be placed in the 6-month window and is listed with the older ' +
-                 'closures.">Closed · date not reported</span>';
+                 'be placed in the ' + cfg.closedWindow + '-month window and is listed ' +
+                 'with the older closures.">Closed · date not reported</span>';
       }
       if (c.closedOn) {
         stats += '<span class="closed-on">Closed ' + esc(c.closedOn) + "</span>";
@@ -242,6 +242,9 @@
       if (c.freq && FREQ[c.freq]) {
         stats += '<span class="freq" data-info="AECB payment frequency ' + esc(c.freq) + " — " +
                  esc(FREQ[c.freq].long) + '">' + esc(FREQ[c.freq].short) + "</span>";
+      } else if (c.freqText) {
+        stats += '<span class="freq" data-info="Payment frequency as delivered — not in ' +
+                 'the configured frequency list.">' + esc(c.freqText) + "</span>";
       }
       /* Role likewise shows only when it is NOT main holder. Main holder is the
          default across the book; a co-holder or guarantor is the exception that
@@ -249,14 +252,30 @@
       var rl = ROLE[c.role];
       if (rl && c.role && c.role !== "A") {
         stats += '<span class="role ' + rl.css + '">' + esc(rl.label) + "</span>";
+      } else if (c.roleText) {
+        /* A delivered role the config cannot read -- never assumed to be
+           main holder, which would hide who is liable. */
+        stats += '<span class="role unk" data-info="Role as delivered — not one of the ' +
+                 'configured roles (main holder, co-holder, guarantor).">' +
+                 esc(c.roleText) + "</span>";
       }
       if (c.overLimit) stats += '<span class="ovl">OVER LIMIT ' + c.util + "%</span>";
       if (c.overdueNow) stats += '<span class="ovl">Overdue now AED ' + esc(c.overdueNow) + "</span>";
 
+      /* The contract's own numbers ride on the name's hover; the provider
+         name prints only when it says more than the code on the badge (with
+         providers.json still a stub, it is the code again). */
+      var ids = [];
+      if (c.ids && c.ids.cb) ids.push("AECB contract " + c.ids.cb);
+      if (c.ids && c.ids.lender) ids.push("lender contract no. " + c.ids.lender);
+      var nameHtml = ids.length
+        ? '<span class="hm-name" data-info="' + esc(ids.join(" · ")) + '">' + esc(c.name) + "</span>"
+        : esc(c.name);
+      var provName = (c.provider && c.provider !== c.code) ? " " + esc(c.provider) : "";
       var h = '<div class="hm-row' + (c.closedAtMonth != null ? " isclosed" : "") + '">' +
-              '<div class="hm-rl"><div class="hm-rl-t">' + esc(c.name) +
-              ' <span class="prov-badge ' + esc(c.badge) + '">' + esc(c.code) + "</span> " +
-              esc(c.provider) + '</div><div class="hm-rl-s">' + stats + "</div></div>" +
+              '<div class="hm-rl"><div class="hm-rl-t">' + nameHtml +
+              ' <span class="prov-badge ' + esc(c.badge) + '">' + esc(c.code) + "</span>" +
+              provName + '</div><div class="hm-rl-s">' + stats + "</div></div>" +
               '<div class="hm-rcells"><div class="hm-sstrip">';
 
       var st = c.status || {}, delays = c.delays || {}, m;
@@ -284,7 +303,7 @@
                ' · no status reported for this month"></div>';
           continue;
         }
-        var k = st[m] || "U";
+        var k = st[m] || "?";
         h += '<div class="scell ' + stCls(k) + '" data-info="' + lbl(m) + " · status " +
              esc(k) + " — " + esc(meta(k).label) + '">' + esc(k) + "</div>";
       }
@@ -375,7 +394,7 @@
     }
     html += "</div></div>";
 
-    var seen = { U: true };
+    var seen = {};
     function note(c) {
       Object.keys(c.status || {}).forEach(function (k) { seen[c.status[k]] = true; });
       if (c.finalStatus) seen[c.finalStatus] = true;

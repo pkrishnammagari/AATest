@@ -17,6 +17,7 @@ approved / rejected vocabulary is not in the payload, so it is not on the page.
 
 from __future__ import annotations
 
+from ... import dates
 from ...derive import applications
 from .. import components as c
 
@@ -72,6 +73,9 @@ def _chart(chart) -> str:
     # entry for a dispute ring nobody drew, or role letters nobody carries,
     # would promise marks the chart does not show.
     extras = ""
+    if chart.get("otherPhase"):
+        extras += ('<span class="ek"><i class="ek-mk other"></i>Other phase'
+                   '</span>')
     if chart.get("disputed"):
         extras += ('<span class="ek"><i class="ek-mk disp"></i>Open dispute'
                    '</span>')
@@ -111,7 +115,9 @@ def _aside(ctx, rows, delivered_90d):
             return c.tag("No applications on file")
         return c.tag("%d in %d days" % (counted, applications.FOCUS_DAYS))
 
-    tone = "bad" if delivered_90d >= 4 else ("warn" if delivered_90d >= 2 else "good")
+    # Thresholds are FH policy in config/bands.json, validated at load.
+    red, amber = ctx.bands["applications_90d_red"], ctx.bands["applications_90d_amber"]
+    tone = "bad" if delivered_90d >= red else ("warn" if delivered_90d >= amber else "good")
     tag = c.tag("%d in %d days %s"
                 % (delivered_90d, applications.FOCUS_DAYS,
                    c.delivered_mark("Delivered by AECB in "
@@ -123,6 +129,30 @@ def _aside(ctx, rows, delivered_90d):
     # it is one line, not the banner it used to be.
     counted = len(applications.in_window(ctx, rows))
     if counted != delivered_90d:
-        tag += c.tag("%d row%s in window" % (counted, "" if counted == 1 else "s"),
-                     "warn")
+        label = "%d row%s in window" % (counted, "" if counted == 1 else "s")
+        tag += ('<span class="tag warn" data-info="%s">%s</span>'
+                % (c.attr(_mismatch_reason(ctx, rows, delivered_90d, counted)),
+                   label))
     return tag
+
+
+def _mismatch_reason(ctx, rows, delivered, counted) -> str:
+    """Why AECB's 90-day counter and the rows disagree, when the payload shows.
+
+    The report is dated by the enquiry; AECB computes its counter at its own
+    data pull. When a recount at score.DataPullDate reproduces the delivered
+    figure, that is the explanation, and saying so turns an apparent
+    contradiction into a stated one.
+    """
+    pull = dates.parse_any(ctx.score.get("DataPullDate"))
+    if pull and pull != ctx.report_date:
+        at_pull = len(applications.in_window_at(pull, rows))
+        if at_pull == delivered:
+            return ("AECB counted at its data pull date, %s: %d application "
+                    "row(s) fall in the 90 days before it. This report is "
+                    "dated by the enquiry, %s, where %d do."
+                    % (dates.fmt_short(pull), at_pull,
+                       dates.fmt_short(ctx.report_date), counted))
+    return ("AECB delivered %d for the last 90 days, but %d application row(s) "
+            "fall in the 90 days before the report date. The payload does not "
+            "explain the difference." % (delivered, counted))

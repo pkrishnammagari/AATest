@@ -64,11 +64,32 @@ def check(path):
     expected = [
         (ctx.customer.get("FullNameEN"), "customer name"),
         (str(ctx.score.get("DataIndex") or ""), "score"),
-        (ctx.subject_id, "subject id"),
     ]
     for value, label in expected:
         if value and value not in raw:
             problems.append("payload value missing from page: %s (%r)" % (label, value))
+
+    # Name-line statements that exist only when the payload delivers their
+    # cause: a garbled Arabic name is stated, never silently hidden, and a
+    # FirstName+LastName spelling that differs from FullNameEN is surfaced.
+    cust = ctx.customer
+    if derive_identity.arabic_name_unreadable(cust) and not re.search(
+            r'<span class="id-name-ar id-ar-bad"[^>]*>Arabic name unreadable '
+            r'in payload</span>', html):
+        problems.append("garbled FullNameAR delivered but not stated in "
+                        "section 01")
+    variant = derive_identity.name_parts_variant(cust)
+    if variant and ("Name parts reported as: %s" % variant) not in html:
+        problems.append("name parts %r differ from FullNameEN but are not "
+                        "surfaced in section 01" % variant)
+
+    # The bureau subject id must be VISIBLE, in section 01's traits line --
+    # not merely present in <title>, which Streamlit never shows (it used to
+    # satisfy a bare substring check on its own).
+    cb_id = ctx.cb_subject_id
+    if cb_id and ('<b class="mono id-subj">%s</b>' % cb_id) not in html:
+        problems.append("payload value missing from page: CB subject id in "
+                        "section 01 (%r)" % cb_id)
 
     # The delivered honorific must render too -- checked against the
     # noise-stripped html, not raw: a 3-character token like 'MRS' can occur
@@ -103,11 +124,11 @@ def check(path):
         problems.append("payload delivers an address row without an Address "
                         "but the page shows no 'Address not provided' entry")
 
-    # Likewise every mobile number and e-mail. Phone Number contacts have no
-    # tile yet (open item), so only the two rendered types are asserted.
+    # Likewise every mobile number, landline (Phone Number, in the Phone
+    # tile's landline fold since 24 Sep 2026) and e-mail.
     for row in ctx.rows("contacts"):
         base = derive_identity.base_type(row.get("ContactType")).lower()
-        if base not in ("mobile number", "e-mail"):
+        if base not in ("mobile number", "phone number", "e-mail"):
             continue
         value = row.get("Contact")
         if value and str(value) not in html:
@@ -115,7 +136,7 @@ def check(path):
                             "%s (%r)" % (row.get("ContactType"), value))
 
     # Every delivered income figure must be on the page -- including the ones
-    # section 04 keeps off the chart as placeholders. Suppressing a figure the
+    # the income section keeps off the chart as placeholders. Suppressing a figure the
     # bureau sent is precisely the failure this script exists to catch, and it
     # would be invisible otherwise: the page would simply look tidier.
     for row in ctx.rows("employment"):
@@ -127,7 +148,18 @@ def check(path):
             problems.append("payload value missing from page: employment income "
                             "(%r, reported by %s)" % (shown, row.get("ProviderNo")))
 
-    # Likewise every returned-instrument amount: section 05's claim is that the
+    # And every other-income amount (incomes), with or without a Source -- a
+    # sourceless row was once dropped whole.
+    for row in ctx.rows("incomes"):
+        amount = row.get("GrossAnnualIncome")
+        if amount is None:
+            continue
+        shown = "{:,.0f}".format(float(amount))
+        if not re.search(r"(?<![\d.,])%s(?![\d])" % re.escape(shown), html):
+            problems.append("payload value missing from page: other income "
+                            "(%r, reported by %s)" % (shown, row.get("ProviderNo")))
+
+    # Likewise every returned-instrument amount: the returns section's claim is that the
     # returns themselves are on screen, so a dropped one must fail the build.
     for row in ctx.rows("paymentOrder"):
         amount = row.get("Amount")
@@ -172,6 +204,20 @@ def check(path):
             if value and value not in html:
                 problems.append("top bar scope chip missing: sectionStatus."
                                 "%s %r never renders" % (field, value))
+        # A blank ReportType is stated, never dropped; a delivered EnquiryNo
+        # rides in the ReportType chip's hover. Both checked against markup.
+        report_type = str(scope_row.get("ReportType") or "").strip()
+        enquiry_no = str(scope_row.get("EnquiryNo") or "").strip()
+        if not report_type and not re.search(
+                r'<span class="tb-scope warn"[^>]*>Report type not reported'
+                r'</span>', html):
+            problems.append("top bar does not state that ReportType is "
+                            "unreported")
+        if report_type and enquiry_no and not re.search(
+                r'<span class="tb-scope" data-info="[^"]*Enquiry no\. %s\.'
+                % re.escape(enquiry_no), html):
+            problems.append("sectionStatus.EnquiryNo %r missing from the "
+                            "scope chip hover" % enquiry_no)
     elif "Enquiry scope not reported" not in html:
         problems.append("top bar does not state that the enquiry scope is "
                         "unreported")
@@ -235,7 +281,7 @@ def check(path):
             problems.append("payload value missing from the heatmap blob: %s "
                             "(%r not found)" % (label, needle))
 
-    # Section 05 shows two delivered figures VERBATIM, at RRM's instruction --
+    # Worst statuses (§03) shows two delivered figures VERBATIM, at RRM's instruction --
     # no relabelling, no rounding, no translation into a letter code. A plain
     # substring search cannot prove that: the life-time count is 0, and "0"
     # appears all over the page. So this reads the figures out of the panels
@@ -253,11 +299,11 @@ def check(path):
     # expected string so a figure cannot satisfy the check from the wrong slot.
     verbatim = [
         (ctx.totals.get("WorstStatus24M"), "%s", panels,
-         "§05 24-month worst status"),
+         "§03 24-month worst status"),
         (ctx.summary.get("Worststatus"), "%s", panels,
-         "§05 life-time worst status count"),
+         "§03 life-time worst status count"),
         (ctx.totals.get("MaxPaymentDelay24M"), "%s days", delay,
-         "§05 24-month max payment delay"),
+         "§03 24-month max payment delay"),
         (ctx.totals.get("CreditUtilizationRate"), "%s%%", util,
          "§06 card utilisation rate"),
     ]

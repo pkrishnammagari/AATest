@@ -17,7 +17,7 @@ from ...derive import facilities
 from .. import components as c
 
 META = {
-    "title": "Credit facilities — detail &amp; 36-month conduct",
+    "title": "Credit Facilities — Detail &amp; 36-Month Conduct",
 }
 
 

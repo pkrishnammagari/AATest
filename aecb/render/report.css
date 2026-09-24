@@ -25,7 +25,7 @@ button{font-family:inherit; cursor:pointer; border:none; background:none; color:
   min-width:28px; border-radius:0}
 .brand-mark.has-logo img{height:28px; width:auto; max-width:170px; display:block; object-fit:contain}
 /* The wordmark is the second-loudest name on the page and never the loudest:
-   19px/700 sits a clear step below the customer name (.id-name-lg, 24px/800)
+   19px/800 sits a clear step below the customer name (.id-name-lg, 24px/800)
    while still reading as a title rather than a label. The bar keeps its 52px
    height -- a 19px display line boxes to ~28px, the same as .brand-mark, so
    nothing grows. */
@@ -34,7 +34,7 @@ button{font-family:inherit; cursor:pointer; border:none; background:none; color:
 .tb-sep{width:1px; height:22px; background:var(--line)}
 .tb-valid{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
   color:var(--green-ink); background:var(--green-wash); border:1px solid var(--green-line);
-  padding:4px 11px; border-radius:20px; white-space:nowrap; flex:none}
+  padding:4px 11px; border-radius:20px; white-space:nowrap; flex:none; cursor:help}
 .tb-valid .pd{width:7px; height:7px; border-radius:50%; background:var(--green)}
 /* Enquiry scope: what the bureau was actually asked for. Neutral chips carry
    the latest enquiry's ReportType and EnquiryType verbatim (facts, not
@@ -166,6 +166,12 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .id-name-ar{margin-left:auto; font-family:var(--font-arabic); font-size:17px;
   font-weight:500; color:var(--ink-2); direction:rtl; text-align:right;
   line-height:1.45; min-width:0}
+/* An Arabic name that arrived garbled: stated in English, quietly, in the
+   Arabic name's place. Two classes so the fluid-scale size rule below does
+   not re-inflate it to headline size. */
+.id-name-ar.id-ar-bad{font-family:var(--font-body); font-size:12px;
+  font-style:italic; font-weight:500; color:var(--ink-3); direction:ltr;
+  cursor:help}
 .facts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; align-items:stretch}
 .facts.id-grid{grid-template-columns:repeat(6,1fr)}
 .fact.c2{grid-column:span 2}
@@ -207,102 +213,62 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .histflag{font-size:8px; font-weight:600; color:var(--ink-3); background:var(--surface-3); padding:0 5px; border-radius:3px; border:1px solid var(--line)}
 
 /* ========== 02 SCORE & BUREAU HISTORY ==========
-   One strip -- score, delivered bands, gauge, history -- following the same
-   grammar as the top-bar validity strip. The previous two-column layout spent
-   277px on five facts, most of it vertical padding around a 155px right column
-   and three stacked gauge rows conveying a single position. */
-.score-strip{display:flex; align-items:center; gap:26px; min-width:0}
+   Half-width card (24 Sep 2026, user decision), paired with 03 Worst Statuses
+   in a .sec-pair row: a semicircular dial -- FH band zones, marker at the
+   score, the score in the bowl -- and a column of the FH chip, the AECB chip,
+   the vintage bar and the file length to its right. The dial is inline SVG
+   built in sections/score.py; the zone colours come from tokens there. */
+.sp{display:flex; align-items:center; gap:22px; min-width:0}
+.sp-dial{position:relative; flex:1 1 240px; min-width:200px; max-width:300px; cursor:help}
+.sp-svg{display:block; width:100%; height:auto; overflow:visible}
+.sp-ticks text{font-family:var(--font-mono); font-size:9px; fill:var(--ink-3)}
+.sp-mark{fill:#fff; stroke:var(--ink); stroke-width:3.5;
+  filter:drop-shadow(0 1px 3px rgba(20,30,44,.35))}
+.sp-val{font-family:var(--font-display); font-weight:800; font-size:40px;
+  letter-spacing:-.03em; fill:var(--ink)}
+.sp-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
+  font-weight:500; fill:var(--ink-3)}
+.sp-na{font-family:var(--font-body); font-size:13px; font-style:italic; fill:var(--ink-3)}
+/* The configured-zone vs delivered-band mismatch mark sits on the dial's
+   shoulder, clear of the arc and the ticks. */
+.sp-attn{position:absolute; top:2px; right:2px}
+.sp-err{margin-top:6px; font-size:11px; color:var(--ink-2); text-align:center}
 
-.ss-score{display:flex; flex-direction:column; flex:none}
-.ss-val{font-family:var(--font-display); font-weight:800; font-size:38px;
-  line-height:.95; letter-spacing:-.03em; color:var(--ink)}
-.ss-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--ink-3); font-weight:500; margin-top:3px}
-
-/* Stacked, not side by side: the two chips are short, and stacking hands the
-   reclaimed width to the gauge -- which is the part that earns its space.
-   Stretched to one width, so the pair reads as two rows of one table rather
-   than two loose chips; the scorecard name sits on the right edge of both. */
-.ss-bands{display:flex; flex-direction:column; align-items:stretch; gap:5px; flex:none}
-/* 15px, not 12px, and the size is budgeted rather than chosen: .ss-hist sets
-   the strip's height, so .ss-bands had ~13px of free height in the binding
-   rail-open case. At 15px a chip measures ~32.5px and the pair plus its gap
-   comes to ~70px, inside that budget with a few px to spare; 16px would eat
-   all of it. The chips are filled SOLID in sections/score.py -- see the note on
-   _FILL there -- which is where most of the prominence actually comes from. */
+.sp-side{display:flex; flex-direction:column; gap:8px; flex:1 1 200px; min-width:180px}
+/* The two chips read as two rows of one table: stretched to one width, the
+   scorecard name on the right edge of both. Filled SOLID in sections/score.py
+   -- a score band is a risk grade, so red/amber/green is the right vocabulary. */
+.ss-bands{display:flex; flex-direction:column; align-items:stretch; gap:5px}
 .ss-band{display:flex; align-items:center; gap:10px;
   font-size:15px; font-weight:700; padding:4px 12px; border-radius:7px;
   border:1px solid; white-space:nowrap}
+.ss-band[data-info]{cursor:help}
 .ss-band.neutral{background:var(--surface-3); color:var(--ink-2); border-color:var(--line)}
 .ss-band em{font-style:normal; font-weight:500; opacity:.65; margin-left:auto; font-size:10.5px}
 
-/* The gauge takes the flexible middle. Zone names are in the tooltip, not a
-   third row -- the band chip already says which zone the applicant is in. */
-/* 44px tall, which is free: the strip's height is set by the score block at
-   52px, so the gauge has room to put the marker ABOVE the bar. Sitting it below
-   collided with the tick labels. Vertical order: dot 0-11, pin through the bar
-   16-26, ticks from 32. */
-/* The gauge is the one thing here that shows rather than states, so it gets the
-   flexible width and a bar substantial enough to read at a glance. Vertical
-   order: dot 0-13, pin through the bar 18-32, ticks from 38. */
-/* No max-width: the gauge is the strip's only elastic member, so whatever the
-   strip gains it has to absorb. Capping it while .ss-hist is pushed right by
-   margin-left:auto opened the surplus as a hole between the band chips and the
-   history block -- 396px of it at 1560 with the brief rail closed. Widening
-   costs nothing here, unlike the SVG timelines: the bar is flexed divs and the
-   ticks are placed by percentage, so no type is magnified, and a longer scale
-   only separates the zones more clearly. */
-.ss-gauge{position:relative; flex:1; min-width:180px;
-  height:50px; cursor:help}
-.ss-bar{display:flex; height:14px; border-radius:7px; overflow:hidden; margin-top:18px}
-.ss-bar i{height:100%}
-.ss-marker{position:absolute; top:6px; left:0; width:3px; height:26px;
-  background:var(--ink); border-radius:2px; transform:translateX(-50%); z-index:2}
-.ss-marker::after{content:''; position:absolute; top:-6px; left:50%;
-  transform:translateX(-50%); width:13px; height:13px; border-radius:50%;
-  background:var(--ink); border:2px solid #fff; box-shadow:0 2px 6px rgba(20,30,44,.35)}
-/* Ticks are absolutely placed at their true scale position -- see
-   derive/scoring.gauge(). Evenly spacing them mispositioned the boundaries
-   relative to the marker. */
-.ss-ticks{position:relative; height:12px; margin-top:6px;
-  font-family:var(--font-mono); font-size:8.5px; color:var(--ink-4)}
-.ss-ticks i{position:absolute; font-style:normal; transform:translateX(-50%); white-space:nowrap}
-.ss-ticks i:first-child{transform:none}
-.ss-ticks i:last-child{transform:translateX(-100%)}
-
-.ss-hist{display:flex; flex-direction:column; flex:none; margin-left:auto;
-  padding-left:26px; border-left:1px solid var(--line); gap:6px}
-.ss-hist .ss-k{cursor:help}
-/* The file-length figure is a peer of the score, so it takes the same type at
-   the same size -- two headline numbers reading as one pair. */
-/* Figure, then a narrow column carrying the vintage band over the unit word.
-   Both share the column's width, which the word sets -- so the band stretches
-   to it. The column fits inside the line the 38px figure already occupies. */
-.ss-hline{display:flex; align-items:center; gap:9px}
-.ss-hv{font-family:var(--font-display); font-weight:800; font-size:38px;
-  line-height:.95; letter-spacing:-.03em; color:var(--ink)}
-/* The column beside the figure now carries BOTH small lines -- the unit word
-   and the since-date. Together they measure ~35px, which fits inside the line
-   the 38-46px figure already occupies, so they cost the block nothing. That is
-   what funds the vintage bar above. */
-.ss-hunit{display:flex; flex-direction:column; align-items:flex-start; gap:2px}
-/* The unit is a word, not part of the figure: body type, small and light, so
-   it annotates the number instead of competing with it. */
-.ss-hu{font-size:10px; font-weight:400; line-height:1; color:var(--ink-3)}
-/* Solid brand blue, not a wash: the vintage band has to carry from across the
-   strip, and blue keeps it out of the red/amber/green risk vocabulary -- file
-   length is a fact about the file, not a grade.
-   Full width of the block and label-left / code-right, so it reads as a stated
-   band rather than as two characters floating in a lot of blue. */
+.ss-hist{display:flex; flex-direction:column; gap:6px}
+/* Solid brand blue, not a wash: file length is a fact about the file, not a
+   grade, so it stays out of the red/amber/green risk vocabulary. Label left,
+   code right, so it reads as a stated band. */
 .ss-vint{display:flex; align-items:center; justify-content:space-between;
-  gap:10px; font-size:14px; font-weight:700; line-height:1.2; padding:3px 9px;
-  border-radius:5px; color:#fff; background:var(--fh-blue);
+  gap:10px; font-size:14px; font-weight:700; line-height:1.2; padding:4px 12px;
+  border-radius:7px; color:#fff; background:var(--fh-blue);
   border:1px solid var(--fh-blue); cursor:help}
 .ss-vint-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
   text-transform:uppercase; font-weight:600; opacity:.8}
-.ss-hs{font-size:11.5px; color:var(--ink-2); font-weight:500}
+.ss-hline{display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; cursor:help;
+  padding:0 2px}
+.ss-hv{font-family:var(--font-display); font-weight:800; font-size:22px;
+  line-height:1; letter-spacing:-.02em; color:var(--ink)}
+.ss-hu{font-size:11.5px; color:var(--ink-2); font-weight:500}
+.ss-hs{font-size:11.5px; color:var(--ink-3); font-weight:500}
 
-/* ========== 04 INCOME ========== */
+/* Two half-width cards on one row (sections/__init__.py: a nested tuple in
+   SECTIONS). Stretch keeps the pair's edges level; below 1180px they stack. */
+.sec-pair{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:14px; align-items:stretch}
+
+/* ========== INCOME (sections/income.py) ========== */
 .trend-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px}
 .trend-title{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); font-weight:500}
 .chart-svg{width:100%; height:auto; display:block}
@@ -332,6 +298,9 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
   text-overflow:ellipsis}
 .inc-latest.none .inc-latest-v{font-family:var(--font-body); font-size:12px;
   font-weight:500; color:var(--ink-3)}
+/* A dispute on the record behind the header figure. Never shrinks: the
+   employer text beside it clips first, the flag must stay readable. */
+.inc-latest-flag{flex:none; font-size:10px; padding:1px 7px; align-self:center}
 
 /* The timeline. Its height comes from the lane count, so a five-employer
    payload is taller than a one-employer payload rather than squashed.
@@ -398,7 +367,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .other-inc{margin-top:18px; padding-top:16px; border-top:1px dashed var(--line-2)}
 .other-inc .trend-title{margin-bottom:9px}
 
-/* ========== RETURNS (rendered section 04; sections/returns.py) ==========
+/* ========== RETURNS (sections/returns.py) ==========
    Shares the two-half .inc-split frame and the tray/legend classes with
    the income section. The .tl-* family below the returns rules belongs to
    the application timeline -- do not fold it into this block. */
@@ -474,13 +443,16 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
    that still reads without hovering. Amber: context, not arrears. */
 .tl-event .mk.disp{box-shadow:0 2px 6px rgba(20,30,44,.25), 0 0 0 2.5px var(--amber)}
 .ek-mk.disp{box-shadow:0 0 0 2.5px var(--amber)}
+/* A phase other than Requested / Disbursed: dashed, so it cannot be read as
+   either -- its own text is in the hover. */
+.enq-tl .mk.other,.ek-mk.other{border-style:dashed; border-color:var(--ink-3)}
 /* Role letter in the legend: the same letter shown beside the provider code
    above a marker ("B04 · G"). */
 .ek-role{font-family:var(--font-mono); font-size:10px; font-weight:700;
   color:var(--ink-2)}
 .ek-note{margin-left:auto; font-style:italic; color:var(--ink-4)}
 
-/* ========== 05 WORST STATUSES ==========
+/* ========== WORST STATUSES (sections/worst_status.py; rendered 03) ==========
    Three panels, one per window. The count is the data: AECB delivers a
    24-month status, a life-time count, and nothing at all for 36 months, so
    this is repeat(3,1fr) for the same reason .fac-grid is repeat(4,1fr) and
@@ -513,7 +485,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .wsx-sub .v.red{color:var(--red)}
 /* The pending panel. Same dashed "stated absence" vocabulary as .rec-none and
    .fac.empty, sized down to sit inside a panel rather than fill a card. It is
-   the tallest member of the row, so it alone sets §05's height -- compressing
+   the tallest member of the row, so it alone sets the section's height -- compressing
    the other two panels does nothing until this one comes down. */
 .wsx-panel .empty-state{margin:9px 0 0; padding:9px 10px; text-align:left}
 .wsx-panel .es-msg{font-size:12.5px; line-height:1.2}
@@ -687,6 +659,9 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .role{font-size:8.5px; font-weight:700; padding:0 5px; border-radius:3px; white-space:nowrap; border:1px solid}
 .role.co{background:#EAF0F6; color:#3f566d; border-color:#D3DEE9}
 .role.gtr{background:var(--brass-wash); color:#6f5320; border-color:#E0D2AE}
+/* A delivered role the config cannot read: stated, neutral, never assumed. */
+.role.unk{background:var(--surface-3); color:var(--ink-2); border-color:var(--line); cursor:help}
+.hm-name[data-info]{cursor:help}
 .hm-legend{display:flex; align-items:center; gap:13px; padding:9px 12px; border-top:1px solid var(--line); background:var(--surface-2); flex-wrap:wrap}
 .lg{display:flex; align-items:center; gap:5px; font-size:10px; color:var(--ink-2); font-weight:500}
 .lg i{width:11px; height:11px; border-radius:3px; flex:none}
@@ -758,9 +733,7 @@ body.rail-off .rail{display:none}
   .inc-detail{padding-right:0}
   .inc-vis{padding-left:0; border-left:none; padding-top:18px;
     border-top:1px solid var(--line)}
-  .score-strip{flex-wrap:wrap; gap:16px 22px}
-  .ss-gauge{order:3; flex-basis:100%}
-  .ss-hist{margin-left:0; order:2}
+  .sec-pair{grid-template-columns:minmax(0,1fr)}
   .id-name-ar{margin-left:0; width:100%}
   .facts{grid-template-columns:repeat(2,1fr)}
   .facts.id-grid{grid-template-columns:repeat(2,1fr)}
@@ -783,13 +756,12 @@ body.rail-off .rail{display:none}
   /* The header label stays one row at every width; this narrow, the employer
      and tenure clip rather than pushing the section title onto a second line. */
   .inc-latest-s{max-width:150px}
-  .ss-gauge{display:none}
-  .ss-hist{padding-left:0; border-left:none}
+  .sp{flex-wrap:wrap}
   .facts,.facts.id-grid{grid-template-columns:1fr}
   .fact.c2,.fact.c3,.fact.c6{grid-column:span 1}
 }
 /* ---------- FOLDED SUB-SECTION (shared) ----------
-   Section 04's "Earlier" fold. This used to also carry section 06's "Card
+   The returns section's "Earlier" fold. This used to also carry section 06's "Card
    utilisation" block, whose .card-behaviour / .cb-* family went with the
    06 rebuild on 7 Aug 2026 -- but .sub-wrap itself is SHARED and must stay. */
 .sub-wrap{margin-top:16px; padding-top:14px; border-top:1px dashed var(--line-2)}
@@ -834,6 +806,9 @@ body.rail-off .rail{display:none}
 .tb-valid.expired .pd{background:var(--red)}
 .tb-valid.unknown{background:var(--surface-3); border-color:var(--line); color:var(--ink-2)}
 .tb-valid.unknown .pd{background:var(--ink-3)}
+/* Report date after today: ungradable rather than lapsed, so amber, not red. */
+.tb-valid.future{background:var(--amber-wash); border-color:var(--amber-line); color:var(--amber-ink)}
+.tb-valid.future .pd{background:var(--amber)}
 
 /* empty category card keeps the grid rhythm rather than collapsing */
 /* These used to lean on a generic `.empty` rule that nothing else generated;
@@ -849,7 +824,7 @@ body.rail-off .rail{display:none}
 .hm-rl-s .stat.cov.thin b{color:var(--amber-ink)}
 .hm-rl-s .stat.cov{cursor:help}
 
-/* section 04/09 notes */
+/* income notes */
 .inc-note{margin-top:14px; padding-top:12px; border-top:1px dashed var(--line-2);
   font-size:11.5px; color:var(--ink-2); line-height:1.5}
 .inc-note b{color:var(--ink)}
@@ -938,7 +913,17 @@ body.rail-off .rail{display:none}
    reads left to right as a single sentence: is the report valid, when was it
    pulled, how far through the window is it, when does it lapse.
    Everything is sized to sit inside the 52px bar without crowding it. */
-.tb-valid-strip{display:flex; align-items:center; gap:14px; min-width:0; flex:1}
+/* overflow:hidden is the safety net: should a delivered value outgrow the
+   breakpoints below (a longer ReportType from the bureau), the strip clips at
+   its own edge instead of sliding under the AI Analysis button.
+   flex-basis is auto, not 0: with `flex:1` the strip split the bar's free
+   space evenly with .tb-spacer regardless of its content, so it was sized
+   narrower than what it holds and the overflow ran under the button. */
+.tb-valid-strip{display:flex; align-items:center; gap:14px; min-width:0;
+  flex:1 1 auto; overflow:hidden;
+  /* Half a marker: at 100% the .tv-dot overhangs the meter by 6px, and when
+     the meter is the strip's last visible child the clip would halve it. */
+  padding-right:6px}
 
 .tv-field{display:flex; align-items:baseline; gap:5px; white-space:nowrap}
 .tv-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.06em;
@@ -949,12 +934,16 @@ body.rail-off .rail{display:none}
 .tv-note{font-size:11px; color:var(--ink-3); font-style:italic}
 
 /* The meter is the one piece of visualisation the bar carries, so it gets the
-   flexible space and stays legible down to ~120px. */
-.tv-meter{position:relative; flex:1; min-width:130px; max-width:300px;
+   flexible space. Its 100px floor is what lets 1280/1440 windows keep the
+   dates / EnquiryType chip (measured 24 Sep 2026). */
+.tv-meter{position:relative; flex:1; min-width:100px; max-width:300px;
   height:12px; cursor:help}
+/* Two colours only (user decision, 24 Sep 2026): the fill is the days elapsed,
+   green while the report is valid and red once it is not; the plain neutral
+   track is the days remaining. No zones -- an amber/red band inside the
+   window once painted a valid report's marker red beside a green pill. */
 .tv-track{position:absolute; top:3px; left:0; right:0; height:6px; border-radius:4px;
-  background:linear-gradient(90deg,var(--green-wash) 0%,var(--green-wash) 70%,
-    var(--amber-wash) 70%,var(--amber-wash) 90%,var(--red-wash) 90%,var(--red-wash) 100%)}
+  background:var(--line)}
 .tv-fill{position:absolute; top:3px; left:0; height:6px; border-radius:4px;
   background:var(--green); opacity:.85}
 .tv-fill.over{background:var(--red); opacity:.8}
@@ -963,18 +952,26 @@ body.rail-off .rail{display:none}
   box-shadow:0 1px 4px rgba(20,30,44,.28)}
 .tv-dot.over{border-color:var(--red)}
 
-/* Narrow windows: shed the dates before the meter, then the meter before the
-   pill. The pill is the part that must never disappear.
+/* Narrow windows: shed the EnquiryType chip first (its value also sits in the
+   ReportType chip's hover), then the dates, then the meter. The pill is the
+   part that must never disappear.
 
-   Measured: the full strip needs ~872px with the FH monogram. A supplied
-   wordmark logo can add ~145px, and the 19px wordmark added ~55px on top of
-   that, so the first breakpoint moved 1040px -> 1100px -- still past any normal
-   laptop, and the dates now shed at the width they actually start to crowd. */
-@media (max-width:1100px){
+   Re-measured 24 Sep 2026 after the scope chips arrived: with both chips the
+   full strip needed ~1400px, so every 1280/1366 laptop ran the meter under
+   the AI Analysis button. The breakpoints below come from a headless-Chrome
+   sweep of both reference payloads in every validity state (worst case: the
+   expired strip, "2.1 years ago" + "Valid until") -- verified unclipped at
+   every 20px from 800 to 1600px plus 1110/1280/1366/1440/1536. 1440 and
+   1280 screens keep the full strip and the dates respectively. Re-measure if
+   the strip gains an element or a label grows. */
+@media (max-width:1439px){
+  .tb-scope-et{display:none}
+}
+@media (max-width:1279px){
   .tv-field{display:none}
   .tv-meter{max-width:220px}
 }
-@media (max-width:800px){
+@media (max-width:1109px){
   .tv-meter{display:none}
 }
 
@@ -1054,14 +1051,9 @@ body.rail-off .rail{display:none}
   @media (max-width:820px){body,body.rail-off{--colw:calc(100vw - 32px)}}
 
   /* --- 02 SCORE: the surplus is spent on SIZE ---
-     The strip has no repeating unit to add a column of, and its gauge is
-     already flex:1 with no cap, so it absorbs width by construction. What is
-     left to gain is the prominence of the two figures.
-
-     .ss-val and .ss-hv are a declared pair (see the comment on .ss-hv above),
-     so they take one declaration and cannot drift apart: 38px -> 46px, which
-     renders 45.755px at the 1560 design viewport. */
-  .ss-val,.ss-hv{font-size:calc(38px + 8 * var(--f,0px))}
+     The dial is SVG and scales with its box (capped at 300px), so its score
+     grows with it; the side column's type grows a little to keep pace. */
+  .ss-hv{font-size:calc(22px + 3 * var(--f,0px))}
 
   /* The chips and the vintage tile annotate those figures, so they grow with
      them -- by much less, or they stop reading as annotation.
@@ -1080,7 +1072,7 @@ body.rail-off .rail{display:none}
   .id-name-lg{font-size:calc(24px + 3 * var(--f,0px))}
   .id-name-ar{font-size:calc(17px + 2 * var(--f,0px))}
 
-  /* --- 05 WORST STATUSES ---
+  /* --- WORST STATUSES ---
      The figure IS the panel: an underwriter reads the status and moves on.
      Nothing below it gets narrowed by a density step (there is none here --
      see the note in the density query), so it can take the size outright. */
@@ -1146,7 +1138,7 @@ body.rail-off .rail{display:none}
      growing them would crowd an axis whose whole job is to keep 15 events
      legible side by side. */
 
-  /* --- 03 INCOME + 04 RETURNS ---
+  /* --- INCOME + RETURNS ---
      These two are one unit: they share the .inc-split frame and the .rec
      record-tile vocabulary, so they cannot be converted separately.
 
@@ -1157,7 +1149,7 @@ body.rail-off .rail{display:none}
      !! THIS BLOCK MOVES PYTHON CONSTANTS !!
      .rec-t, .rec-meta and .ret-amt determine the rendered HEIGHT of the
      record tiles, and sections/returns.py _TILE_BASE / _TILE_ENTRY mirror that height
-     in order to size section 04's timeline to the tiles beside it. Both were
+     in order to size the returns timeline to the tiles beside it. Both were
      re-measured at 1560 with the rail closed after this block landed. Change
      a size here and they must be re-measured again -- there is no automated
      guard, only the witness printed by the probe harness. */
@@ -1199,11 +1191,11 @@ body.rail-off .rail{display:none}
    however wide the (now uncapped) column grows past the four-up threshold,
    the row stays at four and the tiles absorb the width.
 
-   r2-1 / r2-2 says how many tiles the second row was built from -- Python
-   knows, CSS cannot ask without :has(), which is Chrome 105 like container
-   queries. Without it the no-e-mail payload would leave row one at 9 of 12
-   tracks: a hole that does not exist today. With it, that payload spans row
-   one 4-wide and stays full.
+   r2-2 says the second row was built from two tiles -- Python knows, CSS
+   cannot ask without :has(), which is Chrome 105 like container queries.
+   Since 24 Sep 2026 row two is always E-mail + Address (an absent e-mail
+   states "Not reported" instead of vanishing), so the old r2-1 shape and
+   its rule are gone.
 
    minmax(0,1fr) rather than 1fr: 1fr is minmax(auto,1fr), and the unbreakable
    mono Emirates ID can force a track past its share. .fact .v .mono already
@@ -1218,16 +1210,13 @@ body.rail-off .rail{display:none}
      specificity to outrank a selector it should never have competed with. */
   body.rail-off .facts.id-grid.r2-2 > .fact.c2,
   body.rail-off .facts.id-grid.r2-2 > .fact.c3:not(.v-wide){grid-column:span 3}
-  /* One tile on row two: row one keeps three tiles, a third each, and stays
-     full at 12 tracks rather than leaving the fourth quarter empty. */
-  body.rail-off .facts.id-grid.r2-1 > .fact.c2{grid-column:span 4}
   /* The long value always takes the row to itself. */
   body.rail-off .facts.id-grid > .fact.v-wide{grid-column:span 12}
   /* Full width, so the address carries the same size as every other value
      instead of the reduced step it needs when sharing a row. */
   body.rail-off .facts.id-grid > .fact.v-wide .v-addr{font-size:13px}
 
-  /* --- 05 WORST STATUSES has no density move, by the page-wide rule ---
+  /* --- WORST STATUSES has no density move, by the page-wide rule ---
      Its column count is the data (three delivered windows), exactly like
      .fac-grid's four categories, so there is nothing here to re-column. The
      key/value rows that used to go two-up are gone with the redesign; each

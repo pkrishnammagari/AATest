@@ -84,15 +84,28 @@ def _aside(ctx):
     totals = ctx.totals
     parts = []
 
+    # The key figure of the section: stated even when absent. Its hover says
+    # what it counts, because the card balances below never add up to it --
+    # by construction, not by error.
     exposure = totals.get("TotalExposure")
     if exposure is not None:
-        parts.append(c.tag('Total exposure <b>%s</b>' % c.aed(exposure)))
+        parts.append('<span class="tag" data-info="%s">Total exposure <b>%s</b></span>'
+                     % (c.attr("AECB's total exposure counts each revolving "
+                               "facility's full credit limit, not its drawn "
+                               "balance, so it won't equal the balances below. "
+                               "Currency assumed AED: the payload carries no "
+                               "currency field."), c.aed(exposure)))
+    else:
+        parts.append(c.tag('<span class="na">Total exposure not reported</span>'))
 
     # How recently the customer last took on credit. §02 carries the oldest
     # facility as the vintage; this is the other end of the same axis.
     newest = totals.get("NewestContractOpenDate")
     if dates.parse_any(newest):
         parts.append(c.tag('Newest facility <b>%s</b>' % dates.fmt_short(newest)))
+    elif newest is not None:
+        parts.append(c.tag('Newest facility — <span class="na">unreadable date '
+                           '%s</span>' % c.esc(newest)))
 
     # Only when there IS guaranteed exposure. A zero here is what backs the
     # per-category "no guaranteed exposure" lines, so showing it as a chip too

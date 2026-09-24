@@ -21,7 +21,7 @@ else.
 
 from __future__ import annotations
 
-from .sections import SECTIONS
+from .sections import flat_sections
 from . import components as c
 
 # How a severity reads on the card. The class feeds the wash-triad CSS; the
@@ -37,7 +37,7 @@ _SEVERITY_LABELS = {
 def _section_map():
     """section module name -> (anchor id, displayed number, plain title)."""
     out = {}
-    for index, module in enumerate(SECTIONS, start=1):
+    for index, module in enumerate(flat_sections(), start=1):
         name = module.__name__.rsplit(".", 1)[-1]
         title = (module.META.get("title", "")
                  .replace("&amp;", "&").replace("&nbsp;", " "))

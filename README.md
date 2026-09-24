@@ -4,8 +4,8 @@ Renders an archived AECB bureau payload as a single scannable underwriting
 screen, to collapse time-to-decision on an individual customer report.
 
 **Status: wired to the payload, and on a fluid scale.** All eight sections
-render the real customer. Section 05's 36-month panel is **derived** (built
-9 Sep 2026 to RRM defaults — see *§05 worst statuses* below): AECB delivers no
+render the real customer. Section 03's 36-month panel is **derived** (built
+9 Sep 2026 to RRM defaults — see *§03 worst statuses* below): AECB delivers no
 36-month worst status, so it is computed from the delivered conduct evidence
 and always marked `derived`. All eight sections grow and shrink with the space
 available; every section has also been through a design pass.
@@ -115,7 +115,7 @@ Design decisions worth knowing before changing anything:
   `:has()`** (both Chrome 105, above the ~Chrome 88 floor the code already
   requires, and the downloaded file is opened years later on an unknown
   machine); and **`.rec-t` / `.rec-meta` / `.ret-amt` move Python** — they set
-  §04's record-tile heights, which `sections/returns.py`'s `_TILE_BASE` /
+  §05's record-tile heights, which `sections/returns.py`'s `_TILE_BASE` /
   `_TILE_ENTRY` mirror, so those constants must be re-measured (not reasoned
   about) after any change to them. An *element* spends its surplus on either size or density,
   never both: §01's tiles get narrower at the density step, so their type gains
@@ -123,7 +123,7 @@ Design decisions worth knowing before changing anything:
   `min-width:1510px` scoped to `body.rail-off`, and only **§01** (grid 4-up) and
   **§07** (legend 4-up) take it. A section whose column count is *data-driven*
   gets no density move by design — four AECB categories, four counters, 36
-  months, and since 7 August 2026 §05's three delivered windows.
+  months, and since 7 August 2026 §03's three delivered windows.
 - **The brief rail loads closed**, so the wide layout is the *default* layout.
   The underwriting screen is the deliverable and the AI reading is opt-in; with
   no model wired, an open rail would greet every user with its own "no brief
@@ -134,8 +134,8 @@ Design decisions worth knowing before changing anything:
   changes.
 - **Charts never carry literals.** The heatmap and enquiry charts read
   `window.__AECB`, assembled in `js.py`, so wiring them means changing what
-  Python puts in the blob, not the JavaScript. §03 and
-  §04 instead build their timelines as inline SVG in the section module,
+  Python puts in the blob, not the JavaScript. §04 and
+  §05 instead build their timelines as inline SVG in the section module,
   because whether a timeline can be drawn at all depends on which dates the
   payload carries — see those sections below. Their shared time axis lives in
   `aecb/render/svgtime.py`.
@@ -188,31 +188,32 @@ Both render as explicit `n/a` rather than blank.
 
 | What | Why it's blocked |
 |---|---|
-| §05 36-month worst status — refinements | **Built 9 Sep 2026** to RRM defaults (whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD). Still open from the original six questions: whether to derive a like-for-like 24-month figure as a reconciliation against AECB's delivered one, and whether guarantor conduct should be flagged rather than merely included. |
+| §03 36-month worst status — refinements | **Built 9 Sep 2026** to RRM defaults (whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD). Still open from the original six questions: whether to derive a like-for-like 24-month figure as a reconciliation against AECB's delivered one, and whether guarantor conduct should be flagged rather than merely included. |
 | `MaxCurrentPaymentDelay` | The payload delivers `1` while `MaxPaymentDelay24M` is `0`, every contract's `Current_DaysPaymentDelay` is `0` and all 99 `contractsHistory` rows are 0 DPD. **Nothing on screen reads it**, by decision, until AECB explains the discrepancy — showing it would state a contradiction the file cannot resolve. |
 | §02 score cut-offs | `config/bands.json` places 732 in **VLR**, but AECB delivered **LR**. The delivered band wins and the screen shows a warning. The configured cut-offs are provisional and need reconciling against the FH scorecard. |
-| Provider names | `config/providers.json` is a stub, so the sections that name a reporting provider show its code instead: **§01, §03, §04, §07's heatmap and §08's timeline** (`B08`, `T05`, `C04`). §05 and §06 carry no provider codes at all. |
+| Provider names | `config/providers.json` is a stub, so the sections that name a reporting provider show its code instead: **§01, §04, §05, §07's heatmap and §08's timeline** (`B08`, `T05`, `C04`). §03 and §06 carry no provider codes at all. |
 
-### §02 score — the strip's height is set by one member
+### §02 score — a half-width dial beside §03
 
-`.score-strip` is `align-items:center`, so its height is its tallest child, and
-that child is **`.ss-hist`** (the bureau-history block). Measured at 1560 it was
-82.17 closed / 74.09 open — *exactly* the strip, i.e. zero slack — while
-`.ss-score` and `.ss-gauge` sat 22–32px under it and `.ss-bands` had 13–18px
-spare. Anything added to the history block grows the section one-for-one;
-anything added to the band chips, up to that slack, is free. None of that is
-visible in the CSS, so measure before changing §02.
+Since 24 Sep 2026 (user decision) §02 is a **half-width card** sharing a
+`.sec-pair` row with §03 worst statuses — a nested tuple in
+`sections/__init__.SECTIONS` makes the row, and position still assigns the
+numbers (worst statuses moved up from 05 to 03; income is now 04, returns 05).
+The two cards measure ~250px together against ~356px stacked; below 1180px they
+stack. Income stays full width: it loads collapsed and its chart needs the
+width.
 
-That is why the **vintage bar** (a full-width `VINTAGE … B3` band across the top
-of the block) is *paid for* rather than added: `months` and `Since …` fold into
-the column beside the figure, where they fit inside the line the 38–46px figure
-already occupies, and the `Bureau history` caption goes, its provenance tooltip
-moving onto the figure. The block ends up shorter than before.
+The card is a **semicircular dial** — inline SVG built in `score.py`, zones
+coloured from `tokens.py` by each FH band's configured tone, the marker at the
+score, the score in the bowl — with the FH chip, the AECB chip (*J · Good*,
+letter first), the vintage bar and the bureau-history line stacked to its right.
+Colour follows the FH bands throughout. When the configured cut-offs put the
+score in a different band from the delivered one, an amber `!` on the dial's
+shoulder says so; the delivered band still wins. A missing score keeps the card
+(zones, chips, history) and shows the bureau's `ErrorDescription` when sent.
 
-The **band chips** are filled solid with white text rather than the old pale
-wash, at 15px rather than 12px. Solid is where the prominence comes from — 15px
-is simply what the slack allowed. `_FILL` / `_LINE` in `score.py` map only
-`red` and `amber`, with green as the fallback for the green tones.
+The **band chips** are filled solid with white text. `_FILL` in `score.py`
+maps only `red` and `amber`, with green as the fallback for the green tones.
 `scoring.fh_band()` returns a **neutral** tone for a band code the config does
 not know, and the chip renders uncoloured — green is the best-case colour, and
 an unrecognised risk band has earned no colour.
@@ -238,9 +239,10 @@ Two markers come from Python, because CSS cannot ask these questions without
 
 - **`v-wide`** on the address tile — it always carries the longest value, so it
   always takes the whole row.
-- **`r2-N`** on the grid — how many tiles row two was built from. Without it, a
-  payload with no e-mail leaves row one at 9 of 12 tracks: a hole that does not
-  exist today. With it, that payload spans row one 4-wide and stays full.
+- **`r2-N`** on the grid — how many tiles row two was built from. Since
+  24 Sep 2026 the E-mail tile always renders (*Not reported* rather than
+  vanishing), so row two is always two tiles and the marker is always `r2-2`;
+  the old `r2-1` shape and its rule are gone.
 
 `auto-fit`/`minmax()` is deliberately not used: an unnameable track count against
 an explicit `span 3` produces orphan holes at some widths, and `c2`/`c3`/`c6`
@@ -260,7 +262,84 @@ passport's third line put dead space in all of its neighbours. It needs about
 than fixed — forcing it back to a block at those widths would reinstate exactly
 the layout this change removed, and every tile is cramped at that size anyway.
 
-### §03 income & employment — what gets drawn, and why
+### §03 worst statuses — three windows, two of them delivered
+
+FH policy differs by employer segment: some segments are assessed over 24 months
+and some over 36. The card carries both windows side by side so an underwriter
+applies the right one rather than reading a single figure that answers half the
+book. A third panel carries the life-time count.
+
+| panel | source | state |
+|---|---|---|
+| Worst status · last 24 months | `contractsTotalSummary.WorstStatus24M` | delivered, shown **verbatim** |
+| ↳ Max payment delay · 24m | `contractsTotalSummary.MaxPaymentDelay24M` | delivered, shown **verbatim** |
+| Worst status · last 36 months | `contractsHistory` + each contract's dated `WorstStatus`/`MaxDaysPaymentDelay` | **derived** (9 Sep 2026, RRM defaults) |
+| ↳ Max payment delay · 36m | same evidence | **derived** |
+| Life-time worst status count · non-services | `summary.Worststatus` | delivered, shown **verbatim** |
+
+The delay sits **under the status it qualifies**, not in a fourth panel. A worst
+status is a grade and carries no magnitude — *Active Payments* says the customer
+is not delinquent, never how late they have ever been — so the two belong
+together. A delivered `0` is a fact (never late in the window) and prints as
+`0 days`; only a missing field is an absence. It cost §03 nothing in height —
+the pending panel is the tallest member and sets the row on its own, which is
+also why compressing the other two panels does nothing until that one comes
+down. §03 is 186 / 201.
+
+**Verbatim is the requirement, not a shortcut** (RRM, Aug 2026). The delivered
+text is printed as it arrived — no relabelling, no rounding, no translating
+display text into a letter code. `check_report.py` reads the figures back out
+of the `.wsx-worst` panels and fails the build if either stops matching its
+payload field; a plain substring search could not do that, because the life-time
+count is `0` and `0` appears all over the page.
+
+The **only** thing the module derives is the colour, and it grades nothing it
+cannot recognise. `ReportContext.status()` refuses to grade the unknown too:
+anything it cannot match comes back as code `?` with rank `None`, and the
+heatmap paints it in a distinct *unknown* tone (`.su`, a dashed ring) — never
+green, and never under an invented letter (deriving a code from the first
+letter of the text used to collide with real codes: `Closed` → `C`, which is
+Settlement's glyph). `_known_status()` still resolves strictly on code or on
+label and returns `None` otherwise, because this panel wants the config row
+itself rather than a resolver result; an unrecognised status renders uncoloured
+with a *Partly reported* header pill. The life-time figure is
+a count, so a non-zero one is amber rather than red — a count says how many,
+never how deep, and the depth is §07's job.
+
+The 36-month panel is **derived and always marked so** (RRM instruction, 9 Sep
+2026 — the chip renders even over the not-derivable empty state, because
+nothing in that panel is ever a bureau figure). The derivation is
+`derive/facilities.worst_in_window()`, reinstated from git with the RRM
+defaults: **every contract counts** — closed ones and every role included — and
+evidence is the monthly `contractsHistory` rows in the window **plus each
+contract's dated lifetime worst fields** (`WorstStatus`/`WorstStatusDate`,
+`MaxDaysPaymentDelay`/`MaxDaysPaymentDelayDate`) whenever their date falls
+inside it, which lets a closure the monthly rows never covered still grade the
+window. The two hard-won rules from the original implementation survive: a
+clean book must not attribute a "worst" to whichever contract iterated first,
+and a severe status outranks a raw DPD number when naming what happened. A
+status the config cannot rank makes the window **unknown, never clean**; the
+`derived` chip's hover carries the method and the coverage figures; the
+figure's own hover names the worst event (facility, provider, month, closed or
+not). Its max-delay sub-line prints `0 days` only when a zero was actually
+reported somewhere in the window — with no delay figure delivered at all it
+says *Not reported*.
+
+`.wsx` is `repeat(3,1fr)` and takes **no density step**: three windows is the
+data, exactly as `.fac-grid`'s four categories are. The panels stretch to the
+tallest of the row, and the figure carries `margin:auto 0` to sit centred in
+the space rather than floating above a void.
+
+Coverage note: in the reference payload `contractsHistory` gives **69
+facility-months across 13 contracts** inside 24 months and **95 across 15**
+inside 36, against a report date of 2023-10-26 — every row `Active Payments`
+at 0 DPD, so the derived panel reads clean there and adverse on the synthetic
+fixture (Write-off · 214 days, matching the delivered 24M anchor). The
+section's adverse paths are also exercised by `scripts/measure/synthetic.py`
+(`ws-severe`, `ws-adverse`, `ws-unknown`, `ws-absent`, `ws-count`,
+`ws-count-absent`).
+
+### §04 income & employment — what gets drawn, and why
 
 The card is two halves: **what the bureau delivered**, verbatim, on the left;
 **what can be drawn from it** on the right. The left half never depends on the
@@ -275,7 +354,7 @@ to *Salary on file*, when nothing establishes which is newest. It never borrows
 a different employer's figure to fill the slot.
 
 AECB delivers one `GrossAnnualIncome` per employment row and **no series**, so
-what §03 can draw depends entirely on which of that row's dates arrived.
+what §04 can draw depends entirely on which of that row's dates arrived.
 `derive/income.py` decides between four states and the section renders the
 decision; it never fills a gap to reach a nicer one.
 
@@ -323,7 +402,7 @@ whether it can be drawn at all is a question about the payload's dates, and
 that decision belongs next to the data it is made from rather than split
 across two languages.
 
-### §04 returns — built from the returns themselves
+### §05 returns — built from the returns themselves
 
 `paymentOrder` rows are events (one returned instrument each), reaching back
 years. The `summary` block's three-month counters are **deliberately not
@@ -331,7 +410,7 @@ read** — their window cannot describe the list, and whether their figure is an
 amount or a count is unverified (RRM decision, Aug 2026). Every count on the
 card is a count of the rows on it.
 
-Same two-half grammar as §03, **window first, instrument second**: a *"Last 6
+Same two-half grammar as §04, **window first, instrument second**: a *"Last 6
 months"* section holding one tile per instrument (Bounced cheques, Unpaid
 direct debits), then a folded *"Earlier"* section with the same tile
 arrangement inside. In the open section an instrument with nothing still gets
@@ -346,7 +425,7 @@ right half plots the same events on a shared-axis timeline, marker letter =
 instrument, marker colour = severity tone from `config/returns.json`; a return
 without a `ReturnDate` is listed but never plotted. The whole-array empty
 state still distinguishes *requested and clean* / *not requested* /
-*unverified* via `sectionStatus.ReportType`, and the axis is shared with §03
+*unverified* via `sectionStatus.ReportType`, and the axis is shared with §04
 (`aecb/render/svgtime.py`) so the two timelines cannot drift.
 
 The **review window** (`window_months`, 6) is ours, not AECB's. On the
@@ -402,83 +481,6 @@ The quiet and whole-array-empty states are still synthetic-only, and the first
 real adverse payload should be reviewed against this section. Provider class `C`
 (seen on the injected returns) is not named in `config/providers.json` and falls
 back to its code.
-
-### §05 worst statuses — three windows, two of them delivered
-
-FH policy differs by employer segment: some segments are assessed over 24 months
-and some over 36. The card carries both windows side by side so an underwriter
-applies the right one rather than reading a single figure that answers half the
-book. A third panel carries the life-time count.
-
-| panel | source | state |
-|---|---|---|
-| Worst status · last 24 months | `contractsTotalSummary.WorstStatus24M` | delivered, shown **verbatim** |
-| ↳ Max payment delay · 24m | `contractsTotalSummary.MaxPaymentDelay24M` | delivered, shown **verbatim** |
-| Worst status · last 36 months | `contractsHistory` + each contract's dated `WorstStatus`/`MaxDaysPaymentDelay` | **derived** (9 Sep 2026, RRM defaults) |
-| ↳ Max payment delay · 36m | same evidence | **derived** |
-| Life-time worst status count · non-services | `summary.Worststatus` | delivered, shown **verbatim** |
-
-The delay sits **under the status it qualifies**, not in a fourth panel. A worst
-status is a grade and carries no magnitude — *Active Payments* says the customer
-is not delinquent, never how late they have ever been — so the two belong
-together. A delivered `0` is a fact (never late in the window) and prints as
-`0 days`; only a missing field is an absence. It cost §05 nothing in height —
-the pending panel is the tallest member and sets the row on its own, which is
-also why compressing the other two panels does nothing until that one comes
-down. §05 is 186 / 201.
-
-**Verbatim is the requirement, not a shortcut** (RRM, Aug 2026). The delivered
-text is printed as it arrived — no relabelling, no rounding, no translating
-display text into a letter code. `check_report.py` reads the figures back out
-of the `.wsx-worst` panels and fails the build if either stops matching its
-payload field; a plain substring search could not do that, because the life-time
-count is `0` and `0` appears all over the page.
-
-The **only** thing the module derives is the colour, and it grades nothing it
-cannot recognise. `ReportContext.status()` refuses to grade the unknown too:
-anything it cannot match comes back as code `?` with rank `None`, and the
-heatmap paints it in a distinct *unknown* tone (`.su`, a dashed ring) — never
-green, and never under an invented letter (deriving a code from the first
-letter of the text used to collide with real codes: `Closed` → `C`, which is
-Settlement's glyph). `_known_status()` still resolves strictly on code or on
-label and returns `None` otherwise, because this panel wants the config row
-itself rather than a resolver result; an unrecognised status renders uncoloured
-with a *Partly reported* header pill. The life-time figure is
-a count, so a non-zero one is amber rather than red — a count says how many,
-never how deep, and the depth is §07's job.
-
-The 36-month panel is **derived and always marked so** (RRM instruction, 9 Sep
-2026 — the chip renders even over the not-derivable empty state, because
-nothing in that panel is ever a bureau figure). The derivation is
-`derive/facilities.worst_in_window()`, reinstated from git with the RRM
-defaults: **every contract counts** — closed ones and every role included — and
-evidence is the monthly `contractsHistory` rows in the window **plus each
-contract's dated lifetime worst fields** (`WorstStatus`/`WorstStatusDate`,
-`MaxDaysPaymentDelay`/`MaxDaysPaymentDelayDate`) whenever their date falls
-inside it, which lets a closure the monthly rows never covered still grade the
-window. The two hard-won rules from the original implementation survive: a
-clean book must not attribute a "worst" to whichever contract iterated first,
-and a severe status outranks a raw DPD number when naming what happened. A
-status the config cannot rank makes the window **unknown, never clean**; the
-`derived` chip's hover carries the method and the coverage figures; the
-figure's own hover names the worst event (facility, provider, month, closed or
-not). Its max-delay sub-line prints `0 days` only when a zero was actually
-reported somewhere in the window — with no delay figure delivered at all it
-says *Not reported*.
-
-`.wsx` is `repeat(3,1fr)` and takes **no density step**: three windows is the
-data, exactly as `.fac-grid`'s four categories are. The panels stretch to the
-tallest of the row, and the figure carries `margin:auto 0` to sit centred in
-the space rather than floating above a void.
-
-Coverage note: in the reference payload `contractsHistory` gives **69
-facility-months across 13 contracts** inside 24 months and **95 across 15**
-inside 36, against a report date of 2023-10-26 — every row `Active Payments`
-at 0 DPD, so the derived panel reads clean there and adverse on the synthetic
-fixture (Write-off · 214 days, matching the delivered 24M anchor). The
-section's adverse paths are also exercised by `scripts/measure/synthetic.py`
-(`ws-severe`, `ws-adverse`, `ws-unknown`, `ws-absent`, `ws-count`,
-`ws-count-absent`).
 
 ### §06 active credit facilities — split by role
 
@@ -708,7 +710,7 @@ payload, not a drawing detail, so the same rule that puts §07's bucketing in
 Python applies. Percentages rather than an SVG viewBox because the chart has to
 scale across two rail states and ten widths — a viewBox would magnify the 8.5px
 axis labels along with it. The shared axis in `render/svgtime.py` is
-deliberately **not** used: §03 and §04 share it so their timelines cannot drift,
+deliberately **not** used: §04 and §05 share it so their timelines cannot drift,
 and this one is non-linear by design.
 
 **The phase vocabulary is settled, and the block is closed.** AECB delivers two
@@ -801,7 +803,7 @@ wiring sections:
 ### The reference payload has been edited
 
 `ReferenceJSON/aecb_payload_archive_170623.json` shipped with `paymentOrder: []`.
-**Four synthetic returns were added on 6 August 2026** so §04 renders visibly
+**Four synthetic returns were added on 6 August 2026** so §05 renders visibly
 when the app runs — a cheque and a direct debit inside the six-month window and
 one of each outside it, carrying this file's own subject id and archive date.
 Everything else in the file follows the genuine AECB payload structure, but the
@@ -810,7 +812,7 @@ belong to a real person, so the file is safe to commit and share as the
 reference fixture. Prefer a real (anonymized) adverse payload if one arrives,
 and drop these. Note the file's `summary` counters still
 read `Amount_checks_returned_3mon: 0`, which disagrees with the injected
-September return — harmless today because §04 does not read those counters, but
+September return — harmless today because §05 does not read those counters, but
 do not wire them elsewhere without resolving it.
 
 ## Keeping the documentation current

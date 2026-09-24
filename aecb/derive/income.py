@@ -101,7 +101,7 @@ class Record:
 
 
 def build(ctx) -> dict:
-    """Everything section 03 needs, with the chart decision already made.
+    """Everything the income section needs, with the chart decision already made.
 
     Returns a dict; `chart` is one of:
 
@@ -111,13 +111,14 @@ def build(ctx) -> dict:
         'none'   nothing can be placed in time
     """
     cfg = ctx.income_cfg or {}
-    floor = cfg.get("placeholder_floor") or 0
+    # Validated when the context loads (positive), like the window below.
+    floor = cfg["placeholder_floor"]
 
     records = _order(_records(ctx))
     for rec in records:
         _classify_income(rec, floor)
         _place_point(rec)
-        _confirm(rec, ctx.report_date, cfg.get("confirmation_window_months"))
+        _confirm(rec, ctx.report_date, cfg["confirmation_window_months"])
 
     current = _current(records)
     points = [r for r in records if r.plottable]
@@ -161,7 +162,7 @@ def build(ctx) -> dict:
         "y1": _nice_ceiling(max(plotted)) if plotted else None,
         "latest": _latest(records, points, current),
         "floor": floor,
-        "currency": cfg.get("currency") or "AED",
+        "currency": cfg["currency"],
         "inferred": any(r.point_basis == "started" for r in points),
         "rows": len(ctx.rows("employment")),
     }

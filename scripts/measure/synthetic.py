@@ -60,19 +60,32 @@ window.addEventListener('load', function () {
                 equal: row.every(function (t) { return t.h === row[0].h; })};
       });
 
-    var pp = null;
-    tiles.forEach(function (t) { if (t.querySelector('.v-sub')) pp = t; });
+    /* The passport tile, found by its label. "The last tile with a .v-sub"
+       stopped meaning the passport on 24 Sep 2026, when the Emirates ID
+       gained an expiry line and the address an "Updated" date. */
+    var tileKey = function (t) {
+      var k = t.querySelector('.k'); return k ? k.textContent.trim() : ''; };
+    var pp = null, mail = null;
+    tiles.forEach(function (t) {
+      if (/^Passport/i.test(tileKey(t))) pp = t;
+      if (/^E-mail/i.test(tileKey(t))) mail = t;
+    });
     var pv = pp ? pp.querySelector('.v') : null;
 
-    /* Section 05 reports its TONE CLASS rather than a computed colour. The
+    /* Worst statuses (§03) reports its TONE CLASS rather than a computed colour. The
        assertion that matters is "an unrecognised status is left ungraded", and
        a class name states that directly; a colour would only state it once you
        already knew which rgb the green token resolves to. */
-    var wsx = [].slice.call(document.querySelectorAll('#s5 .wsx-panel'))
+    var wsx = [].slice.call(document.querySelectorAll('#s3 .wsx-panel'))
       .map(function (p) {
         var f = p.querySelector('.wsx-worst');
         return {cls: f ? f.className.replace('wsx-worst', '').trim() : null,
-                text: f ? f.textContent.trim() : null,
+                /* The figure's own text, without an amber '!' mark (added
+                   24 Sep 2026) -- the mark is asserted separately. */
+                text: f ? (function () { var k = f.cloneNode(true);
+                  [].slice.call(k.querySelectorAll('.attn')).forEach(function (a) { a.remove(); });
+                  return k.textContent.trim(); })() : null,
+                attn: f ? !!f.querySelector('.attn') : false,
                 pending: !!p.querySelector('.empty-state'),
                 clip: p.scrollWidth > p.clientWidth + 1};
       });
@@ -101,8 +114,8 @@ window.addEventListener('load', function () {
       };
     });
 
-    var sub = q('#s5 .wsx-sub');
-    var subV = q('#s5 .wsx-sub .v');
+    var sub = q('#s3 .wsx-sub');
+    var subV = q('#s3 .wsx-sub .v');
 
     /* Section 07's four buckets. Rows inside a collapsed fold are still in the
        DOM, so text and counts read fine; only their geometry would be zero,
@@ -164,7 +177,7 @@ window.addEventListener('load', function () {
       s1: Math.round(s1.getBoundingClientRect().height),
       s2: Math.round(s2.getBoundingClientRect().height),
       wsx: wsx,
-      wsxTag: q('#s5 .tag') ? q('#s5 .tag').textContent.trim() : null,
+      wsxTag: q('#s3 .tag') ? q('#s3 .tag').textContent.trim() : null,
       wsxSub: sub ? sub.textContent.replace(/\\s+/g, ' ').trim() : null,
       wsxSubRed: subV ? subV.className.indexOf('red') >= 0 : null,
       fac: fac,
@@ -173,6 +186,7 @@ window.addEventListener('load', function () {
       tracks: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
       rows: rowInfo,
       tiles: tiles.length,
+      mailNa: mail ? /Not reported/.test(mail.textContent) : null,
       ppLineH: pv ? +pv.getBoundingClientRect().height.toFixed(1) : null,
       ppClip: pv ? (pv.scrollWidth > pv.clientWidth + 1) : null,
       expiry: pp && pp.querySelector('.v-sub')
@@ -209,7 +223,7 @@ def build_cases(base):
     # --- section 01: the grid's density step ---------------------------------
     d = copy.deepcopy(base)
     d["contacts"] = [r for r in d["contacts"] if r not in mails(d)]
-    cases["no-email"] = d                     # -> r2-1, row one must stay full
+    cases["no-email"] = d                     # E-mail tile says "Not reported"
 
     d = copy.deepcopy(base)
     for r in d["addresses"]:
@@ -255,7 +269,7 @@ def build_cases(base):
         r["FHScoreBand"] = r["FHScoreBand1"] = None    # -> neutral chip
     cases["no-fh-band"] = d
 
-    # --- section 05: every tone, and both absences ---------------------------
+    # --- worst statuses (§03): every tone, and both absences ---------------------------
     # The reference customer is entirely clean, so the only path it renders is
     # the green one. Nothing below is a judgement about this customer; each
     # case exists to drive one branch of sections/worst_status.py _grade().
@@ -403,7 +417,9 @@ def _blocks(r):
 # What each case must be true of, beyond the universal checks. Guards against a
 # mutation that silently matched nothing.
 EXPECT = {
-    "no-email": lambda r: r["tiles"] == 4,
+    # Since 24 Sep 2026 the E-mail tile always renders -- "Not reported"
+    # rather than vanishing -- so the grid keeps five tiles.
+    "no-email": lambda r: r["tiles"] == 5 and r["mailNa"] is True,
     # NOTE: "reference" is the one case that asserts something about every
     # section, so it lives at the BOTTOM of this dict with the section 06
     # checks. Do not add a second "reference" key here -- a duplicate silently
@@ -413,15 +429,15 @@ EXPECT = {
     "no-vintage": lambda r: r["vintage"] is None,
     "no-fh-band": lambda r: len(r["bands"]) == 1,
 
-    # Section 05. Text is asserted alongside the tone because the whole point of
+    # Worst statuses (§03). Text is asserted alongside the tone because the whole point of
     # the 24-month panel is that the delivered value reaches the screen VERBATIM.
-    "ws-severe": lambda r: (r["wsx"][0]["cls"] == "red"
+    "ws-severe": lambda r: (r["wsx"][0]["attn"] and r["wsx"][0]["cls"] == "red"
                             and r["wsx"][0]["text"] == "Write-off"
                             and r["wsxTag"] == "Severe status on file"),
-    "ws-adverse": lambda r: (r["wsx"][0]["cls"] == "amber"
+    "ws-adverse": lambda r: (r["wsx"][0]["attn"] and r["wsx"][0]["cls"] == "amber"
                              and r["wsx"][0]["text"] == "Arrangement"
                              and r["wsxTag"] == "Adverse history"),
-    "ws-unknown": lambda r: (r["wsx"][0]["cls"] == ""
+    "ws-unknown": lambda r: (r["wsx"][0]["attn"] and r["wsx"][0]["cls"] == ""
                              and r["wsx"][0]["text"] == "Restructured Facility"
                              and r["wsxTag"] == "Partly reported"),
     "ws-absent": lambda r: (r["wsx"][0]["pending"]
@@ -439,9 +455,14 @@ EXPECT = {
     # Section 06. A guarantor block always renders, so `roles` is the assertion
     # that the split exists at all; `nil` proves which of the two statements
     # the block chose.
+    # The report date is the enquiry ladder since 10 Sep 2026 (user decision):
+    # on this archive fixture it moved from the 2023-10-26 pull to the
+    # 2024-08-20 enquiry, shifting every window forward -- so the 90-day
+    # focus now holds 0 applications (AECB's own counter still says 5; the
+    # section tags the mismatch) and no facility closed in the last 6 months.
     "reference": lambda r: (_s1(r) and _wsx_ref(r)
                             and r["apps"]["events"] == 15
-                            and r["apps"]["focus"] == 5
+                            and r["apps"]["focus"] == 0
                             and r["apps"]["taken"] == 6
                             and r["apps"]["glyphless"] == 0
                             and [f["cat"] for f in r["fac"]] == ["I", "C", "N", "S"]
@@ -453,7 +474,6 @@ EXPECT = {
                             and all("No exposure reported" in (f["nil"] or [""])[0]
                                     for f in r["fac"] if f["nil"])
                             and _blocks(r) == ["Active facilities",
-                                               "Closed · last 6 months",
                                                "Closed · beyond 6 months",
                                                "Services — no arrears"]
                             and r["hm"]["rows"] == 15
@@ -494,14 +514,17 @@ def _s1(r):
 def _wsx_ref(r):
     return (r["wsx"][0]["cls"] == "green"
             and r["wsx"][0]["text"] == "Active Payments"
-            and r["wsx"][1]["pending"]
+            # The 36-month panel is derived since 9 Sep 2026 (it was a
+            # pending placeholder before): clean on the reference file.
+            and r["wsx"][1]["cls"] == "green"
+            and r["wsx"][1]["text"] == "Active Payments"
             and r["wsx"][2]["cls"] == "green"
             and r["wsx"][2]["text"] == "0"
             and "0 days" in (r["wsxSub"] or ""))
 
 
 def _wsx(got) -> str:
-    """Section 05's three panels as tones, for the run table."""
+    """Worst statuses' three panels as tones, for the run table."""
     out = []
     for panel in got["wsx"]:
         out.append("pending" if panel["pending"] else (panel["cls"] or "ungraded"))
@@ -531,12 +554,12 @@ def _assert_frames(name, width, got, fails):
     A pure extraction from main(): the same checks in the same order, moved
     out so main() reads as case -> render -> probe -> assert.
     """
-    # Section 05's frame: three panels, always, whatever the payload carries.
+    # Worst statuses' frame: three panels, always, whatever the payload carries.
     # A missing figure becomes a stated absence in its panel; it never removes
     # the panel, because a window that vanishes reads as a window with nothing
     # adverse in it.
     if len(got["wsx"]) != 3:
-        fails.append("%s@%d: section 05 rendered %d panels, not 3"
+        fails.append("%s@%d: worst statuses rendered %d panels, not 3"
                      % (name, width, len(got["wsx"])))
     for panel in got["wsx"]:
         if panel["clip"]:
@@ -615,7 +638,7 @@ def main() -> int:
 
     print("%-16s %-9s %-5s %-22s %-9s %-24s %s"
           % ("case", "s1/s2", "grid", "rows (tiles, fill%)", "vintage",
-             "05 panels", "06 util / guarantor"))
+             "03 panels", "06 util / guarantor"))
     for name, data in cases.items():
         open(tmp, "w", encoding="utf-8").write(json.dumps(data))
         html = paths.render(tmp)
