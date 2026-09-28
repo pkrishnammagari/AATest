@@ -108,6 +108,15 @@ class ReportContext:
             if label:
                 self._status_by_label[label] = code
 
+        # Same for application phases: 'Requested ' (sic, trailing space) in
+        # the archive, the letter code 'R' from other feeds.
+        self._phases = {
+            code: label for code, label in
+            (self.status_codes.get("application_phases") or {}).items()
+            if not code.startswith("_")}
+        self._phase_by_label = {label.strip().lower(): code
+                                for code, label in self._phases.items()}
+
     # --- array accessors ----------------------------------------------------
 
     def rows(self, name: str) -> list:
@@ -291,6 +300,23 @@ class ReportContext:
                     "rank": meta.get("rank", 100)}
 
         return {"code": "?", "label": text, "rank": None}
+
+    def phase(self, value) -> dict:
+        """Resolve an application phase, given either its code or description.
+
+        Returns {'code', 'label'}: code is one of the configured letters
+        (B Disbursed, D Declined, J Rejected, N Not taken up, R Requested),
+        or None for nothing delivered or a phase the config does not know --
+        whose label is then the delivered text, never a guess.
+        """
+        text = str(value or "").strip()
+        if not text:
+            return {"code": None, "label": "Not reported"}
+        code = (text.upper() if text.upper() in self._phases
+                else self._phase_by_label.get(text.lower()))
+        if code:
+            return {"code": code, "label": self._phases[code]}
+        return {"code": None, "label": text}
 
 
 def from_file(path: str) -> ReportContext:

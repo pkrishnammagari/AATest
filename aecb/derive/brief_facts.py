@@ -590,10 +590,11 @@ def _income_story(ctx, facts):
 def _application_reconciliation(ctx, facts):
     """B2 + C1: what the application trail says next to the contract book.
 
-    AECB never labels a decline; a Requested application that no contract
-    followed is the nearest observable proxy, and the burst shape (how many,
-    how many providers, amounts in date order) is behavioral evidence the
-    per-row table hides.
+    A Requested application that no contract followed is an unresolved
+    trail; Declined / Rejected phases (D / J, config/status_codes.json
+    application_phases) are the bureau's own record of a refusal. The burst
+    shape (how many, how many providers, amounts in date order) is behavioral
+    evidence the per-row table hides.
     """
     applications = ctx.rows("applications")
     if not applications:
@@ -618,8 +619,10 @@ def _application_reconciliation(ctx, facts):
                 return True
         return False
 
-    requested = [a for a in applications
-                 if str(a.get("Phase") or "").strip().lower() == "requested"]
+    def phase(app):
+        return ctx.phase(app.get("Phase"))["code"]
+
+    requested = [a for a in applications if phase(a) == "R"]
     unconverted = [a for a in requested if not matched(a)]
     if unconverted:
         ordered = sorted(unconverted,
@@ -637,8 +640,10 @@ def _application_reconciliation(ctx, facts):
         facts.add("behavior",
                   "%d application(s) in Requested phase across %d provider(s) "
                   "never appear as a contract of the same type within 3 "
-                  "months, in date order: %s. AECB does not label declines; "
-                  "this is the nearest observable trace."
+                  "months, in date order: %s. Their phase never moved past "
+                  "Requested; no Declined, Rejected or Not taken up outcome "
+                  "is recorded, so this is the nearest observable trace of "
+                  "what became of them."
                   % (len(unconverted), len(providers), listed),
                   ["applications[].Phase", "applications[].ContractType",
                    "applications[].TotalAmount", "applications[].LastUpdateDate",
@@ -647,8 +652,7 @@ def _application_reconciliation(ctx, facts):
 
     disbursed_unmatched = [
         a for a in applications
-        if str(a.get("Phase") or "").strip().lower() == "disbursed"
-        and not matched(a)]
+        if phase(a) == "B" and not matched(a)]
     if disbursed_unmatched:
         facts.add("inconsistency",
                   "%d application(s) marked Disbursed have no contract of the "
@@ -662,6 +666,26 @@ def _application_reconciliation(ctx, facts):
                                for a in disbursed_unmatched)),
                   ["applications[].Phase", "applications[].ContractType",
                    "contracts[].OpenDate"],
+                  "applications")
+
+    refused = [a for a in applications if phase(a) in ("D", "J")]
+    if refused:
+        ordered = sorted(refused,
+                         key=lambda a: dates.parse_any(a.get("LastUpdateDate"))
+                         or dates.parse_any("1970-01-01"))
+        facts.add("behavior",
+                  "%d application(s) Declined or Rejected by the provider, in "
+                  "date order: %s."
+                  % (len(refused), "; ".join(
+                      "%s %s for AED %s at provider %s (%s)"
+                      % (ctx.phase(a.get("Phase"))["label"],
+                         str(a.get("ContractType") or "?").strip(),
+                         _fmt(a.get("TotalAmount")),
+                         ctx.provider(a.get("ProviderNo"))["name"],
+                         _month(a.get("LastUpdateDate")) or "?")
+                      for a in ordered)),
+                  ["applications[].Phase", "applications[].ContractType",
+                   "applications[].TotalAmount", "applications[].LastUpdateDate"],
                   "applications")
 
 

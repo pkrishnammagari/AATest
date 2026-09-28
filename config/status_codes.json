@@ -28,6 +28,14 @@
     "M": {"label": "Prepaid service suspended", "rank": 100},
     "O": {"label": "Prepaid service disconnected", "rank": 100}
   },
+  "application_phases": {
+    "_comment": "AECB application Phase (applications[].Phase), code -> description. The payload may carry either; ReportContext.phase() matches both.",
+    "B": "Disbursed",
+    "D": "Declined",
+    "J": "Rejected",
+    "N": "Not taken up",
+    "R": "Requested"
+  },
   "roles": {
     "A": {"label": "Main holder", "css": "main"},
     "C": {"label": "Co-holder", "css": "co"},

@@ -201,18 +201,20 @@ def timeline(ctx, rows):
         else:
             lane_ends[lane] = x
 
-        phase = str(row.get("Phase") or "").strip().lower()
+        phase = ctx.phase(row.get("Phase"))
         event = {
             "x": round(x, 3),
             "lane": lane,
             "days": days_ago,
             "focus": days_ago < FOCUS_DAYS,
             "glyph": _glyph(row.get("ContractType")),
-            # Two states are what AECB delivers here -- filled and hollow, no
-            # invented wording. Any OTHER phase is not "Requested": it draws
-            # dashed, its own text in the hover (24 Sep 2026).
-            "taken": phase == "disbursed",
-            "otherPhase": phase not in ("disbursed", "requested"),
+            # Filled = Disbursed (B), hollow = Requested (R). Every other
+            # phase -- Declined, Rejected, Not taken up, or one the config
+            # does not know -- is neither, so it draws dashed and the legend
+            # names the phases present (24 Sep 2026).
+            "taken": phase["code"] == "B",
+            "otherPhase": phase["code"] not in ("B", "R"),
+            "phase": phase["label"],
             "provider": ctx.provider(row.get("ProviderNo"))["code"],
             "info": _info(row, when, days_ago, ctx),
         }
@@ -238,9 +240,21 @@ def timeline(ctx, rows):
         # For the section's conditional legend -- nothing renders when empty.
         "disputed": any(e.get("disp") for e in events),
         "otherPhase": any(e["otherPhase"] for e in events),
+        # The other phases present, for the legend: configured ones in config
+        # order (Declined, Rejected, Not taken up), then any unconfigured text.
+        "otherPhases": _phase_order(ctx, set(
+            e["phase"] for e in events if e["otherPhase"])),
         "roles": [{"code": letter, "label": _role_label(ctx, letter)}
                   for letter in role_letters],
     }
+
+
+def _phase_order(ctx, labels):
+    configured = [label for code, label in
+                  (ctx.status_codes.get("application_phases") or {}).items()
+                  if not code.startswith("_")]
+    return ([label for label in configured if label in labels]
+            + sorted(labels - set(configured)))
 
 
 def _ticks(ctx, x_of, oldest_days, report_date):
@@ -286,8 +300,9 @@ def _info(row, when, days_ago, ctx):
     provider = ctx.provider(row.get("ProviderNo"))
     parts.append("Provider %s" % provider["name"])
 
-    phase = str(row.get("Phase") or "").strip()
-    parts.append("Phase: %s" % (phase or "not reported"))
+    # The configured description, whether the payload sent it or the code;
+    # an unconfigured phase shows exactly as delivered.
+    parts.append("Phase: %s" % ctx.phase(row.get("Phase"))["label"])
 
     # Delivered-only: role named when it is not main holder (the exception
     # that changes whose application this is), dispute state whenever the

@@ -708,9 +708,9 @@ elsewhere without resolving it.
    `derived`; max-delay sub-line included. Still open as refinements: a
    derived 24-month reconciliation against the delivered figure (question 1)
    and flagging guarantor conduct distinctly (question 2's second half).
-1. `config/bands.json` cut-offs put 732 in VLR but AECB delivers LR. Delivered
-   band wins (comment in `sections/score.py` explains why) — reconcile against
-   the FH scorecard.
+1. ~~`config/bands.json` cut-offs put 732 in VLR but AECB delivers LR.~~
+   Resolved 24 Sep 2026: the seven FH bands are configured (U 300–631 · SPR 632–646 · VHR 647–652 · HR 653–684 · MR 685–719 · LR 720–749 · VLR 750–900);
+   732 is LR under both. The delivered band still wins.
 2. `config/providers.json` is a STUB — the sections that name a reporting
    provider show its code instead: §01, §03, §04 and §07's heatmap (B08, T05,
    C04). §05, §06 and §08 carry no provider codes at all. Also: what is
@@ -725,7 +725,9 @@ elsewhere without resolving it.
    make, only a vocabulary to stop expecting: AECB delivers `Requested` and
    `Disbursed`, and they are now a hollow and a filled marker. The mockup's
    NTU / Approved / Rejected states are not in the payload and are not
-   invented.
+   invented. **Update 24 Sep 2026:** the FH phase codes are now configured
+   (`status_codes.json` `application_phases`: B Disbursed, D Declined, J Rejected, N Not taken up, R Requested);
+   Declined / Rejected / Not taken up draw dashed and the key names them.
 6. A REAL adverse sample payload is still wanted. The reference customer is
    entirely clean (0 DPD everywhere). Since 19 Aug 2026 the committed fixture
    `ReferenceJSON/1_SyntheticJSONPayload_Delinquent_MultiFacility.json`

@@ -126,9 +126,9 @@ def _aside(ctx):
 
 # --- one category card ------------------------------------------------------
 
-# The delivered application-outcome counters, per category x role. The ONLY
-# place the payload records an application outcome -- section 08's rows carry
-# no declined/rejected/NTU vocabulary at all.
+# The delivered application-outcome counters, per category x role. Section
+# 08's rows can also carry an outcome in Phase (D / J / N, since 24 Sep 2026);
+# these counters are the per-category x role aggregate.
 _OUTCOME_FIELDS = (("DeclinedNo", "declined"),
                    ("RejectedNo", "rejected"),
                    ("NotTakenUpNo", "not taken up"))
@@ -231,8 +231,7 @@ def _outcomes(counts) -> str:
 
     Rendered only when non-zero: the counters are 0 across the whole book on a
     clean file, and sixteen zero lines would bury the one that matters. A
-    non-zero one is adverse -- the bureau recording a decline elsewhere -- and
-    this is the only place the payload carries it.
+    non-zero one is adverse -- the bureau recording a decline elsewhere.
     """
     parts = ["%s %s" % (c.format_number(counts.get(field)), label)
              for field, label in _OUTCOME_FIELDS if counts.get(field)]
@@ -240,8 +239,8 @@ def _outcomes(counts) -> str:
         return ""
     info = ("Delivered by AECB in contractsSummary (DeclinedNo, RejectedNo, "
             "NotTakenUpNo) for this category and role. Shown only when "
-            "non-zero; the payload's application rows carry no outcome, so "
-            "these counters are the only delivered record of one.")
+            "non-zero. Individual applications, with their phase, are in "
+            "Recent Applications.")
     return ('<div class="fac-outcomes" data-info="%s">%s</div>'
             % (c.attr(info), " · ".join(parts)))
 

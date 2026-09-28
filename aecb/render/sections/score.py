@@ -7,8 +7,9 @@ back), contractsTotalSummary.OldestContractOpenDate.
 IMPORTANT -- the delivered FH band is authoritative. The chip shows what AECB
 sent in FHScoreBand; the dial is only configured geometry from
 config/bands.json. Do not "tidy" this by deriving the band from the number:
-for the reference payload the configured cut-offs put 732 in VLR while the
-bureau delivers LR, so computing it would silently contradict the bureau.
+whenever the cut-offs and the bureau disagree, computing it would silently
+contradict the bureau (before the FH bands were set on 24 Sep 2026 the old
+cut-offs put the reference payload's 732 in VLR while AECB delivered LR).
 When the two disagree the dial carries an amber '!' saying so (decision,
 24 Sep 2026) -- the delivered band still wins, the config gets checked.
 
@@ -40,17 +41,29 @@ META = {
 # a score band IS a risk grade. An unrecognised band code arrives with an
 # empty tone from scoring.fh_band() and renders as the neutral chip -- an
 # unknown risk band has earned no colour, least of all green.
-_FILL = {"red": "var(--red)", "amber": "var(--amber)",
-         "green-mid": "var(--green-mid)", "green": "var(--green)"}
-# Text on each fill. The light green-mid (LR) takes dark ink: white on it
-# reads at ~3:1, and the chip must match its dial zone exactly (colour follows
-# the configured FH bands, 24 Sep 2026) rather than borrow VLR's darker green.
-_INK = {"green-mid": "var(--ink)"}
+#
+# The seven FH bands (U, SPR, VHR, HR, MR, LR, VLR) run a red->green ramp:
+# red-ink, red, dpd3 (orange-red), amber, dpd1 (yellow), green-mid, green.
+_FILL = {"red-ink": "var(--red-ink)", "red": "var(--red)",
+         "dpd3": "var(--dpd3)", "amber": "var(--amber)",
+         "dpd1": "var(--dpd1)", "green-mid": "var(--green-mid)",
+         "green": "var(--green)"}
+# Text on each fill. The light fills -- dpd1 (MR) and green-mid (LR) -- take
+# dark ink: white on them reads at ~3:1 or worse, and the chip must match its
+# dial zone exactly (colour follows the configured FH bands, 24 Sep 2026).
+_INK = {"dpd1": "var(--ink)", "green-mid": "var(--ink)"}
 
 # Dial zone opacity per configured tone, over the tone's own token colour.
 # The zones are the backdrop the marker is read against, so they stay lighter
-# than the solid chips; red is lightest because it is the widest zone.
-_ZONE_OPACITY = {"red": .32, "amber": .45, "green-mid": .6, "green": .6}
+# than the solid chips; U's red-ink is lightest because it is the widest zone.
+_ZONE_OPACITY = {"red-ink": .3, "red": .55, "dpd3": .6, "amber": .6,
+                 "dpd1": .7, "green-mid": .6, "green": .6}
+
+# Minimum gap between two boundary labels on the dial, as a fraction of the
+# scale. SPR, VHR and HR start 15 and 6 points apart (632, 647, 653); their
+# labels would print on top of each other, so a boundary closer than this to
+# the last label drawn goes unlabelled. The hover lists every range.
+_TICK_GAP = .045
 
 # Dial geometry, in SVG user units. The dial is a 180-degree arc: the scale
 # minimum at the left end, the maximum at the right, the score in the bowl.
@@ -107,10 +120,16 @@ def _dial_block(ctx, gauge) -> str:
                         _ZONE_OPACITY.get(z["tone"], .3)))
         start = end
 
-    ticks = []
+    ticks, last = [], None
     for t in geo["ticks"]:
         frac = (t["value"] - lo) / span
-        if frac <= 0.001 or frac >= 0.999:
+        inner = 0.001 < frac < 0.999
+        if inner and last is not None and frac - last < _TICK_GAP:
+            continue
+        if inner and frac > 1 - _TICK_GAP:
+            continue
+        last = frac
+        if not inner:
             # The scale ends sit under the arc's feet, not beside them.
             x = _CX + (-_R if frac < .5 else _R)
             ticks.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>'
@@ -148,7 +167,7 @@ def _dial_block(ctx, gauge) -> str:
 
 
 def _ranges_tip(ctx) -> str:
-    """'FH risk bands: HR 300–619 · MR 620–678 · LR 679–729 · VLR 730–900.'
+    """'FH risk bands: U 300–631 · SPR 632–646 · … · VLR 750–900.'
 
     Each band runs from its own 'from' to one below the next band's 'from';
     the last runs to the scale maximum. bands.json deliberately has no 'to'.
@@ -212,8 +231,11 @@ def _band_block(ctx) -> str:
     chips = []
 
     if fh:
-        chips.append(_band_chip("%s · %s" % (fh["code"], fh["label"]), "FH",
-                                tone, mark=_fh_field_conflict(ctx)))
+        # Most FH descriptions are the code itself ("SPR"); show it once.
+        label = ("%s · %s" % (fh["code"], fh["label"])
+                 if fh["label"] != fh["code"] else fh["code"])
+        chips.append(_band_chip(label, "FH", tone,
+                                mark=_fh_field_conflict(ctx)))
     if aecb:
         # The delivered letter leads: the label is a provisional config
         # mapping, so what the bureau actually sent must stay visible.

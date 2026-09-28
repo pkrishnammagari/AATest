@@ -223,10 +223,10 @@ semicircular dial on the left, the chips and bureau history on the right.
 
 | element | source | rule |
 |---|---|---|
-| Dial | config cut-offs + `score.DataIndex` | a 300–900 semicircle; each FH band is a zone from its `from` to the next band's `from`, coloured by its configured tone; tick values at the scale ends and each boundary; the marker at the score, capped to the ends. Geometry, not verdicts. The zones draw even with no score. Hover lists the real ranges (HR 300–619 · MR 620–678 · LR 679–729 · VLR 730–900) |
+| Dial | config cut-offs + `score.DataIndex` | a 300–900 semicircle; each FH band is a zone from its `from` to the next band's `from`, coloured by its configured tone; tick values at the scale ends and each boundary; the marker at the score, capped to the ends. Geometry, not verdicts. The zones draw even with no score. Boundary labels closer than 4.5% of the scale to the previous one are left off (647 and 653), so they don't overprint. Hover lists the real ranges (U 300–631 · SPR 632–646 · VHR 647–652 · HR 653–684 · MR 685–719 · LR 720–749 · VLR 750–900) |
 | Score figure | `score.DataIndex` | in the dial's centre, verbatim; numeric text counts. No score → *Score not reported*, plus the bureau's own reason under the dial — *Score not returned — `ErrorDescription` (error `ErrorNumber`)* — or *No score and no error reason delivered* |
-| Band mismatch `!` | configured zone vs `score.FHScoreBand` | amber, on the dial's shoulder, **only** when the cut-offs put the score in a different band from the delivered one; the hover names both and says to check `bands.json`. The delivered band always wins (the archive shows it today: 732 → configured VLR, delivered LR) |
-| FH band chip | `score.FHScoreBand` (fallback `FHScoreBand1`) | the **delivered band is authoritative** — the code is matched to its label/tone in `bands.json` `fh_bands` (HR red / MR amber / LR light green with dark text / VLR green — each chip matches its dial zone); it is *never* recomputed from the number. If `FHScoreBand` and `FHScoreBand1` both arrive and differ, an amber `!` names both. An unconfigured band code renders neutral — an unknown risk band has earned no colour |
+| Band mismatch `!` | configured zone vs `score.FHScoreBand` | amber, on the dial's shoulder, **only** when the cut-offs put the score in a different band from the delivered one; the hover names both and says to check `bands.json`. The delivered band always wins (the archive no longer shows it: 732 is LR under both since the FH bands were set, 24 Sep 2026) |
+| FH band chip | `score.FHScoreBand` (fallback `FHScoreBand1`) | the **delivered band is authoritative** — the code is matched to its label/tone in `bands.json` `fh_bands` (U dark red, SPR red, VHR orange-red, HR amber, MR yellow, LR light green, VLR green; MR and LR take dark text — each chip matches its dial zone). Where the label equals the code (all but U · UA) the chip shows the code once; it is *never* recomputed from the number. If `FHScoreBand` and `FHScoreBand1` both arrive and differ, an amber `!` names both. An unconfigured band code renders neutral — an unknown risk band has earned no colour |
 | AECB band chip | `score.DataRange` (a letter, A–L) | the delivered **letter first**, then its `aecb_ranges` label (*J · Good*; provisional — the hover says so). Carries the **FH** band's tone — one score, one verdict |
 | Vintage bar | bureau-history months → `vintage_bands` | B1 0–11 · B2 12–47 · B3 48–95 · B4 96+ months — configured policy, brand blue |
 | Bureau history | `contractsTotalSummary.OldestContractOpenDate` → report date | whole calendar months (day-of-month aware) — **derived**; AECB delivers no file length, and the hover says so. *since Mon YYYY* = that date. Not computable → the line says why (*unknown — no report date (since …)*, *oldest contract date x is unreadable*, or *not reported*). `summary.MostOldest_InMonth_Total` stays unread (meaning unconfirmed; decision 24 Sep 2026) |
@@ -443,8 +443,8 @@ dimension) — fill green below 100, full-red at ≥100 with the figure telling
 
 **Application-outcome lines**: `contractsSummary.DeclinedNo / RejectedNo /
 NotTakenUpNo` per category × role render as "2 declined · 1 rejected" inside
-the role block **only when non-zero** — the payload's only delivered record of
-an application outcome (§08's rows carry no such vocabulary). These counters
+the role block **only when non-zero** — the per category × role aggregate
+(§08's rows carry each application's own phase). These counters
 also keep a card alive in the emptiness test: a category holding only declined
 applications is not "nothing reported". The volume counts
 (`TotalNo`/`ActiveNo`/`ClosedNo`) are read for the emptiness test only, never
@@ -531,10 +531,13 @@ pill.** One chart.
   change units at the break — *days* inside the window, *calendar years*
   outside — to signal the scales differ. When everything falls inside 90 days
   there is no compressed zone and no break is drawn.
-- **Markers**: hollow = `Requested`, filled = `Disbursed` — the only two
-  delivered phases; no approved/rejected/NTU vocabulary is invented. Any
-  other delivered phase draws **dashed** (text in the hover; an *Other phase*
-  key entry only when present) — never passed off as Requested. Glyph
+- **Markers**: `Phase` resolves through `status_codes.json`
+  `application_phases` (B Disbursed, D Declined, J Rejected, N Not taken up, R Requested — the payload may send the
+  code or the description). Hollow = Requested, filled = Disbursed; Declined,
+  Rejected, Not taken up, or an unconfigured phase draw **dashed** — never
+  passed off as Requested. The key names the dashed phases present (e.g.
+  *Declined / Not taken up*; *Other phase* for unconfigured text) and the
+  hover names each marker's. Glyph
   I/C/S keyword-matched from `ContractType`; unmatched types get no glyph
   rather than a guessed one. Colliding markers stack **upward** into lanes
   (max 4), never sideways.

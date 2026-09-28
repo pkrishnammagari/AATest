@@ -14,11 +14,15 @@
   ],
   "scale": {"min": 300, "max": 900},
   "fh_bands": [
-    {"code": "HR",  "label": "High risk",     "from": 300, "tone": "red"},
-    {"code": "MR",  "label": "Medium risk",   "from": 620, "tone": "amber"},
-    {"code": "LR",  "label": "Low risk",      "from": 679, "tone": "green-mid"},
-    {"code": "VLR", "label": "Very low risk", "from": 730, "tone": "green"}
+    {"code": "U",   "label": "UA",  "from": 300, "tone": "red-ink"},
+    {"code": "SPR", "label": "SPR", "from": 632, "tone": "red"},
+    {"code": "VHR", "label": "VHR", "from": 647, "tone": "dpd3"},
+    {"code": "HR",  "label": "HR",  "from": 653, "tone": "amber"},
+    {"code": "MR",  "label": "MR",  "from": 685, "tone": "dpd1"},
+    {"code": "LR",  "label": "LR",  "from": 720, "tone": "green-mid"},
+    {"code": "VLR", "label": "VLR", "from": 750, "tone": "green"}
   ],
+  "_fh_bands_comment": "FH score bands (24 Sep 2026): U/UA below 632, SPR 632-646, VHR 647-652, HR 653-684, MR 685-719, LR 720-749, VLR 750+. `label` is the FH description; where it equals the code the chip shows the code once. `tone` is a tokens.py colour name, a red->green ramp from U to VLR.",
   "aecb_ranges": {
     "_comment": "score.DataRange letter -> AECB descriptive band. Confirm against the AECB scorecard spec before relying on these labels.",
     "A": "Very poor",

@@ -10,9 +10,10 @@ weeks compare to the years behind them -- was not on the screen at all.
 The axis maths lives in derive/applications.py, beside the payload decisions it
 depends on. This module only lays out what that returns.
 
-AECB delivers two states here, Requested and Disbursed, and they are encoded as
-a hollow and a filled marker. No other state is invented: a not-taken-up /
-approved / rejected vocabulary is not in the payload, so it is not on the page.
+Phase is resolved by ReportContext.phase() against config/status_codes.json
+application_phases (code or description): B Disbursed draws filled, R Requested
+hollow, and D Declined / J Rejected / N Not taken up -- or a phase the config
+does not know -- dashed, with the legend naming the phases present.
 """
 
 from __future__ import annotations
@@ -74,8 +75,9 @@ def _chart(chart) -> str:
     # would promise marks the chart does not show.
     extras = ""
     if chart.get("otherPhase"):
-        extras += ('<span class="ek"><i class="ek-mk other"></i>Other phase'
-                   '</span>')
+        extras += ('<span class="ek"><i class="ek-mk other"></i>%s</span>'
+                   % c.esc(" / ".join(chart.get("otherPhases") or [])
+                           or "Other phase"))
     if chart.get("disputed"):
         extras += ('<span class="ek"><i class="ek-mk disp"></i>Open dispute'
                    '</span>')

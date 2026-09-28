@@ -322,9 +322,9 @@ its caller, always marked `derived`.
 **The delivered band is authoritative.** The bureau sends the score
 (`DataIndex`), its own band letter (`DataRange`) and the FH band code
 (`FHScoreBand`). This module looks up labels and positions a marker; it never
-recomputes a band from the number. For the reference payload the configured
-cut-offs would put 732 in `VLR` while the bureau delivers `LR` — computing it
-would silently contradict the bureau. A band code the config does not know
+recomputes a band from the number. Whenever the configured cut-offs and the
+bureau disagree, computing it would silently contradict the bureau (the old
+cut-offs put the reference 732 in `VLR` while AECB delivered `LR`). A band code the config does not know
 renders with a **neutral** tone: green is the best-case colour, and an
 unrecognised risk band has earned no colour.
 
@@ -626,7 +626,7 @@ All five files carry `_comment` blocks explaining what they are and why.
 | File | Kind | Contents |
 |---|---|---|
 | `status_codes.json` | **Bureau-published** | 17 status codes with labels and severity ranks; roles (A/C/G) and the display-text→code map; 11 payment frequencies with long descriptions matched against the payload; 5 DPD buckets. |
-| `bands.json` | **FH policy** | Score scale 300–900; four FH bands with lower cut-offs and tones (a zone's end derives from the next band's `from`); AECB `DataRange` letter → descriptive label; four vintage bands (B1–B4) over file length in months; `validity_days: 30`. |
+| `bands.json` | **FH policy** | Score scale 300–900; seven FH bands (U/UA, SPR, VHR, HR, MR, LR, VLR) with lower cut-offs and tones (a zone's end derives from the next band's `from`); AECB `DataRange` letter → descriptive label; four vintage bands (B1–B4) over file length in months; `validity_days: 30`. |
 | `providers.json` | **Registry (STUB)** | Provider code → `{name, kind}`. Names are currently the codes themselves. `kind` drives the badge: `bank` / `tel` / `onus` (set `onus` for FH's own code to mark our facilities). |
 | `income.json` | **FH policy** | `currency: AED` (assumed — the payload carries none); `placeholder_floor: 1200`; `confirmation_window_months: 12` — how recently a provider must have touched an employment row for an open-ended "still employed" claim to count as confirmed rather than unrefreshed. |
 | `returns.json` | **Vocabulary + policy** | `window_months: 6`; instrument type labels; severity → tone (Single→amber, Multiple→red, Reported→neutral pending a business definition). |
@@ -746,9 +746,11 @@ AECB delivers one (it isn't part of the card/service schema at all, so there is
 no gap to report), role only when it is *not* main holder (the exception that
 changes who is liable).
 
-**§08 Applications** — one chart. `Phase` has exactly two delivered states,
-`Requested` and `Disbursed`, encoded as hollow and filled markers. No
-NTU/Approved/Rejected vocabulary is invented; it is not in the payload. When
+**§08 Applications** — one chart. `Phase` is resolved by
+`ReportContext.phase()` against `status_codes.json` `application_phases`
+(B Disbursed, D Declined, J Rejected, N Not taken up, R Requested; code or description both match): Disbursed filled,
+Requested hollow, Declined / Rejected / Not taken up (or an unconfigured
+phase) dashed, with the legend naming the phases present. When
 the delivered `Applications90D` counter and the rows disagree, that is surfaced
 as a finding — one line, not a banner. Two exception marks (9 Sep 2026,
 delivered-only): a `FlagOpenDispute` rings the marker amber, and a
@@ -900,7 +902,7 @@ payload.
 |---|---|
 | §03 36-month worst status | **Built 9 Sep 2026** (RRM defaults: whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD; always marked `derived`). Remaining refinements from the original six questions: a derived 24-month reconciliation against the delivered figure, and flagging guarantor conduct distinctly. |
 | `MaxCurrentPaymentDelay` | Delivered as `1` while `MaxPaymentDelay24M` is `0`, every `Current_DaysPaymentDelay` is `0`, and all 99 `contractsHistory` rows are 0 DPD. **Held off screen** until AECB explains it. |
-| `config/bands.json` cut-offs | Place 732 in `VLR`; AECB delivered `LR`. Delivered band wins. Needs reconciling against the FH scorecard. |
+| `config/bands.json` cut-offs | Resolved 24 Sep 2026 with the FH bands (U 300–631 · SPR 632–646 · VHR 647–652 · HR 653–684 · MR 685–719 · LR 720–749 · VLR 750–900); 732 is `LR` under both. |
 | `config/providers.json` | Stub — §01, §04, §05, §07's heatmap and §08's timeline show codes. |
 | DSR / application context | No payload source at all; needs a separate input path. |
 | Severity `Reported` | Renders neutral pending a business definition of what it grades. |

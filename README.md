@@ -190,7 +190,7 @@ Both render as explicit `n/a` rather than blank.
 |---|---|
 | §03 36-month worst status — refinements | **Built 9 Sep 2026** to RRM defaults (whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD). Still open from the original six questions: whether to derive a like-for-like 24-month figure as a reconciliation against AECB's delivered one, and whether guarantor conduct should be flagged rather than merely included. |
 | `MaxCurrentPaymentDelay` | The payload delivers `1` while `MaxPaymentDelay24M` is `0`, every contract's `Current_DaysPaymentDelay` is `0` and all 99 `contractsHistory` rows are 0 DPD. **Nothing on screen reads it**, by decision, until AECB explains the discrepancy — showing it would state a contradiction the file cannot resolve. |
-| §02 score cut-offs | `config/bands.json` places 732 in **VLR**, but AECB delivered **LR**. The delivered band wins and the screen shows a warning. The configured cut-offs are provisional and need reconciling against the FH scorecard. |
+| §02 score cut-offs | Resolved 24 Sep 2026: `config/bands.json` now holds the seven FH bands (U 300–631 · SPR 632–646 · VHR 647–652 · HR 653–684 · MR 685–719 · LR 720–749 · VLR 750–900). The reference payload's 732 falls in **LR**, matching what AECB delivered. The delivered band still wins; the warning shows only if the two ever disagree. |
 | Provider names | `config/providers.json` is a stub, so the sections that name a reporting provider show its code instead: **§01, §04, §05, §07's heatmap and §08's timeline** (`B08`, `T05`, `C04`). §03 and §06 carry no provider codes at all. |
 
 ### §02 score — a half-width dial beside §03
@@ -494,7 +494,7 @@ Three only-when-non-zero surfaces (9 Sep 2026): a red **Guaranteed overdue**
 top chip from `TotalOverdueGuaranteed` (a non-zero one is the guarantee being
 called; it previously never reached the screen); per-role **declined /
 rejected / not-taken-up** lines from `contractsSummary`'s delivered counters —
-the payload's only record of an application outcome — which also keep a card
+delivered per category and role (§08 carries each application's phase) — which also keep a card
 alive in the emptiness test; and a **Co-holder** block (role `C`) that renders
 between the other two only when the bureau returns figures or counters for it.
 An absent C row is the bureau not returning the split, so no permanent
@@ -713,10 +713,12 @@ axis labels along with it. The shared axis in `render/svgtime.py` is
 deliberately **not** used: §04 and §05 share it so their timelines cannot drift,
 and this one is non-linear by design.
 
-**The phase vocabulary is settled, and the block is closed.** AECB delivers two
-states here — `Requested` and `Disbursed` — encoded as a **hollow** and a
-**filled** marker. A not-taken-up / approved / rejected vocabulary is not in the
-payload and is not invented, so there is no mapping to make. The marker letter is the AECB category the
+**The phase codes are configured** (24 Sep 2026) in `config/status_codes.json`
+`application_phases`: B Disbursed, D Declined, J Rejected, N Not taken up,
+R Requested. The payload may send the code or the description; both match.
+Disbursed is a **filled** marker, Requested **hollow**, and Declined, Rejected,
+Not taken up (or an unconfigured phase) **dashed**, with the key naming the
+dashed phases present. The marker letter is the AECB category the
 rest of the page uses (I / C / S), matched on a keyword so a new wording still
 lands somewhere sensible; an unmatched type renders a **blank** marker and says
 so on hover rather than being filed under a category nobody chose.

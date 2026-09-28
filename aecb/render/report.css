@@ -429,8 +429,8 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .enq-split{position:absolute; top:0; bottom:24px; width:0; border-left:1px dashed var(--fh-blue-line)}
 /* Markers. Brand blue, never a risk colour: one application is a fact, and it
    is the CLUSTER that an underwriter reads as a signal -- which the focus wash
-   already carries. Filled = Disbursed, hollow = Requested. Those are the only
-   two states AECB delivers here, so no phase vocabulary is invented. */
+   already carries. Filled = Disbursed (B), hollow = Requested (R); the other
+   phases (Declined, Rejected, Not taken up) draw dashed, below. */
 .enq-tl .mk{width:18px; height:18px; background:#fff; border:2px solid var(--fh-blue-line); color:var(--fh-blue-ink); box-shadow:none}
 .enq-tl .mk.taken{background:var(--fh-blue); border-color:var(--fh-blue); color:#fff}
 .enq-tl .mk.focus{border-color:var(--fh-blue); box-shadow:0 1px 5px rgba(0,66,106,.28)}
@@ -443,8 +443,9 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
    that still reads without hovering. Amber: context, not arrears. */
 .tl-event .mk.disp{box-shadow:0 2px 6px rgba(20,30,44,.25), 0 0 0 2.5px var(--amber)}
 .ek-mk.disp{box-shadow:0 0 0 2.5px var(--amber)}
-/* A phase other than Requested / Disbursed: dashed, so it cannot be read as
-   either -- its own text is in the hover. */
+/* A phase other than Requested / Disbursed (Declined, Rejected, Not taken up,
+   or unconfigured): dashed, so it cannot be read as either -- the legend names
+   the phases present and the hover names each marker's. */
 .enq-tl .mk.other,.ek-mk.other{border-style:dashed; border-color:var(--ink-3)}
 /* Role letter in the legend: the same letter shown beside the provider code
    above a marker ("B04 · G"). */
