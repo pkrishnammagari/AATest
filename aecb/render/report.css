@@ -214,19 +214,36 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 
 /* ========== 02 SCORE & BUREAU HISTORY ==========
    Half-width card (24 Sep 2026, user decision), paired with 03 Worst Statuses
-   in a .sec-pair row: a semicircular dial -- FH band zones, marker at the
+   in a .sec-pair row: a dial (a 120-degree arc) -- FH band zones, marker at the
    score, the score in the bowl -- and a column of the FH chip, the AECB chip,
    the vintage bar and the file length to its right. The dial is inline SVG
-   built in sections/score.py; the zone colours come from tokens there. */
-.sp{display:flex; align-items:center; gap:22px; min-width:0}
-.sp-dial{position:relative; flex:1 1 240px; min-width:200px; max-width:300px; cursor:help}
+   built in sections/score.py; the zone colours come from tokens there.
+
+   The dial is the hero (28 Sep 2026). The side column is only as wide as its
+   widest tile and sits hard against the card's right edge (its items align
+   right, so the tiles do too even when the file-length line is wider); the
+   dial takes everything to its left. The side gives way first when space runs short
+   (flex-shrink 4 against the dial's 1, down to that tile width).
+
+   The dial's HEIGHT is the section's budget: 158.4px, exactly the dial before
+   the redesign (300 x 250:132), so the section height does not move. Its width
+   cap is that budget times the viewBox ratio, which score.py sets inline as
+   --dial-ratio -- change the dial's shape there and the cap follows. */
+.sp{display:flex; align-items:center; justify-content:space-between; gap:20px;
+  min-width:0; --dial-h:158.4px}
+.sp-dial{position:relative; flex:1 1 calc(var(--dial-h) * var(--dial-ratio, 2));
+  min-width:0; max-width:calc(var(--dial-h) * var(--dial-ratio, 2)); cursor:help}
 .sp-svg{display:block; width:100%; height:auto; overflow:visible}
-.sp-ticks text{font-family:var(--font-mono); font-size:9px; fill:var(--ink-3)}
+/* In SVG user units, so it scales with the dial: 7.5 units is ~11.8px at full
+   size and ~6.8px on the narrowest paired card (rail open, 1400px), near the
+   pre-redesign labels' 7.2px there. score.py's _TICK_CH / _TICK_H assume this
+   size for their overlap test -- change both together. */
+.sp-ticks text{font-family:var(--font-mono); font-size:7.5px; fill:var(--ink-3)}
 .sp-mark{fill:#fff; stroke:var(--ink); stroke-width:3.5;
   filter:drop-shadow(0 1px 3px rgba(20,30,44,.35))}
-.sp-val{font-family:var(--font-display); font-weight:800; font-size:40px;
+.sp-val{font-family:var(--font-display); font-weight:800; font-size:44px;
   letter-spacing:-.03em; fill:var(--ink)}
-.sp-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
+.sp-k{font-family:var(--font-mono); font-size:8px; letter-spacing:.08em;
   font-weight:500; fill:var(--ink-3)}
 .sp-na{font-family:var(--font-body); font-size:13px; font-style:italic; fill:var(--ink-3)}
 /* The configured-zone vs delivered-band mismatch mark sits on the dial's
@@ -234,11 +251,16 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .sp-attn{position:absolute; top:2px; right:2px}
 .sp-err{margin-top:6px; font-size:11px; color:var(--ink-2); text-align:center}
 
-.sp-side{display:flex; flex-direction:column; gap:8px; flex:1 1 200px; min-width:180px}
-/* The two chips read as two rows of one table: stretched to one width, the
-   scorecard name on the right edge of both. Filled SOLID in sections/score.py
-   -- a score band is a risk grade, so red/amber/green is the right vocabulary. */
-.ss-bands{display:flex; flex-direction:column; align-items:stretch; gap:5px}
+/* No min-width override: the flex default (min-content) is the tile stack's
+   width, since the tiles never wrap -- only the file-length line may. */
+.sp-side{display:flex; flex-direction:column; align-items:flex-end; gap:8px;
+  flex:0 4 auto}
+/* The two chips and the vintage bar read as rows of one table: one width --
+   the widest tile's, no wider -- with the scorecard name on the right edge.
+   Filled SOLID in sections/score.py -- a score band is a risk grade, so
+   red/amber/green is the right vocabulary. */
+.ss-bands{display:grid; gap:5px}
+.ss-bands .ss-vint{margin-top:3px}
 .ss-band{display:flex; align-items:center; gap:10px;
   font-size:15px; font-weight:700; padding:4px 12px; border-radius:7px;
   border:1px solid; white-space:nowrap}
@@ -256,7 +278,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
   border:1px solid var(--fh-blue); cursor:help}
 .ss-vint-k{font-family:var(--font-mono); font-size:8.5px; letter-spacing:.08em;
   text-transform:uppercase; font-weight:600; opacity:.8}
-.ss-hline{display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; cursor:help;
+.ss-hline{display:flex; align-items:baseline; justify-content:flex-end; gap:6px; flex-wrap:wrap; cursor:help;
   padding:0 2px}
 .ss-hv{font-family:var(--font-display); font-weight:800; font-size:22px;
   line-height:1; letter-spacing:-.02em; color:var(--ink)}
@@ -1052,8 +1074,8 @@ body.rail-off .rail{display:none}
   @media (max-width:820px){body,body.rail-off{--colw:calc(100vw - 32px)}}
 
   /* --- 02 SCORE: the surplus is spent on SIZE ---
-     The dial is SVG and scales with its box (capped at 300px), so its score
-     grows with it; the side column's type grows a little to keep pace. */
+     The dial is SVG and fills its box up to its height budget (see the 02
+     block above); the side column's type grows a little instead. */
   .ss-hv{font-size:calc(22px + 3 * var(--f,0px))}
 
   /* The chips and the vintage tile annotate those figures, so they grow with

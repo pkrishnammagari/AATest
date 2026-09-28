@@ -203,17 +203,25 @@ The two cards measure ~250px together against ~356px stacked; below 1180px they
 stack. Income stays full width: it loads collapsed and its chart needs the
 width.
 
-The card is a **semicircular dial** — inline SVG built in `score.py`, zones
+The card is a **dial** (a 120° arc) — inline SVG built in `score.py`, zones
 coloured from `tokens.py` by each FH band's configured tone, the marker at the
 score, the score in the bowl — with the FH chip, the AECB chip (*J · Good*,
 letter first), the vintage bar and the bureau-history line stacked to its right.
+The dial is the hero (28 Sep 2026). The chip stack is only as wide as its
+widest tile and sits against the card's right edge; the dial fills the rest.
+The dial's height is held at 158px, the old dial's, so the card did not grow.
+Its shape is what makes it bigger: a 120° arc is ~2.8:1, against a
+semicircle's 2:1, so the same height buys a ~447px-wide dial with a ~235px
+radius (was 300px wide, ~103px radius). Every label sits inside the arc,
+so no space goes on outside margins.
 Colour follows the FH bands throughout. When the configured cut-offs put the
 score in a different band from the delivered one, an amber `!` on the dial's
 shoulder says so; the delivered band still wins. A missing score keeps the card
 (zones, chips, history) and shows the bureau's `ErrorDescription` when sent.
 
-The **band chips** are filled solid with white text. `_FILL` in `score.py`
-maps only `red` and `amber`, with green as the fallback for the green tones.
+The **band chips** are filled solid. `_FILL` in `score.py` maps each of the
+seven FH band tones; the two light fills (MR yellow, LR light green) take dark
+text via `_INK`, the rest white.
 `scoring.fh_band()` returns a **neutral** tone for a band code the config does
 not know, and the chip renders uncoloured — green is the best-case colour, and
 an unrecognised risk band has earned no colour.

@@ -14,7 +14,7 @@ When the two disagree the dial carries an amber '!' saying so (decision,
 24 Sep 2026) -- the delivered band still wins, the config gets checked.
 
 Layout (24 Sep 2026, user decision): a half-width card beside section 03
-(worst statuses). A semicircular dial -- FH band zones, marker at the score,
+(worst statuses). A dial (a 120-degree arc) -- FH band zones, marker at the score,
 the score in the middle -- with the FH chip, the AECB chip, the vintage bar
 and the bureau-history line stacked to its right. Colour follows the FH bands
 everywhere: the dial zones by configured tone, both chips by the delivered FH
@@ -59,17 +59,52 @@ _INK = {"dpd1": "var(--ink)", "green-mid": "var(--ink)"}
 _ZONE_OPACITY = {"red-ink": .3, "red": .55, "dpd3": .6, "amber": .6,
                  "dpd1": .7, "green-mid": .6, "green": .6}
 
-# Minimum gap between two boundary labels on the dial, as a fraction of the
-# scale. SPR, VHR and HR start 15 and 6 points apart (632, 647, 653); their
-# labels would print on top of each other, so a boundary closer than this to
-# the last label drawn goes unlabelled. The hover lists every range.
-_TICK_GAP = .045
+# Dial geometry, in SVG user units. The dial is a 120-degree arc of a wide
+# circle: the scale minimum at the left foot, the maximum at the right, the
+# score in the bowl.
+#
+# The dial is the section's hero (28 Sep 2026). Its HEIGHT is fixed by the
+# section (report.css caps it), so the shape decides how big it can look: a
+# semicircle is only 2:1, while a 120-degree sweep is ~2.8:1 -- the same height
+# buys a far wider, larger-radius dial that fills the card's width beside the
+# chips (140 degrees still left ~100px of the card empty at 1560px). Every label sits INSIDE the bowl and
+# the viewBox is cropped to what is drawn, so no width or height is spent on
+# margins. The viewBox ratio reaches the CSS as --dial-ratio (see _dial_block).
+_SWEEP = math.radians(120)
+_R, _STROKE = 150, 20
+_MARK_R = 9                               # .sp-mark adds a 3.5 stroke
+_MARK_REACH = _MARK_R + 1.75
+_HALF = _SWEEP / 2
 
-# Dial geometry, in SVG user units. The dial is a 180-degree arc: the scale
-# minimum at the left end, the maximum at the right, the score in the bowl.
-_W, _H = 250, 132
-_CX, _CY = 125, 108
-_R, _STROKE = 86, 16
+# Tick labels: 7.5-unit mono text (report.css .sp-ticks) centred on a ring just
+# inside the arc. Boundaries fill the outer ring first, then the leftovers try
+# a second, deeper ring; one that fits neither is dropped -- 632 / 647 / 653
+# sit 15 and 6 points apart and cannot all print. The hover lists every range.
+# _TICK_CH is the mono advance (0.6em) at 7.5 units. At 8 units 720 no
+# longer fits beside 685 and 750, so 7.5 is the ceiling for the current bands.
+_TICK_RINGS = (_R - _STROKE / 2 - 7.5, _R - _STROKE / 2 - 17.5)
+_TICK_CH, _TICK_H, _TICK_PAD = 4.5, 7.5, 0.5
+
+# The score figure (report.css .sp-val, 44 units) and its cap height.
+_VAL_SIZE, _VAL_CAP = 44, 32
+
+
+def _extent():
+    """viewBox width/height and the circle centre, cropped to what is drawn:
+    the arc's outer edge and the marker at the top and at either foot, and
+    the scale-end labels, which sit lowest of all."""
+    pad = 1.5
+    reach = _R + max(_STROKE / 2, _MARK_REACH)
+    half_w = max((_R + _STROKE / 2) * math.sin(_HALF),
+                 _R * math.sin(_HALF) + _MARK_REACH) + pad
+    cy = reach + pad
+    bottom = max(cy - (_R - _STROKE / 2) * math.cos(_HALF),
+                 cy - _R * math.cos(_HALF) + _MARK_REACH,
+                 cy - _TICK_RINGS[0] * math.cos(_HALF) + _TICK_H / 2) + pad
+    return 2 * half_w, bottom, half_w, cy
+
+
+_W, _H, _CX, _CY = _extent()
 
 
 def render(ctx, meta) -> str:
@@ -85,23 +120,25 @@ def render(ctx, meta) -> str:
 # --- the dial ---------------------------------------------------------------
 
 def _angle(frac):
-    """Scale fraction 0..1 -> angle in radians, pi (left) .. 0 (right)."""
-    return math.pi * (1.0 - max(0.0, min(1.0, frac)))
+    """Scale fraction 0..1 -> angle from vertical, -_HALF (left) .. +_HALF."""
+    return _SWEEP * max(0.0, min(1.0, frac)) - _HALF
 
 
 def _point(frac, radius):
     a = _angle(frac)
-    return _CX + radius * math.cos(a), _CY - radius * math.sin(a)
+    return _CX + radius * math.sin(a), _CY - radius * math.cos(a)
 
 
 def _arc(frac_from, frac_to):
+    # Every zone is under 180 degrees (the whole sweep is 120), so the
+    # large-arc flag is always 0.
     x1, y1 = _point(frac_from, _R)
     x2, y2 = _point(frac_to, _R)
     return "M %.2f %.2f A %d %d 0 0 1 %.2f %.2f" % (x1, y1, _R, _R, x2, y2)
 
 
 def _dial_block(ctx, gauge) -> str:
-    """The semicircular dial: FH zones, tick values, marker, score.
+    """The dial: FH zones, tick values, marker, score.
 
     Geometry comes from scoring.gauge() when there is a score; without one
     the zones still draw (they are config, not payload) and the bowl says
@@ -110,7 +147,6 @@ def _dial_block(ctx, gauge) -> str:
     """
     geo = gauge or scoring.scale_geometry(ctx)
     lo, hi = geo["min"], geo["max"]
-    span = float(hi - lo)
 
     zones, start = [], 0.0
     for z in geo["zones"]:
@@ -120,40 +156,22 @@ def _dial_block(ctx, gauge) -> str:
                         _ZONE_OPACITY.get(z["tone"], .3)))
         start = end
 
-    ticks, last = [], None
-    for t in geo["ticks"]:
-        frac = (t["value"] - lo) / span
-        inner = 0.001 < frac < 0.999
-        if inner and last is not None and frac - last < _TICK_GAP:
-            continue
-        if inner and frac > 1 - _TICK_GAP:
-            continue
-        last = frac
-        if not inner:
-            # The scale ends sit under the arc's feet, not beside them.
-            x = _CX + (-_R if frac < .5 else _R)
-            ticks.append('<text x="%.1f" y="%d" text-anchor="middle">%s</text>'
-                         % (x, _CY + 16, t["value"]))
-            continue
-        x, y = _point(frac, _R + _STROKE / 2 + 9)
-        anchor = "end" if x < _CX - 8 else "start" if x > _CX + 8 else "middle"
-        ticks.append('<text x="%.1f" y="%.1f" text-anchor="%s">%s</text>'
-                     % (x, y + 3, anchor, t["value"]))
+    ticks = _tick_labels(geo, gauge)
 
     if gauge:
         mx, my = _point(gauge["pct"] / 100.0, _R)
-        marker = ('<circle class="sp-mark" cx="%.2f" cy="%.2f" r="7"/>'
-                  % (mx, my))
-        centre = ('<text class="sp-val" x="%d" y="%d" text-anchor="middle">'
-                  '%d</text><text class="sp-k" x="%d" y="%d" '
-                  'text-anchor="middle">SCORE</text>'
-                  % (_CX, _CY - 12, gauge["value"], _CX, _CY + 4))
+        marker = ('<circle class="sp-mark" cx="%.2f" cy="%.2f" r="%d"/>'
+                  % (mx, my, _MARK_R))
+        centre = ('<text class="sp-val" x="%.1f" y="%.1f" '
+                  'text-anchor="middle">%d</text><text class="sp-k" x="%.1f" '
+                  'y="%.1f" text-anchor="middle">SCORE</text>'
+                  % (_CX, _val_baseline(), gauge["value"], _CX, _H - 3))
     else:
         marker = ""
-        centre = ('<text class="sp-na" x="%d" y="%d" text-anchor="middle">'
-                  'Score not reported</text>' % (_CX, _CY - 14))
+        centre = ('<text class="sp-na" x="%.1f" y="%.1f" text-anchor="middle">'
+                  'Score not reported</text>' % (_CX, _H - 22))
 
-    svg = ('<svg class="sp-svg" viewBox="0 0 %d %d" role="img" '
+    svg = ('<svg class="sp-svg" viewBox="0 0 %.1f %.1f" role="img" '
            'aria-label="%s"><g class="sp-zones" fill="none" '
            'stroke-width="%d">%s</g><g class="sp-ticks">%s</g>%s%s</svg>'
            % (_W, _H, c.attr("Score %s on the FH scale %d to %d"
@@ -161,9 +179,72 @@ def _dial_block(ctx, gauge) -> str:
                                 lo, hi)),
               _STROKE, "".join(zones), "".join(ticks), marker, centre))
 
-    return ('<div class="sp-dial" data-info="%s">%s%s%s</div>'
-            % (c.attr(_ranges_tip(ctx)), svg, _mismatch_mark(ctx, gauge),
-               _error_line(ctx, gauge)))
+    # --dial-ratio lets report.css turn its height budget into a width cap.
+    return ('<div class="sp-dial" style="--dial-ratio:%.4f" data-info="%s">'
+            '%s%s%s</div>'
+            % (_W / _H, c.attr(_ranges_tip(ctx)), svg,
+               _mismatch_mark(ctx, gauge), _error_line(ctx, gauge)))
+
+
+def _val_baseline():
+    """The score figure sits just above its SCORE caption."""
+    return _H - 15
+
+
+def _tick_labels(geo, gauge):
+    """Scale ends and band boundaries as <text>, all inside the bowl.
+
+    Each sits at its true angle. The ends go on the outer ring first, so they
+    are never crowded out; boundaries are then placed in two passes: first every one the outer ring can
+    hold, then the leftovers on the inner ring; what fits neither is left off.
+    Fit is judged by box overlap against every label already placed and the
+    score figure, so no two ever print on top of each other. Outer-ring-first
+    keeps the labels on one line wherever the bands allow it -- placing each
+    boundary on its first free ring in scale order zig-zagged, and let a
+    crowded low boundary take the room a later one needed.
+    """
+    lo, hi = geo["min"], geo["max"]
+    span = float(hi - lo)
+    placed, out = [], []
+    if gauge:
+        # The score figure: ~0.62em per display digit, cap height _VAL_CAP.
+        half = 0.31 * _VAL_SIZE * len(str(gauge["value"])) + 2
+        base = _val_baseline()
+        placed.append((_CX - half, base - _VAL_CAP - 2, _CX + half, base + 2))
+
+    def box(x, y, text):
+        half = len(text) * _TICK_CH / 2 + _TICK_PAD
+        return (x - half, y - _TICK_H / 2 - _TICK_PAD,
+                x + half, y + _TICK_H / 2 + _TICK_PAD)
+
+    def clear(b):
+        return all(b[2] <= p[0] or b[0] >= p[2] or b[3] <= p[1] or b[1] >= p[3]
+                   for p in placed)
+
+    ends, inner = [], []
+    for t in geo["ticks"]:
+        frac = (t["value"] - lo) / span
+        (inner if 0.001 < frac < 0.999 else ends).append((frac, str(t["value"])))
+
+    for frac, text in ends:
+        x, y = _point(frac, _TICK_RINGS[0])
+        placed.append(box(x, y, text))
+        out.append('<text x="%.1f" y="%.1f" text-anchor="middle">%s</text>'
+                   % (x, y + _TICK_H / 2 - 1, text))
+
+    for ring in _TICK_RINGS:
+        left_over = []
+        for frac, text in inner:
+            x, y = _point(frac, ring)
+            b = box(x, y, text)
+            if not clear(b):
+                left_over.append((frac, text))
+                continue
+            placed.append(b)
+            out.append('<text x="%.1f" y="%.1f" text-anchor="middle">%s'
+                       '</text>' % (x, y + _TICK_H / 2 - 1, text))
+        inner = left_over
+    return out
 
 
 def _ranges_tip(ctx) -> str:
@@ -211,10 +292,15 @@ def _error_line(ctx, gauge) -> str:
 
 
 # --- the right-hand column ---------------------------------------------------
+# The chips and the vintage bar share one stack (.ss-bands), sized by its
+# widest tile; the file-length line sits under it.
 
 def _side_block(ctx) -> str:
-    return ('<div class="sp-side">%s%s</div>'
-            % (_band_block(ctx), _history_block(ctx)))
+    """The FH chip, the AECB chip and the vintage bar as ONE stack of tiles --
+    one width, the widest tile's (28 Sep 2026: the column is only as wide as
+    its content needs, so the dial gets the rest) -- then the file length."""
+    return ('<div class="sp-side"><div class="ss-bands">%s%s</div>%s</div>'
+            % (_band_block(ctx), _vintage_bar(ctx), _history_block(ctx)))
 
 
 def _band_block(ctx) -> str:
@@ -247,8 +333,8 @@ def _band_block(ctx) -> str:
             % aecb["code"])))
 
     if not chips:
-        return '<div class="ss-bands"><span class="na">Band not reported</span></div>'
-    return '<div class="ss-bands">%s</div>' % "".join(chips)
+        return '<span class="na">Band not reported</span>'
+    return "".join(chips)
 
 
 def _fh_field_conflict(ctx) -> str:
@@ -280,11 +366,20 @@ def _band_chip(label, source, tone, info="", mark="") -> str:
                source))
 
 
+def _vintage_bar(ctx) -> str:
+    """The vintage tile, or nothing when the file length can't be worked out."""
+    vintage = scoring.vintage_band(ctx)
+    if scoring.history_months(ctx) is None or not vintage.get("code"):
+        return ""
+    return ('<div class="ss-vint" data-info="%s">'
+            '<span class="ss-vint-k">Vintage</span><span>%s</span></div>'
+            % (c.attr(_vintage_tip(ctx)), c.esc(vintage["code"])))
+
+
 def _history_block(ctx) -> str:
-    """Vintage bar, then bureau file length and the oldest facility date."""
+    """Bureau file length and the oldest facility date."""
     months = scoring.history_months(ctx)
     oldest = ctx.totals.get("OldestContractOpenDate")
-    vintage = scoring.vintage_band(ctx)
 
     if months is None:
         # Say which part is missing -- the oldest date may well have arrived.
@@ -298,12 +393,6 @@ def _history_block(ctx) -> str:
             text = "Bureau history not reported"
         return '<div class="ss-hist"><span class="na">%s</span></div>' % text
 
-    bar = ""
-    if vintage.get("code"):
-        bar = ('<div class="ss-vint" data-info="%s">'
-               '<span class="ss-vint-k">Vintage</span><span>%s</span></div>'
-               % (c.attr(_vintage_tip(ctx)), c.esc(vintage["code"])))
-
     since = ('<span class="ss-hs">since %s</span>' % dates.fmt_month_year(oldest)
              ) if oldest else ""
 
@@ -311,11 +400,11 @@ def _history_block(ctx) -> str:
     tip = ("Bureau history, computed from "
            "contractsTotalSummary.OldestContractOpenDate against the report "
            "date. AECB does not deliver a file length.")
-    return ('<div class="ss-hist">%s'
+    return ('<div class="ss-hist">'
             '<div class="ss-hline" data-info="%s">'
             '<span class="ss-hv">%d</span><span class="ss-hu">months</span>%s'
             '</div></div>'
-            % (bar, c.attr(tip), months, since))
+            % (c.attr(tip), months, since))
 
 
 def _vintage_tip(ctx) -> str:

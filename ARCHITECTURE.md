@@ -655,7 +655,7 @@ stating *Not reported* when empty (the E-mail tile stopped vanishing on
 24 Sep 2026). Two marker classes (`v-wide`, `r2-N`) exist because CSS could only
 ask about row shape with `:has()`, which is above the browser floor.
 
-**§02 Score** — a half-width card beside §03: a semicircular dial (FH zones, marker, score in the bowl, amber `!` when the configured zone and the delivered band disagree) with the FH chip, the AECB chip, the vintage bar and the bureau-history line to its right.
+**§02 Score** — a half-width card beside §03: a dial, a 120° arc (FH zones, marker, score in the bowl, amber `!` when the configured zone and the delivered band disagree) with the FH chip, the AECB chip, the vintage bar and the bureau-history line to its right. The dial is the hero (28 Sep 2026): the chip stack is only as wide as its widest tile and sits against the right edge, and the dial fills the rest. Its height is held at the old 158px, and a 120° sweep (~2.8:1, against a semicircle's 2:1) is what lets that height buy a much wider, larger dial. `score.py` passes the viewBox ratio to the CSS as `--dial-ratio`, which turns the height budget into the width cap. All labels sit inside the arc.
 Both band chips carry **one** tone (taken from the FH band, which is what FH
 policy acts on) because two colours against a single position would read as two
 opinions.
