@@ -214,6 +214,20 @@ payloads shaped differently from the reference customer — no e-mail, an expire
 passport, a missing score band — so paths the real file never exercises still
 get rendered.
 
+**The real-report corpus check.** Every live report the API returns is saved
+(inside the organisation, never committed). A second automated check runs the
+whole collection through the report and checks each one:
+
+- nothing crashed, and no delivered value went missing;
+- the headline figures and status pills agree with the rules, recomputed from
+  the raw report;
+- nothing like "None" or a blank slot reached the screen;
+- no bureau value arrived that the configuration cannot interpret.
+
+It also records which kinds of report the collection has actually exercised,
+and remembers the approved output of each one, so a later change that alters a
+report shows up as a difference to review.
+
 **Install-time verification.** Deploying to the server renders a report as the
 final installation step and refuses to declare success if the output contains an
 external reference.

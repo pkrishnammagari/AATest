@@ -101,6 +101,9 @@ ReferenceJSON/             committed anonymized fixtures the sidebar offers
                            captures — real data, invisible to the picker
 scripts/
 ├── check_report.py        the correctness gate
+├── check_corpus.py        the gate and more over every archived API payload
+├── corpus/                its checks, browser pass, coverage profile,
+│                          baseline, report writer, self-test, TRIAGE.md
 ├── make_synthetic_payload.py  seeded generator of the delinquent fixture
 ├── fetch_fonts.py         one-off, needs internet
 ├── build_wheels.sh        offline bundle builder (connected machine);
@@ -789,7 +792,35 @@ Renders every payload in `ReferenceJSON/` and fails on:
 - any `http://` or `https://` in the output.
 
 The font block and comments are stripped before scanning, since base64 contains
-arbitrary character runs.
+arbitrary character runs. Values are matched as delivered *or* as the escaped
+markup they become (an `&` in an address), the score as the dial's whole
+number, and §03's panels with any amber `!` annotation removed (28 Sep 2026).
+`check_page(ctx, raw)` runs the assertions against an already-rendered page.
+
+### 7.1a `scripts/check_corpus.py` — every archived API payload
+
+```bash
+python3 scripts/check_corpus.py --selftest   # prove every check can fire
+python3 scripts/check_corpus.py              # ReferenceJSON/api_responses/
+python3 scripts/check_corpus.py --approve    # record today's output as baseline
+```
+
+The fixtures exercise one shape of most things; the responses `app_api.py`
+archives exercise the rest. This runs each one through `context.from_bytes`
+(the API seam) and `render_page`, then checks it in layers: load and render (a
+crash is re-rendered section by section to name the one that raised);
+`check_report.check_page`; further no-drop checks (every contract in the §07
+blob, history rows that cannot join, applications off the timeline, contact
+types and §06 summary rows the page never reads); pills and headline figures
+**recomputed from the raw payload** by PayLoadRead.md's rules; page hygiene
+(`None`/`NaN`/empty slots/broken markup); config vocabulary gaps; date shapes;
+and, when Chrome is present, a headless pass over what `report.js` draws. It
+also profiles which variants each payload exercises and snapshots derived facts
+per payload, so a later run diffs against an approved baseline.
+
+Output goes to `corpus_report/` (gitignored): `summary.md` to triage from,
+`results.json`, and the rendered page of every flagged payload. The triage
+playbook is `scripts/corpus/TRIAGE.md`. Exit 1 on any ERROR or FAIL.
 
 ### 7.2 `scripts/measure/` — the geometry harness (dev only)
 

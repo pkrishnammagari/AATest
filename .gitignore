@@ -20,3 +20,7 @@ aecb_api.log
 # data, never commit. The anonymized fixtures at ReferenceJSON/ top level ARE
 # committed.
 ReferenceJSON/api_responses/
+
+# Written by scripts/check_corpus.py -- rendered pages, findings and the
+# approved baseline, all derived from those captures. Never commit.
+corpus_report/

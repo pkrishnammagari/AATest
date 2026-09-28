@@ -604,3 +604,8 @@ amount, non-zero guaranteed-overdue or outcome counter, and §07/§08's
 only-when-delivered blob keys); if a verbatim figure is not in the exact
 element meant to carry it (§03's delivered panels, §06's utilisation); or if
 any external URL appears in the output. Run it after every change.
+
+`scripts/check_corpus.py` runs the same gate over every archived API response
+in `ReferenceJSON/api_responses/`. It also re-derives the pills and headline
+figures described above from each raw payload and compares them with the page.
+See ARCHITECTURE.md §7.1a and `scripts/corpus/TRIAGE.md`.

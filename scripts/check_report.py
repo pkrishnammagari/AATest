@@ -23,7 +23,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aecb import context, dates               # noqa: E402
 from aecb.derive import identity as derive_identity  # noqa: E402
+from aecb.derive import scoring               # noqa: E402
+from aecb.render.components import esc        # noqa: E402
 from aecb.render.page import render_page      # noqa: E402
+
+
+def _on_page(value, html):
+    """Whether a delivered value is on the page, as delivered or as the
+    escaped markup it becomes. A value carrying & < > or " (an address like
+    'A&B TOWER') only ever appears escaped, and a raw-substring search would
+    report it missing while the reader sees it."""
+    text = str(value)
+    return text in html or esc(text) in html
+
 
 def strip_noise(html):
     """Drop the font blob, the stylesheet and comments before scanning.
@@ -55,18 +67,29 @@ def _values_in(block_class, raw):
 
 def check(path):
     ctx = context.from_file(path)
-    raw = render_page(ctx)
+    return check_page(ctx, render_page(ctx))
+
+
+def check_page(ctx, raw):
+    """Every assertion below, against an already-rendered page.
+
+    Split out of check() so scripts/check_corpus.py can run the same gate on
+    each archived API payload without rendering it twice.
+    """
     html = strip_noise(raw)
 
     problems = []
 
-    # Values the payload genuinely carries must reach the page.
+    # Values the payload genuinely carries must reach the page. The score is
+    # the dial's whole number: numeric text such as '732.0' is still 732
+    # (PayLoadRead.md, section 02), so it is looked for as the page shows it.
+    score = scoring.score_value(ctx)
     expected = [
         (ctx.customer.get("FullNameEN"), "customer name"),
-        (str(ctx.score.get("DataIndex") or ""), "score"),
+        (str(score) if score is not None else "", "score"),
     ]
     for value, label in expected:
-        if value and value not in raw:
+        if value and not _on_page(value, raw):
             problems.append("payload value missing from page: %s (%r)" % (label, value))
 
     # Name-line statements that exist only when the payload delivers their
@@ -95,7 +118,7 @@ def check(path):
     # noise-stripped html, not raw: a 3-character token like 'MRS' can occur
     # by chance inside the base64 font block and would false-pass there.
     title = ctx.customer.get("Title")
-    if title and title not in html:
+    if title and not _on_page(title, html):
         problems.append("payload value missing from page: customer title (%r)" % title)
 
     # Every delivered identification value must reach the page -- the newest
@@ -104,7 +127,7 @@ def check(path):
     # loss the page would never reveal (decision, 8 Sep 2026).
     for row in ctx.rows("identification"):
         info = row.get("Info")
-        if info and str(info) not in html:
+        if info and not _on_page(info, html):
             problems.append("payload value missing from page: identification "
                             "%s (%r)" % (row.get("InfoType"), info))
 
@@ -115,7 +138,7 @@ def check(path):
     partial = False
     for row in ctx.rows("addresses"):
         text = row.get("Address")
-        if text and str(text) not in html:
+        if text and not _on_page(text, html):
             problems.append("payload value missing from page: address (%r)" % text)
         if text is None and any(row.get(f) is not None
                                 for f in ("Emirate", "PoBox", "PlotNo")):
@@ -131,7 +154,7 @@ def check(path):
         if base not in ("mobile number", "phone number", "e-mail"):
             continue
         value = row.get("Contact")
-        if value and str(value) not in html:
+        if value and not _on_page(value, html):
             problems.append("payload value missing from page: contact "
                             "%s (%r)" % (row.get("ContactType"), value))
 
@@ -201,7 +224,7 @@ def check(path):
     if scope_row is not None:
         for field in ("ReportType", "EnquiryType"):
             value = str(scope_row.get(field) or "").strip()
-            if value and value not in html:
+            if value and not _on_page(value, html):
                 problems.append("top bar scope chip missing: sectionStatus."
                                 "%s %r never renders" % (field, value))
         # A blank ReportType is stated, never dropped; a delivered EnquiryNo
@@ -288,7 +311,11 @@ def check(path):
     # themselves. It is coupled to .wsx-worst on purpose; that coupling is the
     # only thing that makes the assertion mean anything, and if the markup
     # moves, this check SHOULD be the thing that notices.
-    panels = re.findall(r'<div class="wsx-worst[^"]*">(.*?)</div>', raw, flags=re.S)
+    # The amber '!' a panel may carry (summary.WorstStatus24M disagreeing, or
+    # the 36-month floor) annotates the figure; it is not part of it.
+    panels = [re.sub(r'\s*<span class="attn"[^>]*>!</span>', "", p)
+              for p in re.findall(r'<div class="wsx-worst[^"]*">(.*?)</div>',
+                                  raw, flags=re.S)]
     delay = _values_in("wsx-sub", raw)
     util = _values_in("fac-util-h", raw)
 
@@ -312,7 +339,7 @@ def check(path):
             continue
         text = "{:,.0f}".format(value) if isinstance(value, (int, float)) else str(value)
         wanted = shape % text
-        if wanted not in found:
+        if wanted not in found and esc(wanted) not in found:
             problems.append("a delivered figure is not shown verbatim: %s -- "
                             "expected %r, that element carries %r"
                             % (label, wanted, found))

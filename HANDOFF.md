@@ -29,7 +29,10 @@ about it.
 > delivered figures shown verbatim, no external references — is unchanged and
 > still runs after every change.
 
-Last updated: **2 September 2026**, after a documentation-drift audit and the
+Last updated: **28 September 2026**: the real-payload corpus harness
+(`scripts/check_corpus.py` + `scripts/corpus/`) landed, with three
+false-alarm fixes to `check_report.py`. See *Recently landed*. Before that,
+**2 September 2026**, after a documentation-drift audit and the
 fix batch that followed it: uploads made session-scoped again (nothing written
 to disk), the 36-month history window enforced at derivation, an ungraded
 *unknown* tone for statuses the config cannot rank, escaping tightened, a
@@ -742,6 +745,8 @@ elsewhere without resolving it.
 
 ```bash
 .venv/bin/python scripts/check_report.py
+.venv/bin/python scripts/check_corpus.py --selftest
+.venv/bin/python scripts/check_corpus.py   # where api_responses/ exists
 node --check aecb/render/report.js
 .venv/bin/python -c "
 import ast,pathlib
@@ -837,8 +842,9 @@ aecb/render/page.py   render_page(ctx) -> one standalone HTML string
     sections/         identity · score · income · returns · worst_status ·
                       facilities · detail · applications (numbered by position)
 config/               providers · status_codes · bands · income · returns
-scripts/              check_report · make_synthetic_payload · fetch_fonts ·
-                      build_wheels (writes requirements.lock) ·
+scripts/              check_report · check_corpus + corpus/ (real-payload
+                      harness, TRIAGE.md) · make_synthetic_payload ·
+                      fetch_fonts · build_wheels (writes requirements.lock) ·
                       install_offline · measure/
 docs/BRD.docx         business requirements, written in RRM's voice
 sonar-project.properties    Sonar scan exclusions
@@ -848,6 +854,45 @@ assets/fonts/OFL.txt        font licence and attribution
 ## Recently landed
 
 Nothing in flight.
+
+**28 September 2026: the real-payload corpus harness.** The user has about
+100 masked live responses in `ReferenceJSON/api_responses/` on their
+organisation machine (not on this one). `scripts/check_corpus.py` runs every
+one through `context.from_bytes` and `render_page`. It then checks load and
+render (crashes are localised by rendering each section alone),
+`check_report.check_page`, extra no-drop rules, pills and headline figures
+**recomputed from the raw payload** per PayLoadRead.md, page hygiene, config
+vocabulary, date shapes and (with Chrome) what `report.js` draws. It writes
+`corpus_report/summary.md` + `results.json` + flagged pages (gitignored).
+Other pieces:
+
+- a variant-coverage matrix (which report paths the real corpus exercises);
+- a derived-facts baseline (`--approve`, then diffs);
+- `--selftest`: 60 cases, each breaking one thing, prove every check can fire.
+
+Triage playbook for Claude Code: `scripts/corpus/TRIAGE.md`.
+
+Decisions and learnings from building it:
+
+- **AI is not the oracle.** The harness is deterministic; Claude Code triages
+  its findings. With no answer key for real reports, "right output" means the
+  spec restated as recomputations, plus a human-approved baseline.
+- **`check_report.py` false alarms fixed** (they would have hit real data):
+  values are now matched as delivered *or* escaped (an `&` in an address); the
+  score is matched as the dial's whole number (`"732.0"` shows as 732, per
+  spec); §03 panels are compared with the amber `!` annotation stripped.
+  `check()` now delegates to `check_page(ctx, raw)`.
+- **Found on synthetic variants, not fixed (the triage run decides):**
+  - a `null` entry inside `contracts` or `applications` crashes the render
+    (`Facility`/`applied_on` call `.get` on `None`);
+  - a delivered string `"0"` is truthy, so §06 shows "Guaranteed AED 0" chips
+    and §07 files a zero-overdue service under Active;
+  - `YYYYMMDD` dates do not parse;
+  - a 300-character unbroken value makes the page scroll sideways at 1560 px.
+- **Headless Chrome hangs with an explicit `--user-data-dir` on this Mac**
+  (0.6 s without, a 40 s timeout with). The browser pass relies on headless
+  Chrome's own temporary profile; parallel instances were verified not to
+  collide.
 
 **10 September 2026 — ctx.report_date is now the enquiry ladder, read
 generically.** The sectionStatus ladder that dated only the validity strip

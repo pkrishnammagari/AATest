@@ -18,7 +18,10 @@ available; every section has also been through a design pass.
 **Every figure on screen comes from the payload.** That is enforced, not
 assumed: `python3 scripts/check_report.py` fails the build if a payload value
 goes missing from the page, if a delivered figure stops being shown verbatim, or
-if an external reference creeps in.
+if an external reference creeps in. `python3 scripts/check_corpus.py` runs that
+gate, and a good deal more, over every live response archived in
+`ReferenceJSON/api_responses/`, and writes a triage report to
+`corpus_report/` (playbook: `scripts/corpus/TRIAGE.md`).
 
 **Governing rule: no fabricated value ever reaches the screen.** Where the
 payload carries nothing, the element renders an explicit empty state that
