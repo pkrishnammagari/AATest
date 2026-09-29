@@ -27,7 +27,8 @@ optional surrounding quotes. Values are taken literally -- no escapes, no
 variable expansion. A setting already present in the shell environment wins
 over the file, so a one-off override needs no edit.
 
-Development tooling only: never deployed (.gitattributes export-ignore).
+Development tooling only: never deployed (deploy/make_release.sh leaves
+scripts/ out of the release).
 Python 3.9 compatible.
 """
 

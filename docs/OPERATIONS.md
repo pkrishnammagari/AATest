@@ -73,9 +73,10 @@ The release archive holds exactly what is committed, not the working tree:
   It does not check for untracked files, and untracked files are never
   packaged. Before packaging, commit every file the server needs, such as a
   new file under `deploy/`, `.streamlit/` or `requirements.lock`.
-- It runs `git archive HEAD`, minus the `export-ignore` paths in
-  `.gitattributes`: `app.py`, `tests/`, `scripts/`, `docs/`, the anonymized
-  archive fixture, and the development config files.
+- It runs `git archive HEAD`, minus the development-only paths listed in
+  the script (`DEV_ONLY`): `app.py`, `tests/`, `scripts/`, `docs/`, the
+  anonymized archive fixture, and the development config files. A GitHub
+  "Download ZIP" or a `git clone` still contains everything.
 - The release keeps `app_api.py`, `aecb/`, `config/`, `assets/`,
   `resources/`, `.streamlit/`, `deploy/`, `requirements.txt`,
   `requirements.lock`, and the synthetic fixture used by the install smoke
