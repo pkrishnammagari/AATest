@@ -455,11 +455,11 @@ EXPECT = {
     # Section 06. A guarantor block always renders, so `roles` is the assertion
     # that the split exists at all; `nil` proves which of the two statements
     # the block chose.
-    # The report date is the enquiry ladder since 10 Sep 2026 (user decision):
-    # on this archive fixture it moved from the 2023-10-26 pull to the
-    # 2024-08-20 enquiry, shifting every window forward -- so the 90-day
-    # focus now holds 0 applications (AECB's own counter still says 5; the
-    # section tags the mismatch) and no facility closed in the last 6 months.
+    # The report date is the latest sectionStatus enquiry: on this archive
+    # fixture that is 2024-08-20, ten months after the 2023-10-26 data pull,
+    # which shifts every window forward -- so the 90-day focus holds 0
+    # applications (AECB's own counter says 5; the section tags the mismatch)
+    # and no facility closed in the last 6 months.
     "reference": lambda r: (_s1(r) and _wsx_ref(r)
                             and r["apps"]["events"] == 15
                             and r["apps"]["focus"] == 0
@@ -494,8 +494,8 @@ EXPECT = {
                                  and "Closed · last 6 months" not in _blocks(r)),
     "guarantor-role": lambda r: r["hm"]["roles"].count("Guarantor") == 2,
 
-    # Section 08. The reference payload has 15 dated applications, 5 of them
-    # inside the window and 6 disbursed.
+    # Applications. The reference payload has 15 dated applications, none
+    # inside the 90-day window (see "reference" above), and 6 disbursed.
     "apps-none": lambda r: r["apps"]["events"] == 0 and r["apps"]["empty"],
     "apps-undated": lambda r: r["apps"]["events"] == 0 and r["apps"]["empty"],
     "apps-quiet": lambda r: (r["apps"]["events"] == 15

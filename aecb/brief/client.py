@@ -1,9 +1,12 @@
-"""Thin Ollama client for the brief -- urllib only, localhost only.
+"""Thin Ollama client for the brief -- urllib only, loopback only.
 
 urllib.request rather than a pip dependency: the deployment is air-gapped and
-requirements.txt is deliberately one line long. The base URL is pinned to
-localhost and is NOT read from config or environment -- a bureau payload digest
-must not be routable off this machine by misconfiguration.
+requirements.txt is deliberately one line long. The base URL is pinned to the
+loopback address and is NOT read from config or environment -- a bureau
+payload digest must not be routable off this machine by misconfiguration. For
+the same reason the opener ignores proxy environment variables (urllib would
+otherwise send even a localhost request to an http_proxy) and refuses
+redirects.
 
 The /api/chat endpoint, not /api/generate: gpt-oss:20b returns an EMPTY
 response when a JSON format schema is passed to /api/generate (verified against
@@ -17,7 +20,7 @@ import json
 import urllib.error
 import urllib.request
 
-OLLAMA_URL = "http://localhost:11434"
+OLLAMA_URL = "http://127.0.0.1:11434"
 MODEL = "gpt-oss:20b"
 
 # First call pays model load (~7s) plus reasoning tokens at ~40 tok/s on the
@@ -46,6 +49,30 @@ class BriefUnavailable(Exception):
     state rather than carrying an error about infrastructure."""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code,
+                                     "redirects are refused", headers, fp)
+
+
+# No ProxyHandler entries: proxy environment variables are ignored.
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                      _NoRedirect())
+
+# A chat reply is a few KB of JSON. Anything far larger is not one.
+_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
+
+def _read_json(response):
+    body = response.read(_MAX_RESPONSE_BYTES + 1)
+    if len(body) > _MAX_RESPONSE_BYTES:
+        raise ValueError("response larger than %d bytes" % _MAX_RESPONSE_BYTES)
+    data = json.loads(body.decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("response is not a JSON object")
+    return data
+
+
 def _post(path: str, payload: dict, timeout: int) -> dict:
     request = urllib.request.Request(
         OLLAMA_URL + path,
@@ -54,10 +81,10 @@ def _post(path: str, payload: dict, timeout: int) -> dict:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
+        with _OPENER.open(request, timeout=timeout) as response:
+            return _read_json(response)
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        raise BriefUnavailable("Ollama request failed: %s" % exc)
+        raise BriefUnavailable("Ollama request failed: %s" % exc) from exc
 
 
 def probe() -> str:
@@ -69,8 +96,8 @@ def probe() -> str:
     refused in milliseconds.
     """
     try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=2) as r:
-            tags = json.loads(r.read().decode("utf-8"))
+        with _OPENER.open(OLLAMA_URL + "/api/tags", timeout=2) as response:
+            tags = _read_json(response)
     except (urllib.error.URLError, OSError, ValueError):
         return "model service not reachable on this deployment"
     names = {m.get("name", "") for m in tags.get("models") or []}
@@ -100,7 +127,9 @@ def chat(system: str, user: str, schema: dict) -> dict:
     last_error = "empty response"
     for _ in range(2):
         data = _post("/api/chat", payload, TIMEOUT_S)
-        content = (data.get("message") or {}).get("content") or ""
+        message = data.get("message")
+        content = (message.get("content") if isinstance(message, dict)
+                   else None) or ""
         if content.strip():
             try:
                 return json.loads(content)

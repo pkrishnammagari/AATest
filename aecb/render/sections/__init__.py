@@ -8,11 +8,11 @@ position this tuple assigns it.
 
 A nested tuple is a ROW: its sections render side by side as half-width cards
 (.sec-pair), numbered in order like any other. Score and worst statuses share
-one (user decision, 24 Sep 2026) -- the score dial and the worst conduct read
-as one risk-at-a-glance row and measure about the same height; income stays
-full width because it loads collapsed and its chart needs the width.
+one -- the score dial and the worst conduct read as one risk-at-a-glance row
+and measure about the same height; income stays full width because it loads
+collapsed and its chart needs the width.
 
-Each module supplies META (title, purpose) and a render(ctx, meta) that passes
+Each module supplies META (its title) and a render(ctx, meta) that passes
 meta straight through to components.section_card.
 """
 

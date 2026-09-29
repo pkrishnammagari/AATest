@@ -3,8 +3,8 @@
 Source: paymentOrder only. Each row is one returned instrument. The summary
 block's three-month counters are deliberately not read -- their window cannot
 describe a list that reaches back years, and whether their figure is an amount
-or a count is unverified. RRM decision, Aug 2026: the section is built from
-the returns themselves.
+or a count is unverified. By RRM decision the section is built from the
+returns themselves.
 
 Two halves over one card, the same grammar as the income section: the returns as
 delivered on the left, the same events on a timeline on the right. Severity
@@ -21,6 +21,7 @@ positive finding while 'never requested' is a gap in the file.
 from __future__ import annotations
 
 from ... import dates
+from ...coerce import flag
 from ...derive import returns
 from .. import components as c
 from .. import svgtime
@@ -160,18 +161,6 @@ def _aside(model, requested, confirming):
     return c.tag("Unverified", "warn")
 
 
-def _as_flag(value):
-    """True / False / None for a delivered flag, text spellings included."""
-    if isinstance(value, bool) or value is None:
-        return value
-    text = str(value).strip().lower()
-    if text in ("true", "y", "yes", "1"):
-        return True
-    if text in ("false", "n", "no", "0"):
-        return False
-    return None
-
-
 def _flag_conflict(ctx, has_rows) -> str:
     """Amber '!' when score.PaymentOrderFlag contradicts the rows delivered.
 
@@ -179,10 +168,10 @@ def _flag_conflict(ctx, has_rows) -> str:
     returns exist. Silent when they agree or the flag is absent -- the
     section itself is built from paymentOrder alone.
     """
-    flag = _as_flag(ctx.score.get("PaymentOrderFlag"))
-    if flag is None or flag == has_rows:
+    flagged = flag(ctx.score.get("PaymentOrderFlag"))
+    if flagged is None or flagged == has_rows:
         return ""
-    if flag:
+    if flagged:
         text = ("score.PaymentOrderFlag is true -- the bureau flags returned "
                 "payment orders -- but paymentOrder delivered no rows.")
     else:
@@ -594,32 +583,37 @@ def _event(rec, sx, y) -> str:
                x, y + 3.2, glyph))
 
 
-def _legend(model) -> str:
-    items = []
-    kinds = set(r.kind for r in model["dated"])
-    if "cheque" in kinds:
-        items.append('<span class="inc-lg"><i class="mk-lg">C</i>Bounced '
-                     'cheque</span>')
-    if "dd" in kinds:
-        items.append('<span class="inc-lg"><i class="mk-lg">D</i>Unpaid '
-                     'direct debit</span>')
-    if None in kinds:
-        items.append('<span class="inc-lg"><i class="mk-lg">?</i>Other '
-                     'instrument</span>')
+# Instrument markers in legend order: (kind, glyph, legend text).
+_KIND_LEGEND = (("cheque", "C", "Bounced cheque"),
+                ("dd", "D", "Unpaid direct debit"),
+                (None, "?", "Other instrument"))
 
-    # Only the tones actually on the chart, so the legend never promises a
-    # severity the payload did not deliver.
-    tones = [(t, label) for t, label in
-             (("red", "Multiple"), ("amber", "Single"), ("neutral", "Other"))
-             if any(r.severity_tone == t for r in model["dated"])]
-    for tone, _label in tones:
-        names = sorted(set(str(r.severity) for r in model["dated"]
+# Severity tones in legend order; neutral draws in ink-3.
+_LEGEND_TONES = ("red", "amber", "neutral")
+
+
+def _tone_legend(dated) -> list:
+    """One entry per tone actually on the chart, naming the delivered
+    Severity texts behind it -- the legend never promises a severity the
+    payload did not deliver."""
+    items = []
+    for tone in _LEGEND_TONES:
+        names = sorted(set(str(r.severity) for r in dated
                            if r.severity_tone == tone and r.severity))
         if names:
             items.append('<span class="inc-lg"><i class="dot" style='
                          '"background:var(--%s)"></i>%s</span>'
-                         % (_TONE_FILL[tone] if tone != "neutral" else "ink-3",
+                         % (_TONE_FILL.get(tone, "ink-3"),
                             c.esc(" / ".join(names))))
+    return items
+
+
+def _legend(model) -> str:
+    kinds = set(r.kind for r in model["dated"])
+    items = ['<span class="inc-lg"><i class="mk-lg">%s</i>%s</span>'
+             % (glyph, text) for kind, glyph, text in _KIND_LEGEND
+             if kind in kinds]
+    items.extend(_tone_legend(model["dated"]))
     return ('<div class="inc-legend">%s</div>' % "".join(items)) if items else ""
 
 

@@ -8,15 +8,13 @@ IMPORTANT -- the delivered FH band is authoritative. The chip shows what AECB
 sent in FHScoreBand; the dial is only configured geometry from
 config/bands.json. Do not "tidy" this by deriving the band from the number:
 whenever the cut-offs and the bureau disagree, computing it would silently
-contradict the bureau (before the FH bands were set on 24 Sep 2026 the old
-cut-offs put the reference payload's 732 in VLR while AECB delivered LR).
-When the two disagree the dial carries an amber '!' saying so (decision,
-24 Sep 2026) -- the delivered band still wins, the config gets checked.
+contradict the bureau. When the two disagree the dial carries an amber '!'
+saying so -- the delivered band still wins, the config gets checked.
 
-Layout (24 Sep 2026, user decision): a half-width card beside section 03
-(worst statuses). A dial (a 120-degree arc) -- FH band zones, marker at the score,
-the score in the middle -- with the FH chip, the AECB chip, the vintage bar
-and the bureau-history line stacked to its right. Colour follows the FH bands
+Layout: a half-width card beside the worst-statuses section. A dial (a
+120-degree arc) -- FH band zones, marker at the score, the score in the
+middle -- with the FH chip, the AECB chip, the vintage bar and the
+bureau-history line stacked to its right. Colour follows the FH bands
 everywhere: the dial zones by configured tone, both chips by the delivered FH
 band's tone.
 """
@@ -50,8 +48,20 @@ _FILL = {"red-ink": "var(--red-ink)", "red": "var(--red)",
          "green": "var(--green)"}
 # Text on each fill. The light fills -- dpd1 (MR) and green-mid (LR) -- take
 # dark ink: white on them reads at ~3:1 or worse, and the chip must match its
-# dial zone exactly (colour follows the configured FH bands, 24 Sep 2026).
+# dial zone exactly (colour follows the configured FH bands).
 _INK = {"dpd1": "var(--ink)", "green-mid": "var(--ink)"}
+
+
+def _checked_tone(tone):
+    """A configured band tone, which must be one this section can draw.
+
+    An unknown tone is a configuration fault and fails loudly: it must neither
+    crash the dial on one path nor silently paint the chip green on another.
+    """
+    if tone and tone not in _FILL:
+        raise ValueError("config/bands.json fh_bands tone %r is not one of %s."
+                         % (tone, ", ".join(sorted(_FILL))))
+    return tone
 
 # Dial zone opacity per configured tone, over the tone's own token colour.
 # The zones are the backdrop the marker is read against, so they stay lighter
@@ -63,11 +73,12 @@ _ZONE_OPACITY = {"red-ink": .3, "red": .55, "dpd3": .6, "amber": .6,
 # circle: the scale minimum at the left foot, the maximum at the right, the
 # score in the bowl.
 #
-# The dial is the section's hero (28 Sep 2026). Its HEIGHT is fixed by the
+# The dial is the section's hero. Its HEIGHT is fixed by the
 # section (report.css caps it), so the shape decides how big it can look: a
 # semicircle is only 2:1, while a 120-degree sweep is ~2.8:1 -- the same height
 # buys a far wider, larger-radius dial that fills the card's width beside the
-# chips (140 degrees still left ~100px of the card empty at 1560px). Every label sits INSIDE the bowl and
+# chips (140 degrees still left ~100px of the card empty at 1560px). Every
+# label sits INSIDE the bowl and
 # the viewBox is cropped to what is drawn, so no width or height is spent on
 # margins. The viewBox ratio reaches the CSS as --dial-ratio (see _dial_block).
 _SWEEP = math.radians(120)
@@ -108,9 +119,9 @@ _W, _H, _CX, _CY = _extent()
 
 
 def render(ctx, meta) -> str:
-    # A missing score no longer blanks the card (24 Sep 2026): the bands and
-    # the bureau history come from other fields -- one of them another array
-    # -- and hiding them with the score was information loss.
+    # A missing score does not blank the card: the bands and the bureau
+    # history come from other fields -- one of them another array -- and
+    # hiding them with the score would be information loss.
     gauge = scoring.gauge(ctx)
     body = ('<div class="sp">%s%s</div>'
             % (_dial_block(ctx, gauge), _side_block(ctx)))
@@ -152,7 +163,8 @@ def _dial_block(ctx, gauge) -> str:
     for z in geo["zones"]:
         end = start + z["width"] / 100.0
         zones.append('<path d="%s" stroke="%s" stroke-opacity="%.2f"/>'
-                     % (_arc(start, end), tokens.token(z["tone"] or "ink-4"),
+                     % (_arc(start, end),
+                        tokens.token(_checked_tone(z["tone"]) or "ink-4"),
                         _ZONE_OPACITY.get(z["tone"], .3)))
         start = end
 
@@ -254,7 +266,7 @@ def _ranges_tip(ctx) -> str:
     the last runs to the scale maximum. bands.json deliberately has no 'to'.
     """
     bands = ctx.bands.get("fh_bands") or []
-    top = (ctx.bands.get("scale") or {}).get("max", 900)
+    top = ctx.bands["scale"]["max"]
     parts = []
     for i, band in enumerate(bands):
         end = bands[i + 1].get("from") - 1 if i + 1 < len(bands) else top
@@ -297,8 +309,8 @@ def _error_line(ctx, gauge) -> str:
 
 def _side_block(ctx) -> str:
     """The FH chip, the AECB chip and the vintage bar as ONE stack of tiles --
-    one width, the widest tile's (28 Sep 2026: the column is only as wide as
-    its content needs, so the dial gets the rest) -- then the file length."""
+    one width, the widest tile's (the column is only as wide as its content
+    needs, so the dial gets the rest) -- then the file length."""
     return ('<div class="sp-side"><div class="ss-bands">%s%s</div>%s</div>'
             % (_band_block(ctx), _vintage_bar(ctx), _history_block(ctx)))
 
@@ -307,7 +319,7 @@ def _band_block(ctx) -> str:
     """The two delivered bands, stacked as equal-width tiles.
 
     Both tiles carry ONE tone, the delivered FH band's -- the colour coding
-    follows the FH bands (user decision, 24 Sep 2026); the AECB tile only
+    follows the FH bands; the AECB tile only
     names AECB's own band. When only AECB is delivered there is no FH tone to
     borrow and its tile stays neutral.
     """
@@ -359,7 +371,7 @@ def _band_chip(label, source, tone, info="", mark="") -> str:
     if not tone:
         return ('<span class="ss-band neutral"%s>%s%s<em>%s</em></span>'
                 % (hover, c.esc(label), mark, source))
-    fill = _FILL.get(tone, "var(--green)")
+    fill = _FILL[_checked_tone(tone)]
     return ('<span class="ss-band" style="background:%s; color:%s; '
             'border-color:%s"%s>%s%s<em>%s</em></span>'
             % (fill, _INK.get(tone, "#fff"), fill, hover, c.esc(label), mark,

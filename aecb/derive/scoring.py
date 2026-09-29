@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime
 
 from .. import dates
+from ..coerce import integer
 
 
 def score_value(ctx):
@@ -19,16 +20,7 @@ def score_value(ctx):
     Numeric text is accepted ("732", "732.0") -- a score delivered as text is
     still a score. A non-whole or non-numeric value is not.
     """
-    value = ctx.score.get("DataIndex")
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        pass
-    try:
-        number = float(str(value).strip())
-    except (TypeError, ValueError):
-        return None
-    return int(number) if number.is_integer() else None
+    return integer(ctx.score.get("DataIndex"))
 
 
 def fh_band(ctx):
@@ -73,7 +65,7 @@ def gauge(ctx):
     """
     value = score_value(ctx)
     geo = scale_geometry(ctx)
-    if value is None or geo is None:
+    if value is None:
         return None
     lo, hi = geo["min"], geo["max"]
     geo.update({"value": value,
@@ -84,14 +76,14 @@ def gauge(ctx):
 def scale_geometry(ctx):
     """The configured scale on its own: zones and ticks, no score.
 
-    Returns {'zones', 'ticks', 'min', 'max'}, or None for an unusable scale.
+    Returns {'zones', 'ticks', 'min', 'max'}.
     Split out of gauge() so the dial can draw its FH zones even when no
     score came back -- the zones are config, not payload.
     """
-    scale = ctx.bands.get("scale") or {}
-    lo, hi = scale.get("min", 300), scale.get("max", 900)
-    if hi <= lo:
-        return None
+    # Validated at load (context._validate_score_bands): numeric, min < max,
+    # bands ascending with a numeric 'from'.
+    scale = ctx.bands["scale"]
+    lo, hi = scale["min"], scale["max"]
     span = float(hi - lo)
 
     def at(v):
@@ -100,7 +92,7 @@ def scale_geometry(ctx):
     bands = ctx.bands.get("fh_bands") or []
     zones = []
     for i, band in enumerate(bands):
-        start = band.get("from", lo)
+        start = band["from"]
         # Each zone runs to where the next one begins, so no gap or overlap.
         end = bands[i + 1].get("from") if i + 1 < len(bands) else hi
         zones.append({
@@ -127,8 +119,8 @@ def configured_band(ctx):
         return None
     code = None
     for band in ctx.bands.get("fh_bands") or []:
-        if value >= band.get("from", 0):
-            code = band.get("code")
+        if value >= band["from"]:
+            code = band["code"]
     return code
 
 
@@ -161,34 +153,17 @@ def vintage_band(ctx):
     return {"code": None, "all": codes}
 
 
-def enquiry_anchor(ctx):
-    """The date the VALIDITY verdict ages, and the enquiry scope behind it.
-
-    Since 10 Sep 2026 this IS ctx.report_date's ladder -- the windows and the
-    validity strip age the same date. The ladder lives on ReportContext
-    (context.enquiry_anchor); this wrapper keeps scoring's public surface so
-    shell.py and validity() need no knowledge of the move.
-
-    Returns {'date', 'basis' ('enquiry' | 'pull' | None), 'report_type',
-             'enquiry_type', 'enquiry_no', 'scope_source'} -- the scope
-    strings verbatim from the winning (latest-dated) sectionStatus row, for
-    the top-bar chips.
-    """
-    return ctx.enquiry_anchor()
-
-
 def validity(ctx):
     """Report freshness against the configured look-back window.
 
-    The aged date comes from enquiry_anchor() -- since 10 Sep 2026 the same
-    ladder that resolves ctx.report_date, so the validity verdict and the
-    windows age one date. Returns
+    The aged date comes from ctx.enquiry_anchor() -- the same ladder that
+    resolves ctx.report_date, so the validity verdict and the windows age one
+    date. Returns
     {'report_date', 'age_days', 'window', 'state', 'valid', 'expires', 'pct',
      'basis', 'report_type', 'enquiry_type', 'enquiry_no', 'scope_source'}
-    -- the last four passed through from enquiry_anchor(). pct is the marker
-    position on
-    the meter, clamped to 0..100 so an old report pins at the end rather than
-    running off the track.
+    -- the last four passed through from the anchor, for the top-bar chips.
+    pct is the marker position on the meter, clamped to 0..100 so an old
+    report pins at the end rather than running off the track.
 
     state is 'valid' (0 <= age <= window), 'expired' (age > window),
     'future' (report date after today -- a bad date or clock skew, which
@@ -199,7 +174,7 @@ def validity(ctx):
     the scope strings still return, so the bar can state what was pulled even
     while saying the age cannot be established.
     """
-    anchor = enquiry_anchor(ctx)
+    anchor = ctx.enquiry_anchor()
     # Validated as a positive whole number when the context loads.
     window = ctx.bands["validity_days"]
     report_date = anchor["date"]

@@ -5,8 +5,7 @@ category x role -- A, C and G), contractsTotalSummary (exposure, newest
 facility, card utilisation, guarantee totals including the overdue-guaranteed
 chip), contractsSummary (the emptiness test, plus the delivered
 declined/rejected/not-taken-up counters, shown only when non-zero -- the
-volume counts TotalNo/ActiveNo/ClosedNo stay undisplayed by the 7 Aug 2026
-decision).
+volume counts TotalNo/ActiveNo/ClosedNo stay undisplayed by decision).
 
 Three things worth stating here rather than leaving to be rediscovered:
 
@@ -21,7 +20,7 @@ plus the 59,600 card LIMIT is exactly the 391,020 delivered, where the card
 balance is only 33,714. So the header total is not the sum of the balances on
 the cards beneath it, and nothing here should be "fixed" to reconcile them.
 
-MAXCURRENTPAYMENTDELAY IS DELIBERATELY NOT SHOWN (RRM decision, Aug 2026). The
+MAXCURRENTPAYMENTDELAY IS DELIBERATELY NOT SHOWN (RRM decision). The
 payload delivers 1 while MaxPaymentDelay24M is 0, every contract's
 Current_DaysPaymentDelay is 0, and every contractsHistory row is 0 DPD. Putting
 it on screen would state a contradiction the file cannot explain. It stays off
@@ -31,6 +30,7 @@ until AECB resolves it.
 from __future__ import annotations
 
 from ... import dates
+from ...coerce import nonzero, number
 from ...derive import facilities
 from ...loader import CATEGORY_LABEL
 from .. import components as c
@@ -98,8 +98,9 @@ def _aside(ctx):
     else:
         parts.append(c.tag('<span class="na">Total exposure not reported</span>'))
 
-    # How recently the customer last took on credit. §02 carries the oldest
-    # facility as the vintage; this is the other end of the same axis.
+    # How recently the customer last took on credit. The score section carries
+    # the oldest facility as the vintage; this is the other end of the same
+    # axis.
     newest = totals.get("NewestContractOpenDate")
     if dates.parse_any(newest):
         parts.append(c.tag('Newest facility <b>%s</b>' % dates.fmt_short(newest)))
@@ -111,14 +112,14 @@ def _aside(ctx):
     # per-category "no guaranteed exposure" lines, so showing it as a chip too
     # would state the same fact twice.
     guaranteed = totals.get("TotalBalanceGuaranteed")
-    if guaranteed:
+    if nonzero(guaranteed):
         parts.append(c.tag("Guaranteed %s" % c.aed(guaranteed), "warn"))
 
     # Guaranteed exposure already OVERDUE is the guarantee being called -- an
     # acute signal, red where the balance chip is amber. Same rule: a zero is
     # carried by the per-category lines, only a real figure earns a chip.
     gtr_overdue = totals.get("TotalOverdueGuaranteed")
-    if gtr_overdue:
+    if nonzero(gtr_overdue):
         parts.append(c.tag("Guaranteed overdue %s" % c.aed(gtr_overdue), "bad"))
 
     return "".join(parts)
@@ -126,8 +127,8 @@ def _aside(ctx):
 
 # --- one category card ------------------------------------------------------
 
-# The delivered application-outcome counters, per category x role. Section
-# 08's rows can also carry an outcome in Phase (D / J / N, since 24 Sep 2026);
+# The delivered application-outcome counters, per category x role. The
+# applications section's rows can also carry an outcome in Phase (D / J / N);
 # these counters are the per-category x role aggregate.
 _OUTCOME_FIELDS = (("DeclinedNo", "declined"),
                    ("RejectedNo", "rejected"),
@@ -168,16 +169,16 @@ def _is_empty(main, co, gtr, counts, live_rows) -> bool:
     if live_rows:
         return False
     for row in counts.values():
-        if row.get("TotalNo"):
+        if nonzero(row.get("TotalNo")):
             return False
-        if any(row.get(field) for field, _label in _OUTCOME_FIELDS):
+        if any(nonzero(row.get(field)) for field, _label in _OUTCOME_FIELDS):
             return False
     return not any(_has_figures(fin) for fin in (main, co, gtr))
 
 
 def _has_figures(fin) -> bool:
     """True when a role carries anything at all beyond zeros and nulls."""
-    return any(fin.get(field) for field in _FIGURES)
+    return any(nonzero(fin.get(field)) for field in _FIGURES)
 
 
 # --- the role blocks --------------------------------------------------------
@@ -218,7 +219,8 @@ def _guarantor_block(ctx, cat, fin, counts):
     # from empty cells. The inference runs in this direction only: a NON-zero
     # total cannot be attributed to any one category, so no claim is made.
     totals = ctx.totals
-    if totals.get("TotalBalanceGuaranteed") == 0 and totals.get("TotalOverdueGuaranteed") == 0:
+    if (number(totals.get("TotalBalanceGuaranteed")) == 0
+            and number(totals.get("TotalOverdueGuaranteed")) == 0):
         return ('<div class="fac-block">%s<span class="fac-nil">No exposure '
                 'reported%s</span></div>%s' % (head, _tag_delivered(),
                                                _outcomes(counts)))
@@ -234,7 +236,7 @@ def _outcomes(counts) -> str:
     non-zero one is adverse -- the bureau recording a decline elsewhere.
     """
     parts = ["%s %s" % (c.format_number(counts.get(field)), label)
-             for field, label in _OUTCOME_FIELDS if counts.get(field)]
+             for field, label in _OUTCOME_FIELDS if nonzero(counts.get(field))]
     if not parts:
         return ""
     info = ("Delivered by AECB in contractsSummary (DeclinedNo, RejectedNo, "
@@ -296,11 +298,8 @@ def _utilisation(ctx):
     halfway already says the track's full width is 100%.
     """
     raw = ctx.totals.get("CreditUtilizationRate")
-    if raw is None or not str(raw).strip():
-        return ""
-    try:
-        pct = float(raw)
-    except (TypeError, ValueError):
+    pct = number(raw)
+    if pct is None:
         return ""
 
     over = pct >= 100

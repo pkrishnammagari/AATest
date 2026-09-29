@@ -8,7 +8,8 @@ the scroll.
 The bar reads left to right as one sentence: is it valid, when was it pulled,
 how far through the window is it, when does it lapse.
 
-Customer identity belongs to section 01 and the score to section 02, so neither
+Customer identity belongs to the identity section and the score to the score
+section, so neither
 is repeated here. Application context (product, amount, tenor, DSR) has no
 source in an AECB payload at all.
 """
@@ -25,7 +26,11 @@ from . import components as c
 from .sections import nav_items
 
 
-def topbar(ctx) -> str:
+_BRIEF_BUTTON = ('<button class="brief-btn" id="briefBtn">'
+                 '<span class="bb-ic">◧</span> AI Analysis</button>')
+
+
+def topbar(ctx, ai_panel: bool = True) -> str:
     return """
 <header class="topbar">
   <div class="brand">
@@ -35,9 +40,11 @@ def topbar(ctx) -> str:
   <div class="tb-sep"></div>
   {validity}
   <div class="tb-spacer"></div>
-  <button class="brief-btn" id="briefBtn"><span class="bb-ic">◧</span> AI Analysis</button>
+  {brief_button}
 </header>
-""".format(mark=branding.brand_mark(), name=branding.APP_NAME,validity=_validity_strip(ctx))
+""".format(mark=branding.brand_mark(), name=branding.APP_NAME,
+           validity=_validity_strip(ctx),
+           brief_button=_BRIEF_BUTTON if ai_panel else "")
 
 
 def _date_label(v) -> str:
@@ -53,8 +60,8 @@ def _date_label(v) -> str:
 def _basis_text(v):
     """What dated the report, for the date-field and meter hovers.
 
-    The ladder (10 Sep 2026): the latest-dated sectionStatus enquiry first,
-    the warehouse pull date as a last resort only.
+    The ladder: the latest-dated sectionStatus enquiry first, the warehouse
+    pull date as a last resort only.
     """
     if v["basis"] == "enquiry":
         return ("Dated by the latest sectionStatus enquiry — %s, Last "
@@ -70,12 +77,12 @@ def _scope_chip(v):
     """The enquiry scope, always stated: what the bureau was actually asked.
 
     The latest-dated sectionStatus row's ReportType and EnquiryType render
-    verbatim as chips -- no hard-coded product vocabulary (10 Sep 2026), so
-    a product the bureau adds later reaches the bar without a code change.
+    verbatim as chips -- no hard-coded product vocabulary, so a product the
+    bureau adds later reaches the bar without a code change.
     An empty sectionStatus still warns: which products were pulled cannot be
     established, and the absence of a bounced-cheque product is graded by
-    the returns section, not here. So does a row with a blank ReportType -- the one
-    fact that says what kind of report this is. A blank EnquiryType simply
+    the returns section, not here. So does a row with a blank ReportType --
+    the one fact that says what kind of report this is. A blank EnquiryType simply
     drops its chip.
 
     The ReportType hover carries the delivered EnquiryNo, the bureau's own
@@ -165,8 +172,8 @@ def _validity_strip(ctx):
                 '— report age cannot be established</span></div>'
                 % (pill, scope))
 
-    # The meter has two colours (user decision, 24 Sep 2026): green while the
-    # report is valid, red otherwise -- expired pins the marker at the far
+    # The meter has two colours: green while the report is valid, red
+    # otherwise -- expired pins the marker at the far
     # end, future-dated sits at zero (scoring clamps pct to 0..100). The end
     # date always reads "Valid until" -- it is the last valid day (age ==
     # window is still valid), so calling it the day the report "lapsed" was
@@ -266,7 +273,7 @@ def _days_label(v) -> str:
     return ("%.1f" % years).rstrip("0").rstrip(".") + " years"
 
 
-def spine(ctx) -> str:
+def spine() -> str:
     """Left rail of numbered markers, one per section.
 
     A sticky column in the grid rather than a fixed overlay. Fixed positioning

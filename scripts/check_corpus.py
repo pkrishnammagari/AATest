@@ -1,11 +1,12 @@
 """Run every archived API payload through the report and check what it shows.
 
 check_report.py gates the two committed fixtures. This runs the same gate --
-and a good deal more -- over every real response app_api.py has archived to
-ReferenceJSON/api_responses/, because a code path the fixtures never take is
-a code path nothing has tested.
+and a good deal more -- over every real response app_api.py has archived
+(the AECB_ARCHIVE_DIR folder; ReferenceJSON/api_responses/ on machines that
+still hold the older in-tree archive), because a code path the fixtures never
+take is a code path nothing has tested.
 
-    python3 scripts/check_corpus.py                    # ReferenceJSON/api_responses/
+    python3 scripts/check_corpus.py                    # $AECB_ARCHIVE_DIR
     python3 scripts/check_corpus.py --only 20260915    # files whose name contains it
     python3 scripts/check_corpus.py --approve          # accept today's output as baseline
     python3 scripts/check_corpus.py --browser off      # skip the headless-Chrome pass
@@ -45,7 +46,10 @@ from aecb.render import branding                      # noqa: E402
 from corpus import (browser, checks, pagetext, registry, report,   # noqa: E402
                     snapshot)
 
-DEFAULT_DIR = os.path.join(REPO, "ReferenceJSON", "api_responses")
+# Where app_api.py archives responses (aecb/archive.py); the in-tree folder
+# is the pre-AECB_ARCHIVE_DIR location, kept as the fallback.
+DEFAULT_DIR = (os.environ.get("AECB_ARCHIVE_DIR")
+               or os.path.join(REPO, "ReferenceJSON", "api_responses"))
 DEFAULT_OUT = os.path.join(REPO, "corpus_report")
 
 
@@ -94,10 +98,12 @@ def _resolve_dir(path):
 def _git():
     try:
         sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO,
-                             capture_output=True, text=True).stdout.strip()
+                             capture_output=True, text=True,
+                             timeout=10).stdout.strip()
         dirty = bool(subprocess.run(["git", "status", "--porcelain", "--",
                                      "aecb", "config", "scripts"], cwd=REPO,
-                                    capture_output=True, text=True).stdout.strip())
+                                    capture_output=True, text=True,
+                                    timeout=10).stdout.strip())
         return sha or "unknown", dirty
     except Exception:   # noqa: BLE001 -- no git on the box is not a failure
         return "unknown", False

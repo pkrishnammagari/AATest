@@ -21,10 +21,9 @@ SECTIONS = {
            ".inc-note", ".attn"],
     "s5": [".ret-grp", ".rec-t", ".ret-amt", ".ret-date", ".rtype", ".sev",
            ".mk-lg", ".sub-wrap.slim .sub-bar-t"],
-    # The .wsx-row* family went with the three-panel redesign (7 Aug 2026).
-    # The pending 36-month panel renders an .empty-state inside a .wsx-panel,
-    # which is scoped markup the bare .empty-state selector would resolve to
-    # section 06's instead -- hence the scoped entries.
+    # A panel stating an absence renders an .empty-state inside a .wsx-panel,
+    # which the bare .empty-state selector would resolve to another section's
+    # instead -- hence the scoped entries.
     "s3": [".wsx", ".wsx-panel", ".wsx-win", ".wsx-fig", ".wsx-worst",
            ".wsx-sub", ".wsx-sub .k", ".wsx-sub .v",
            "#s3 .empty-state", "#s3 .es-msg", "#s3 .es-detail"],

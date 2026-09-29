@@ -1,898 +1,180 @@
-# AECB Analyzer V2
+# FH AECB Analyzer
 
-Renders an archived AECB bureau payload as a single scannable underwriting
-screen, to collapse time-to-decision on an individual customer report.
+FH AECB Analyzer renders an Al Etihad Credit Bureau (AECB) credit-report payload
+(JSON) as one self-contained HTML underwriting screen. Streamlit hosts the page.
+Its purpose is to shorten the time an underwriter needs to read one customer's
+bureau report.
 
-**Status: wired to the payload, and on a fluid scale.** All eight sections
-render the real customer. Section 03's 36-month panel is **derived** (built
-9 Sep 2026 to RRM defaults — see *§03 worst statuses* below): AECB delivers no
-36-month worst status, so it is computed from the delivered conduct evidence
-and always marked `derived`. All eight sections grow and shrink with the space
-available; every section has also been through a design pass.
+- **Read-only viewer.** The app does not score, approve, decline or write
+  anything back to any system. It shows what the bureau delivered, arranged so
+  it can be read.
+- **Delivered vs derived.** Every figure is either delivered by AECB (shown
+  verbatim) or arithmetically derived from delivered values. Figures are tagged
+  `delivered` or `derived`. No value is fabricated.
+- **Absence never renders as good conduct.** Where the payload carries nothing,
+  the page says *not reported*. It never shows a blank, a zero or a green tone.
+  "Reported as zero" and "not reported" mean opposite things on a credit screen.
 
-> **Picking this up mid-stream?** Read [HANDOFF.md](HANDOFF.md) — it carries the
-> current state of play, the decisions already taken, and what was being worked
-> on last. Keeping it current is a standing instruction; see
-> *[Keeping the documentation current](#keeping-the-documentation-current)*.
+## Entry points
 
-**Every figure on screen comes from the payload.** That is enforced, not
-assumed: `python3 scripts/check_report.py` fails the build if a payload value
-goes missing from the page, if a delivered figure stops being shown verbatim, or
-if an external reference creeps in. `python3 scripts/check_corpus.py` runs that
-gate, and a good deal more, over every live response archived in
-`ReferenceJSON/api_responses/`, and writes a triage report to
-`corpus_report/` (playbook: `scripts/corpus/TRIAGE.md`).
+| Entry point | Role | Deployed |
+|---|---|---|
+| `app_api.py` | Production/UAT. Takes a CB subject id, fetches the payload from the internal bureau-report API endpoint configured in `config/api.json`, validates it and renders the report. The AI Analysis panel is not included. Each query is audit-logged. | Yes |
+| `app.py` | Development harness. Offers a picker for the committed fixtures, a session-scoped uploader, the optional local-model AI brief (Ollama) and a CSS/JS reload button. | No (excluded from the release archive) |
 
-**Governing rule: no fabricated value ever reaches the screen.** Where the
-payload carries nothing, the element renders an explicit empty state that
-distinguishes *reported as zero* from *not reported* — for a credit screen those
-mean opposite things, and a blank that could be read as "clean" is a hazard.
-Figures we computed are tagged `derived`; bureau figures are tagged `delivered`.
+Both entry points use the same pipeline and the same hosting code (`aecb/ui.py`).
 
-## Running it
+## Requirements
+
+- **Server:** CPython **3.9** on Linux x86_64, air-gapped. Any 3.9.x release
+  except **3.9.7**, which streamlit 1.50.0 excludes. The server stays on 3.9 by
+  decision because it is air-gapped. The known vulnerabilities that follow
+  from this are assessed in [docs/DEPENDENCY_RISK.md](docs/DEPENDENCY_RISK.md).
+- **Runtime dependency:** `streamlit==1.50.0`, the last release that supports
+  Python 3.9. The full dependency tree is pinned with sha256 hashes in
+  `requirements.lock`.
+- **Development:** a newer Python works locally, but the code, tests and CI
+  must pass on Python 3.9. `tests/test_python39.py` parses every shipped module
+  with the 3.9 grammar.
+
+## Quick start (development)
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python -m streamlit run app_api.py   # production entry: CB subject id -> live API -> report
-.venv/bin/python -m streamlit run app.py       # dev harness: fixture picker + uploader
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m streamlit run app.py       # fixture picker + uploader
 ```
 
-`app_api.py` asks for a CB subject id, POSTs it to the bureau-report API
-(endpoint in `config/api.json` — the URL from the integration Postman
-collection, and the only place it lives), validates the response exactly as
-the uploader does, and renders through the same pipeline. The payload lives
-in session memory only. A subject-id mismatch between request and response
-renders the report under a prominent warning naming both ids.
+### Calling the live API from a development machine
 
-The API sits behind **IIS Windows authentication**, so requests authenticate
-as a service account over **NTLMv2** — implemented in `aecb/ntlm.py` from the
-MS-NLMP spec, stdlib only (no wheels added to the offline bundle), self-tested
-against the official vectors (`python3 -m aecb.ntlm`). The account lives in
-`config/api.json` under `auth` as **DUMMY values — replace them on the
-deployment server** (`DOMAIN\\account` form; NTLM sends a challenge proof,
-never the password itself). API failures are logged in full — status, every
-header, untruncated body — to `aecb_api.log` beside the app (gitignored;
-successful payloads are never logged). Off the bank network the entry screen
-still renders; a Display click reports the API as not reachable, which is the
-expected result there.
+On the server, systemd loads `/etc/aecb-analyzer/aecb.env` into the app's
+environment. `scripts/local_env.py` does the same job locally. It uses a
+settings file with the same variables, under your home folder by default:
+`~/etc/aecb-analyzer/aecb.env`. That keeps it outside the repository, so it
+cannot be committed, and needs no administrator rights. It needs network
+access to the bureau-report API.
 
-## How it fits together
-
-The report is a **self-contained HTML document** built by Python. Streamlit's job
-is deliberately narrow — pick a payload, host the document, offer it as a
-download. All layout, type and interaction live in the HTML.
-
-```
-payload JSON
-   │
-   ├─ aecb/loader.py      strip strings, canonicalise categories, fill gaps
-   ├─ aecb/dates.py       parse the three date formats the payload mixes
-   ├─ aecb/context.py     ReportContext: arrays + report date + 5 configs
-   └─ aecb/derive/        identity dedup · contracts×history join · score bands
-                          income · returns · applications: what can be drawn
-                              │
-                              ▼
-   aecb/render/page.py ── render_page(ctx) -> one standalone HTML string
-        ├─ css.py         fonts (base64) + tokens + report.css
-        ├─ shell.py       top bar, spine nav, brief rail
-        ├─ sections/      identity … applications, each render(ctx) -> str
-        │                 (numbered 01..08 by position — see Section numbering)
-        └─ js.py          window.__AECB data blob + report.js
-                              │
-                              ▼
-   app.py ── components.html(...)  +  "Download standalone HTML"
+```bash
+.venv/bin/python scripts/local_env.py init    # create ~/etc/aecb-analyzer/aecb.env (mode 0600)
+# edit it: AECB_API_USERNAME, AECB_API_DOMAIN, AECB_API_PASSWORD, AECB_TEST_SUBJECT_ID
+.venv/bin/python scripts/local_env.py check   # show the settings, password hidden
+.venv/bin/python scripts/local_env.py run     # start app_api.py with them
+.venv/bin/python scripts/local_env.py exec -- .venv/bin/python -m pytest -m live_api
 ```
 
-Design decisions worth knowing before changing anything:
+- Responses fetched through `run` are archived to `~/var/lib/aecb-analyzer/api_responses/`.
+- `exec -- .venv/bin/python scripts/check_corpus.py` checks the archived responses.
+- A variable already set in your shell overrides the file.
+- `--env-file PATH` (or `AECB_ENV_FILE`) selects a different file, such as the real `/etc` one.
 
-- **One iframe, not nine.** The sticky top bar, spine nav and scrollspy need a
-  single scrolling context, and iframes cannot share one.
-- **The layout has two axes, not one.** Viewport width and whether the brief
-  rail is open both change the grid, and every responsive rule has to hold for
-  all four corners. `body.rail-off` is a *higher-specificity* selector than the
-  plain `.wrap` rules inside the media queries, so it wins inside them unless
-  restated — which is how the rail-closed page once squeezed itself to ~112px
-  below 820px. Test both states at every breakpoint.
-- **The whole page is on a fluid scale, and the page chrome is not.** All eight
-  sections grow and shrink with the space available; the top bar, spine, brief
-  rail and the shared card vocabulary (`.sec-title`, `.tag`, `.na`, `.hint`)
-  stay fixed, because they are the frame rather than the content — scaling them
-  too would zoom the page instead of filling it.
-  `--colw` on `body` carries the report column width,
-  *derived* rather than measured (`.wrap` is a fixed grid, so it is
-  `100vw` less 498 with the rail open or 106 with it closed), and
-  `--f` is a 0→1 progress value along the 1074→1466px range that the rail gives
-  back, clamped — full gain arrives at a 1572px viewport and stays there.
-  The page itself is no longer capped: `.wrap`'s old 1572px max-width is now
-  `:root{--page-max}`, set to `none` with auto margins so the grid takes the
-  whole window (on a 16" MacBook, 1728 CSS px, the capped page read as pinned
-  to the left while the full-bleed top bar spanned it). Re-cap `--page-max`
-  and the `--colw` formulas need their `min(100vw, cap)` back, or the type
-  ramp overstates the column.
-  Sizes read `calc(BASE + GAIN * var(--f,0px))`, so the current value stays
-  visible as `BASE`. The whole block sits at the end of `report.css` behind an
-  `@supports` guard and is purely additive: deleting it restores the px design.
-  Three rules govern extending it — `--f` is **pinned to 0 on `body`** so the
-  rail-open state is exact by construction; **no container queries and no
-  `:has()`** (both Chrome 105, above the ~Chrome 88 floor the code already
-  requires, and the downloaded file is opened years later on an unknown
-  machine); and **`.rec-t` / `.rec-meta` / `.ret-amt` move Python** — they set
-  §05's record-tile heights, which `sections/returns.py`'s `_TILE_BASE` /
-  `_TILE_ENTRY` mirror, so those constants must be re-measured (not reasoned
-  about) after any change to them. An *element* spends its surplus on either size or density,
-  never both: §01's tiles get narrower at the density step, so their type gains
-  nothing. Density lives at one breakpoint for the whole page,
-  `min-width:1510px` scoped to `body.rail-off`, and only **§01** (grid 4-up) and
-  **§07** (legend 4-up) take it. A section whose column count is *data-driven*
-  gets no density move by design — four AECB categories, four counters, 36
-  months, and since 7 August 2026 §03's three delivered windows.
-- **The brief rail loads closed**, so the wide layout is the *default* layout.
-  The underwriting screen is the deliverable and the AI reading is opt-in; with
-  no model wired, an open rail would greet every user with its own "no brief
-  generated" placeholder. `<body class="rail-off">` in `page.py` sets it; the
-  top bar's AI Analysis button and the rail's own × toggle it. Anything
-  calibrated against a column width — `sections/returns.py`'s `_COL_W` — is
-  calibrated to this state and has to be re-measured if the default ever
-  changes.
-- **Charts never carry literals.** The heatmap and enquiry charts read
-  `window.__AECB`, assembled in `js.py`, so wiring them means changing what
-  Python puts in the blob, not the JavaScript. §04 and
-  §05 instead build their timelines as inline SVG in the section module,
-  because whether a timeline can be drawn at all depends on which dates the
-  payload carries — see those sections below. Their shared time axis lives in
-  `aecb/render/svgtime.py`.
-- **Section numbering comes from position** in `sections/__init__.py`. Report
-  validity moved into the top bar, so the report shows eight sections numbered
-  `01..08`. The module files carry names, not numbers (`identity.py` …
-  `applications.py`), precisely so a filename cannot drift from the position
-  the registry assigns it. Never hard-code a number.
-- **One report date, everywhere** (10 Sep 2026): `ctx.report_date` resolves
-  the `sectionStatus` enquiry ladder, read generically — the latest
-  `Last EnquiryDate` across all rows (no hard-coded `ReportType`
-  vocabulary; array order breaks ties) → `score.DataPullDate` as last
-  resort, never first. Validity, every window, age/expiry checks and the
-  `__AECB` blob all age this one date. The top bar chips the winning row's
-  `ReportType` and `EnquiryType` verbatim (amber *Enquiry scope not
-  reported* when `sectionStatus` is empty) and discloses the dating field
-  on hover. See `PayLoadRead.md`.
-- **`tokens.py` is the only place a colour is defined.** `report.css` refers to
-  `var(--*)` throughout; `js.py` passes the few tokens the SVG charts need.
-- **One brand colour, and it is Finance House blue.** Every branded element
-  resolves through the five `--fh-blue*` tokens, and no teal token is defined,
-  so a rule cannot reach for one. Two rules govern the rest:
-  red/amber/green mean RISK and nothing else, and a fact that is not a risk
-  signal takes brand blue. The single exception is the contract-category accent
-  set (`--cat-i/c/n/s/x`), which is categorical rather than brand or risk — five
-  hues chosen to be told apart at 17px, carrying no ordering. `--cat-c` is still
-  a teal, because it has to stay distinguishable from `--cat-i`, which is blue.
-- **Zero external references.** No CDN, no font host, no image URLs. Enforced by
-  a check in `scripts/install_offline.sh`.
-- **Sections register once.** `aecb/render/sections/__init__.py` drives both the
-  card order and the spine dots, so the two cannot drift.
+## Tests and QA tools
+
+```bash
+.venv/bin/python -m pytest                          # full suite (tests/)
+.venv/bin/python -m pytest --cov --cov-report=xml   # plus coverage.xml for Sonar
+```
+
+Tests marked `browser` need Chrome or Chromium. Tests marked `model` need a
+local Ollama. Tests marked `live_api` call the real bureau-report API and need
+the credentials and `AECB_TEST_SUBJECT_ID` (see above). Each group is skipped
+when what it needs is missing. Dev
+dependencies (`requirements-dev.txt`): pytest 8.4.2, pytest-cov 7.1.0 and
+coverage 7.10.7, all of which support Python 3.9.
+
+The developer QA tools in `scripts/` are not deployed:
+
+| Tool | Purpose |
+|---|---|
+| `scripts/check_report.py` | Correctness gate over the fixtures in `ReferenceJSON/`. It fails if a delivered value is missing from the page, if a verbatim figure changed, or if the page has an external reference. |
+| `scripts/check_corpus.py` | Runs the same gate, and more, over every archived API response (default folder `$AECB_ARCHIVE_DIR`). Writes `corpus_report/`. `--selftest` proves every check can fire. Triage playbook: [scripts/corpus/TRIAGE.md](scripts/corpus/TRIAGE.md). |
+| `scripts/check_brief.py`, `scripts/eval_brief.py` | AI brief gate and quality harness. They need a local Ollama with the model. The model steps are skipped without it. |
+| `scripts/measure/` | Layout (geometry) harness in headless Chrome. Use it for any change to `report.css` or to section markup. See [scripts/measure/README.md](scripts/measure/README.md). |
+| `scripts/local_env.py` | Loads the local settings file (`~/etc/aecb-analyzer/aecb.env`) and runs `app_api.py` or any command with it. |
+| `scripts/make_synthetic_payload.py` | Generates the synthetic delinquent fixture. |
+| `scripts/fetch_fonts.py` | Regenerates `assets/fonts/fonts_inline.css`. Needs internet access. |
 
 ## Configuration
 
-The payload does not carry everything the screen shows. These fill the gaps:
+### Config files (`config/`)
 
-| File | Supplies |
-|---|---|
-| `config/providers.json` | Provider code → display name and badge kind. **Stub** — the payload carries codes only (`B01`, `T05`), so provider names come entirely from here. Unknown codes fall back to the code itself. |
-| `config/status_codes.json` | AECB contract status codes, labels and severity ranks; roles; payment frequencies; DPD buckets. |
-| `config/bands.json` | FH score bands and gauge geometry, AECB `DataRange` letter → label, vintage bands, validity window. |
-| `config/income.json` | How to read `GrossAnnualIncome`: the assumed currency (the payload carries none), the floor below which a figure is a provider placeholder rather than an income, and `confirmation_window_months` (12) — how recently a provider must have touched an employment row for "still employed there" to count as a confirmed claim rather than an unrefreshed one. |
-| `config/returns.json` | `paymentOrder` vocabularies: `Type` text → instrument kind (Bounced Cheques / Unpaid Direct Debits), and `Severity` text → display tone (Single→amber, Multiple→red, Reported→neutral pending a business definition). Unknown values render neutral, never guessed into a risk colour. |
+Policy and vocabularies live in JSON with `_comment` blocks. A missing file, or
+an invalid required key, stops the render with an error. The app never falls
+back to a default.
 
-Still with no source at all, and needing an input path rather than config: **DSR**
-and the **application context** (product, amount, tenor) shown in the top bar.
-Both render as explicit `n/a` rather than blank.
-
-### Known gaps — decisions still needed
-
-| What | Why it's blocked |
-|---|---|
-| §03 36-month worst status — refinements | **Built 9 Sep 2026** to RRM defaults (whole book, closed contracts and all roles; monthly history + dated contract lifetime worst fields; status outranks DPD). Still open from the original six questions: whether to derive a like-for-like 24-month figure as a reconciliation against AECB's delivered one, and whether guarantor conduct should be flagged rather than merely included. |
-| `MaxCurrentPaymentDelay` | The payload delivers `1` while `MaxPaymentDelay24M` is `0`, every contract's `Current_DaysPaymentDelay` is `0` and all 99 `contractsHistory` rows are 0 DPD. **Nothing on screen reads it**, by decision, until AECB explains the discrepancy — showing it would state a contradiction the file cannot resolve. |
-| §02 score cut-offs | Resolved 24 Sep 2026: `config/bands.json` now holds the seven FH bands (U 300–631 · SPR 632–646 · VHR 647–652 · HR 653–684 · MR 685–719 · LR 720–749 · VLR 750–900). The reference payload's 732 falls in **LR**, matching what AECB delivered. The delivered band still wins; the warning shows only if the two ever disagree. |
-| Provider names | `config/providers.json` is a stub, so the sections that name a reporting provider show its code instead: **§01, §04, §05, §07's heatmap and §08's timeline** (`B08`, `T05`, `C04`). §03 and §06 carry no provider codes at all. |
-
-### §02 score — a half-width dial beside §03
-
-Since 24 Sep 2026 (user decision) §02 is a **half-width card** sharing a
-`.sec-pair` row with §03 worst statuses — a nested tuple in
-`sections/__init__.SECTIONS` makes the row, and position still assigns the
-numbers (worst statuses moved up from 05 to 03; income is now 04, returns 05).
-The two cards measure ~250px together against ~356px stacked; below 1180px they
-stack. Income stays full width: it loads collapsed and its chart needs the
-width.
-
-The card is a **dial** (a 120° arc) — inline SVG built in `score.py`, zones
-coloured from `tokens.py` by each FH band's configured tone, the marker at the
-score, the score in the bowl — with the FH chip, the AECB chip (*J · Good*,
-letter first), the vintage bar and the bureau-history line stacked to its right.
-The dial is the hero (28 Sep 2026). The chip stack is only as wide as its
-widest tile and sits against the card's right edge; the dial fills the rest.
-The dial's height is held at 158px, the old dial's, so the card did not grow.
-Its shape is what makes it bigger: a 120° arc is ~2.8:1, against a
-semicircle's 2:1, so the same height buys a ~447px-wide dial with a ~235px
-radius (was 300px wide, ~103px radius). Every label sits inside the arc,
-so no space goes on outside margins.
-Colour follows the FH bands throughout. When the configured cut-offs put the
-score in a different band from the delivered one, an amber `!` on the dial's
-shoulder says so; the delivered band still wins. A missing score keeps the card
-(zones, chips, history) and shows the bureau's `ErrorDescription` when sent.
-
-The **band chips** are filled solid. `_FILL` in `score.py` maps each of the
-seven FH band tones; the two light fills (MR yellow, LR light green) take dark
-text via `_INK`, the rest white.
-`scoring.fh_band()` returns a **neutral** tone for a band code the config does
-not know, and the chip renders uncoloured — green is the best-case colour, and
-an unrecognised risk band has earned no colour.
-
-### §01 identity — the density step
-
-The identity tiles are the one place the fluid scale buys a **column** rather
-than size. At ≥1510px with the brief rail closed, the six-track grid is re-mapped
-onto **twelve**: row one carries four tiles instead of three (the e-mail is
-pulled up from row two) and the address takes the row beneath at full width.
-
-A span of `2k`-of-12 is exactly a span of `k`-of-6 at the same gap, so the re-map
-only makes halves of the existing columns addressable — it cannot move an edge it
-should not. The narrow state keeps its six tracks untouched. `1510` is derived,
-not chosen: a span-3-of-12 tile is `W/4 − 6` and the tuned three-up tile is 334px,
-so the fourth column appears only once it is at least as wide as the tile the
-layout was already tuned around. There is no second step — the density query is
-the only re-map, so on the now-uncapped page a wider viewport buys the four
-tiles width, never a fifth column.
-
-Two markers come from Python, because CSS cannot ask these questions without
-`:has()` (Chrome 105, above the floor this page targets):
-
-- **`v-wide`** on the address tile — it always carries the longest value, so it
-  always takes the whole row.
-- **`r2-N`** on the grid — how many tiles row two was built from. Since
-  24 Sep 2026 the E-mail tile always renders (*Not reported* rather than
-  vanishing), so row two is always two tiles and the marker is always `r2-2`;
-  the old `r2-1` shape and its rule are gone.
-
-`auto-fit`/`minmax()` is deliberately not used: an unnameable track count against
-an explicit `span 3` produces orphan holes at some widths, and `c2`/`c3`/`c6`
-encode *meaning* ("half a row"), which `auto-fit` cannot express.
-
-**Watch the specificity.** `.r2-2 > .fact.c3` is (0,6,1) and out-ranks
-`.id-grid > .fact.v-wide` at (0,5,1). That shipped once and left the address a
-quarter wide with three empty tracks beside it — invisible in a font-size vector,
-obvious in a screenshot. The fix is `:not(.v-wide)` on the narrower rule, never
-more specificity on the other.
-
-**The passport expiry lives on the value line**, inside `.v`, not as a `.v-sub`
-block after it. `.facts` stretches every tile to the tallest in its row, so the
-passport's third line put dead space in all of its neighbours. It needs about
-240px of tile width; in **rail-open between 1181 and ~1370px** the tile is only
-179–232px and it wraps to a second right-aligned line. That is accepted rather
-than fixed — forcing it back to a block at those widths would reinstate exactly
-the layout this change removed, and every tile is cramped at that size anyway.
-
-### §03 worst statuses — three windows, two of them delivered
-
-FH policy differs by employer segment: some segments are assessed over 24 months
-and some over 36. The card carries both windows side by side so an underwriter
-applies the right one rather than reading a single figure that answers half the
-book. A third panel carries the life-time count.
-
-| panel | source | state |
+| File | Kind | Supplies |
 |---|---|---|
-| Worst status · last 24 months | `contractsTotalSummary.WorstStatus24M` | delivered, shown **verbatim** |
-| ↳ Max payment delay · 24m | `contractsTotalSummary.MaxPaymentDelay24M` | delivered, shown **verbatim** |
-| Worst status · last 36 months | `contractsHistory` + each contract's dated `WorstStatus`/`MaxDaysPaymentDelay` | **derived** (9 Sep 2026, RRM defaults) |
-| ↳ Max payment delay · 36m | same evidence | **derived** |
-| Life-time worst status count · non-services | `summary.Worststatus` | delivered, shown **verbatim** |
+| `api.json` | Deployment | Bureau-report API `base_url` and `timeout_seconds`, used by `app_api.py` only. It must not contain credentials: a file with an `auth` block is refused. |
+| `bands.json` | FH policy | Score scale, the seven FH score bands (cut-off and tone), AECB `DataRange` labels, vintage bands, `validity_days`, `closed_window_months`, `applications_90d_red`/`_amber`. |
+| `status_codes.json` | Bureau vocabulary + FH cut-offs | Contract status codes, labels and integer ranks; the `severity` cut-offs that map a rank to severe, adverse or normal; roles; payment frequencies; DPD buckets; application phases. |
+| `providers.json` | Registry (stub) | Provider code to display name and badge kind. Unknown codes are shown as the code itself. |
+| `income.json` | FH policy | Assumed currency, placeholder-income floor, employment confirmation window. |
+| `returns.json` | Vocabulary + policy | Returned-instrument types, severity tones, review window. |
+| `macro_context.json` | Optional, AI brief only | Curated, dated macro facts for the brief's background lens. If the file is absent, the lens is off. |
 
-The delay sits **under the status it qualifies**, not in a fourth panel. A worst
-status is a grade and carries no magnitude — *Active Payments* says the customer
-is not delinquent, never how late they have ever been — so the two belong
-together. A delivered `0` is a fact (never late in the window) and prints as
-`0 days`; only a missing field is an absence. It cost §03 nothing in height —
-the pending panel is the tallest member and sets the row on its own, which is
-also why compressing the other two panels does nothing until that one comes
-down. §03 is 186 / 201.
+### Environment variables
 
-**Verbatim is the requirement, not a shortcut** (RRM, Aug 2026). The delivered
-text is printed as it arrived — no relabelling, no rounding, no translating
-display text into a letter code. `check_report.py` reads the figures back out
-of the `.wsx-worst` panels and fails the build if either stops matching its
-payload field; a plain substring search could not do that, because the life-time
-count is `0` and `0` appears all over the page.
-
-The **only** thing the module derives is the colour, and it grades nothing it
-cannot recognise. `ReportContext.status()` refuses to grade the unknown too:
-anything it cannot match comes back as code `?` with rank `None`, and the
-heatmap paints it in a distinct *unknown* tone (`.su`, a dashed ring) — never
-green, and never under an invented letter (deriving a code from the first
-letter of the text used to collide with real codes: `Closed` → `C`, which is
-Settlement's glyph). `_known_status()` still resolves strictly on code or on
-label and returns `None` otherwise, because this panel wants the config row
-itself rather than a resolver result; an unrecognised status renders uncoloured
-with a *Partly reported* header pill. The life-time figure is
-a count, so a non-zero one is amber rather than red — a count says how many,
-never how deep, and the depth is §07's job.
-
-The 36-month panel is **derived and always marked so** (RRM instruction, 9 Sep
-2026 — the chip renders even over the not-derivable empty state, because
-nothing in that panel is ever a bureau figure). The derivation is
-`derive/facilities.worst_in_window()`, reinstated from git with the RRM
-defaults: **every contract counts** — closed ones and every role included — and
-evidence is the monthly `contractsHistory` rows in the window **plus each
-contract's dated lifetime worst fields** (`WorstStatus`/`WorstStatusDate`,
-`MaxDaysPaymentDelay`/`MaxDaysPaymentDelayDate`) whenever their date falls
-inside it, which lets a closure the monthly rows never covered still grade the
-window. The two hard-won rules from the original implementation survive: a
-clean book must not attribute a "worst" to whichever contract iterated first,
-and a severe status outranks a raw DPD number when naming what happened. A
-status the config cannot rank makes the window **unknown, never clean**; the
-`derived` chip's hover carries the method and the coverage figures; the
-figure's own hover names the worst event (facility, provider, month, closed or
-not). Its max-delay sub-line prints `0 days` only when a zero was actually
-reported somewhere in the window — with no delay figure delivered at all it
-says *Not reported*.
-
-`.wsx` is `repeat(3,1fr)` and takes **no density step**: three windows is the
-data, exactly as `.fac-grid`'s four categories are. The panels stretch to the
-tallest of the row, and the figure carries `margin:auto 0` to sit centred in
-the space rather than floating above a void.
-
-Coverage note: in the reference payload `contractsHistory` gives **69
-facility-months across 13 contracts** inside 24 months and **95 across 15**
-inside 36, against a report date of 2023-10-26 — every row `Active Payments`
-at 0 DPD, so the derived panel reads clean there and adverse on the synthetic
-fixture (Write-off · 214 days, matching the delivered 24M anchor). The
-section's adverse paths are also exercised by `scripts/measure/synthetic.py`
-(`ws-severe`, `ws-adverse`, `ws-unknown`, `ws-absent`, `ws-count`,
-`ws-count-absent`).
-
-### §04 income & employment — what gets drawn, and why
-
-The card is two halves: **what the bureau delivered**, verbatim, on the left;
-**what can be drawn from it** on the right. The left half never depends on the
-right, so when nothing is drawable the records still stand on their own. The
-header follows the **current employer** — settled by the newest start date
-among the jobs the bureau has not marked finished, because employment carries
-no current/prior flag and the start dates are the only evidence of which job is
-the live one. It is headed *Current salary* (or *Current employer*, when that
-row carries no usable figure); only when no employer qualifies as current does
-it fall back to *Latest salary* — the newest figure the bureau dated — and then
-to *Salary on file*, when nothing establishes which is newest. It never borrows
-a different employer's figure to fill the slot.
-
-AECB delivers one `GrossAnnualIncome` per employment row and **no series**, so
-what §04 can draw depends entirely on which of that row's dates arrived.
-`derive/income.py` decides between four states and the section renders the
-decision; it never fills a gap to reach a nicer one.
-
-| state | when | drawn |
+| Variable | Used by | Purpose |
 |---|---|---|
-| `trend` | ≥2 datable figures | employment spans, income points, line |
-| `single` | exactly 1 | spans and one marker, plus why there is no trend |
-| `spans` | no datable figure | employment bars only, no income axis |
-| `none` | nothing datable | no chart, and why in general terms |
+| `AECB_API_USERNAME` | `app_api.py` (required) | Service account for the bureau-report API (IIS Windows authentication, NTLMv2). |
+| `AECB_API_DOMAIN` | `app_api.py` (optional) | Windows domain for a bare account name. In env files, set this instead of writing `DOMAIN\account`. |
+| `AECB_API_PASSWORD` | `app_api.py` (required) | Service account password. |
+| `AECB_ARCHIVE_DIR` | `app_api.py`, `check_corpus.py` | Folder for archived API responses. Must be outside the app directory. If unset, archiving is off. |
+| `AECB_LOG_DIR` | both entry points | Folder for the rotating `aecb.log`. If unset, logs go to stderr only. |
+| `AECB_AUDIT_USER_HEADER` | `app_api.py` (optional) | Name of the request header in which the SSO reverse proxy passes the authenticated user. The user is then recorded in the audit line. |
+| `AECB_ENV_FILE`, `AECB_TEST_SUBJECT_ID` | `scripts/local_env.py`, `tests/test_api_live.py` | The local settings file to load, and the subject id the live API tests fetch. Development only. |
+| `AECB_CHROME`, `AECB_ROOT`, `AECB_WORK`, `AECB_PAYLOAD` | `scripts/measure/`, browser tests | Chrome path, source tree, work folder and payload for the layout harness. Development only. |
 
-Three rules make it honest rather than merely tolerant:
+On the server, these variables are set in `/etc/aecb-analyzer/aecb.env`
+(template: `deploy/aecb.env.example`). See [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-- **A figure is dated by `DateOfLastUpdate`.** When that is null the hire date
-  stands in, the point is drawn **hollow**, and the section is badged `derived` —
-  putting a salary at the hire date claims it was the salary *at hire*, which is
-  our inference, not the bureau's. The reference payload is entirely in this
-  state: `DateOfLastUpdate` is null on all five rows.
-- **A prior employer with no `DateOfTermination` has an unknown extent**, so its
-  bar fades out rather than stopping at an invented date or running to the edge.
-  A **stale** row fades the same way: when `DateOfLastUpdate` arrived but falls
-  outside `confirmation_window_months` (`config/income.json`), running the bar
-  to the report date would assert years nobody vouched for. Absence of an
-  update date is *not* this case — unknown is not unconfirmed, and inventing
-  doubt is as wrong as inventing confidence.
-- **`GrossAnnualIncome` of 1 is a placeholder**, not an income. It is shown,
-  flagged, and kept out of the chart scale — where a sentinel flattens every
-  real point onto the axis. Exactly zero is *not* a placeholder: a reported zero
-  is a delivered fact.
+## Data handling
 
-**No sentence on the screen counts this payload's null fields.** Every statement
-has to hold for any payload that lands in the same state — a note reading "null
-on 3 of 5 rows" describes one file rather than the section, and turns an
-underwriting screen into a defect report. The reasons given are structural
-("a trend needs two figures the bureau has dated"), and the per-record facts
-carry the specifics.
+- **Input.** `app_api.py` accepts one CB subject id, checked against
+  `^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$`, and has no file uploader. The fetched
+  payload is held in the user's Streamlit session.
+- **Archive.** Each successful API response is saved verbatim to
+  `AECB_ARCHIVE_DIR` (folder mode 0700, file mode 0600, one file per fetch).
+  Retention is an operations task.
+- **Logs.** Logs contain CB subject ids and audit lines, never payload
+  content. API error responses are logged with their status, headers and the
+  first part of the body.
+- **Output.** The report is one HTML document with no external references,
+  guarded by a per-page Content-Security-Policy. It can be downloaded
+  (`aecb_<subject>.html`) for filing.
+- **Fixtures.** The committed payloads in `ReferenceJSON/` are anonymized or
+  synthetic.
 
-The reference payload disagrees with itself — **18,450** (ADCB) against
-**153,900** (Mashreq, historical), and AECB carries no monthly-or-annual marker
-to reconcile them with. Every delivered figure is shown side by side rather than
-reconciled, and `check_report.py` asserts each one reaches the page,
-placeholders included.
+## Repository layout
 
-The chart is built as **inline SVG in Python** rather than by `report.js`:
-whether it can be drawn at all is a question about the payload's dates, and
-that decision belongs next to the data it is made from rather than split
-across two languages.
-
-### §05 returns — built from the returns themselves
-
-`paymentOrder` rows are events (one returned instrument each), reaching back
-years. The `summary` block's three-month counters are **deliberately not
-read** — their window cannot describe the list, and whether their figure is an
-amount or a count is unverified (RRM decision, Aug 2026). Every count on the
-card is a count of the rows on it.
-
-Same two-half grammar as §04, **window first, instrument second**: a *"Last 6
-months"* section holding one tile per instrument (Bounced cheques, Unpaid
-direct debits), then a folded *"Earlier"* section with the same tile
-arrangement inside. In the open section an instrument with nothing still gets
-a dashed tile saying so — for an adverse section that absence is a finding;
-inside the fold only instruments with records appear. Entries carry amount,
-date and severity tag, then a meta line of only what was delivered — reason
-keeps an explicit "not reported", the secondary identifiers (beneficiary,
-masked IBAN collapsed to its digits, instrument number) simply drop out when
-absent. An *"Other instruments"* tile appears only when the payload delivers a
-`Type` outside the two known kinds, with the delivered text per entry. The
-right half plots the same events on a shared-axis timeline, marker letter =
-instrument, marker colour = severity tone from `config/returns.json`; a return
-without a `ReturnDate` is listed but never plotted. The whole-array empty
-state still distinguishes *requested and clean* / *not requested* /
-*unverified* via `sectionStatus.ReportType`, and the axis is shared with §04
-(`aecb/render/svgtime.py`) so the two timelines cannot drift.
-
-The **review window** (`window_months`, 6) is ours, not AECB's. On the
-timeline it is a shaded band drawn only when it actually holds a return; a
-quiet half-year over an adverse history is stated in words on both halves
-rather than left as blank space. When the report date cannot be resolved, no
-window is claimed and the section renders one flat "On file" set of tiles.
-
-The **chart is sized to the "Last 6 months" tiles beside it**, so the two
-halves of the card end level: its height mirrors the tile box model (a tile
-base, a gap, and one entry per return in the window), and the constants in
-`sections/returns.py` name the `.rec` / `.rec-item` / `.rec-list` rules they
-track.
-
-Those tile rules are now **fluid**, so `_TILE_BASE` and `_TILE_ENTRY` are the
-rail-closed measurements (39 and 62; they were 37 and 57 before the fluid
-scale). Re-measure them rather than reasoning about them: render, then read
-`.rec`'s rendered height and `.rec-item`'s at 1560 with the rail closed —
-`_TILE_ENTRY` is `.rec-item`'s height plus its 7px `margin-top`, `_TILE_BASE`
-is `.rec`'s height minus one entry. Nothing enforces this. Because they are
-render-time constants mirroring a height that is now fluid, one value cannot
-serve both rail states; they are calibrated to the load state, which leaves the
-chart marginally better in both (residual −17→−14 closed, −73→−62 open).
-
-`_COL_W` is the width that conversion is calibrated to — the right half at 1560
-with the brief rail **closed**, the state the page loads in. It is a design
-width rather than a measurement, and cannot be otherwise: the SVG is static, so
-what width it will be rendered at is not knowable in Python. It therefore has to
-be re-measured whenever the load-state layout changes; it moved from 503 to 706
-when the rail was made closed-on-load. Opening the rail narrows the half back to
-~503px, and the chart then scales down and stops short of the tile block. The
-halves still *end* level, because `.inc-split` stretches both cells to the row —
-what shows is a short tail on one side. The alternative is generating the chart
-at runtime, which would move the drawing out of Python and away from the payload
-decisions it is built from.
-
-Only the window count feeds it — opening the "Earlier" fold lengthens the
-record column and leaves the chart exactly as it was. Each return in the window
-takes its own stem lane, spread evenly over the height and centred; lanes are
-necessary as well as tidy, since the window is a narrow slice of an axis that
-can span years and four returns inside it would otherwise draw on top of one
-another. Returns outside the window pack into the bottom lane. Stems stay
-hairlines however tall they grow: a heavier line would read as a bar, as though
-height encoded the amount, and it does not — the amount is the text beside the
-marker.
-
-The reference payload's `paymentOrder` shipped **empty**; it now carries four
-injected returns (see *[The reference payload has been
-edited](#the-reference-payload-has-been-edited)*), so the populated states are
-exercised by the reference file itself rather than only by synthetic variants —
-the window, earlier-fold, both-instrument and outside-window paths all render.
-The quiet and whole-array-empty states are still synthetic-only, and the first
-real adverse payload should be reviewed against this section. Provider class `C`
-(seen on the injected returns) is not named in `config/providers.json` and falls
-back to its code.
-
-### §06 active credit facilities — split by role
-
-Four cards, one per AECB category, each split into **Main holder** and
-**Guarantor**. That split is the section's reason to exist: they are different
-liabilities and FH lends against them differently, so a guarantor block that
-were simply absent would leave an underwriter inferring the guarantor position
-from silence. It always renders, and says which of three things is true.
-
-Three only-when-non-zero surfaces (9 Sep 2026): a red **Guaranteed overdue**
-top chip from `TotalOverdueGuaranteed` (a non-zero one is the guarantee being
-called; it previously never reached the screen); per-role **declined /
-rejected / not-taken-up** lines from `contractsSummary`'s delivered counters —
-delivered per category and role (§08 carries each application's phase) — which also keep a card
-alive in the emptiness test; and a **Co-holder** block (role `C`) that renders
-between the other two only when the bureau returns figures or counters for it.
-An absent C row is the bureau not returning the split, so no permanent
-"Not reported" third block is shown — the guarantor rationale does not
-transfer.
-
-| category | headline | rows |
-|---|---|---|
-| I Installments | Balance | Payment amount · Overdue |
-| C Credit cards | Balance | Credit limit · Overdue |
-| N Non-installments | Balance | Credit limit · Overdue |
-| S Services | Balance | Overdue |
-
-`contractsFinancialSummary` carries exactly four figures per category × role, so
-those are all there is to choose from. Balance is the headline in every card
-because it is the one figure common to all four, which gives the row of cards a
-single scan line. N is limit-bearing credit and carries no `PaymentAmount`; S
-carries neither a limit nor a scheduled instalment, because a telecom account
-has no credit line to fill.
-
-**The guarantor block picks between three statements**, and the first two are
-backed by delivered figures:
-
-1. The category's `G` row carries a non-zero figure → the same rows as the main
-   holder.
-2. Nothing in the `G` row, and `TotalBalanceGuaranteed` **and**
-   `TotalOverdueGuaranteed` are both `0` → *No exposure reported*, tagged
-   `delivered`. The inference runs one way only: a book-wide guaranteed total
-   of zero means every category's is zero.
-3. Nothing in the `G` row but the totals are non-zero or absent → *Not
-   reported*, untagged. A non-zero book total cannot be attributed to one
-   category, so no delivered claim is made.
-
-Both role labels sit **on** the figure line rather than above it, in a
-`.fac-block` flex row: the label is that figure's caption, so a line of its own
-said the same thing twice and cost one per block. The row wraps at narrow
-widths, which puts the figure back underneath — the old layout, reached only
-when it is actually needed.
-
-**The utilisation line replaced the donut**, and sits above the role split
-rather than inside main holder's rows, because `CreditUtilizationRate` is
-delivered once for the category and carries no role dimension. It reads like a
-book-wide ratio from where it lives in `contractsTotalSummary`, and is not:
-33,714 balance over a 59,600 limit is 56.57%, which is the delivered `"57"`.
-Below 100 the bar fills green in proportion; at or above 100 it fills red
-completely, so the figure beside the label is the only thing separating 101%
-from 300%. It is modelled on the top bar's `.tv-meter`, **not** on `.ss-gauge`,
-which is a zoned scale with a marker rather than a fill; `.tv-meter` itself is
-untouched because the top bar is locked.
-
-The bar carries **no `0`/`100%` scale**. One was added and then removed in the
-compression pass, so the reasoning is worth recording: it was justified as "a
-bar with no reference point cannot be read", but the percentage is printed
-beside the label, and a track filled just over halfway next to the figure *57%*
-already establishes that its full width is 100%. The scale restated what the
-figure said, and cost a 13px row on the tallest card in the section.
-
-**`TotalExposure` counts a revolving facility's full credit LIMIT, not its drawn
-balance.** 331,420 installment balance plus the 59,600 card *limit* is exactly
-the 391,020 delivered, where the card balance is only 33,714. The header total
-is therefore not the sum of the balances on the cards beneath it, and nothing
-here should be "fixed" to reconcile them.
-
-Deliberately **not** shown: bureau counts, anywhere. `contractsSummary`'s
-`TotalNo` spans more history than the delivered contract rows, so putting it
-beside §07's per-facility list invites a comparison that cannot be made. It is
-still *read* — as the emptiness test, so a category that is empty now but was
-not always does not claim nothing was ever reported — just never displayed.
-
-All four `.fac-cat` chips are Finance House blue. The categorical
-`--cat-i/c/n/s` set survives for §07's heatmap group headers, so **§06 and §07
-no longer agree on a category's colour**. That is the instruction, not a slip.
-
-**Where §06's height went** (378 → 275 in the compression pass, a 27% cut). The
-card was 292px and only 101 of those were figures. The rest was structure, and
-the two biggest items were not obvious: **60px of `.fac` row-gap** across seven
-children, and **two role headings at 23.5px each** where a 9px caption needs
-nine. The gap is now 5px because `.fac-role`'s own top padding and hairline were
-already doing that job — a 19px trough before every role heading is what made a
-card of seven short lines read as tall. Nothing shrank below its legible size:
-row text is still 11.5px and the balance is still 19px.
-
-### §07 credit facilities — four buckets, not one list
-
-Every facility lands in exactly one of four blocks, and which one is a payload
-decision — closure dates and arrears — so it is made in `js.py` and arrives
-already bucketed. `report.js` only draws what it is handed.
-
-| block | holds | state |
-|---|---|---|
-| Active facilities | everything AECB flags Active, **except** quiet services | open |
-| Closed · last 6 months | `ClosedDate` inside the window | folded |
-| Closed · beyond 6 months | everything else closed | folded |
-| Services — no arrears | active services carrying nothing adverse | folded |
-
-Inside each block the facilities are grouped by AECB category (I / C / N / S).
-There are two levels of heading and they must stay visually distinct: the
-**block** is the bucket and carries the fold, the **group** is the category. If
-they read alike, four buckets look like eight categories in a row.
-
-**An active service with nothing on it is context, not a finding**, which is why
-the active block is not simply "everything not closed". *Arrears* is deliberately
-broad — an overdue balance, a current delay, **or** a current contract status the
-bureau ranks below normal. Filing a service that is in arrears under *no arrears*
-is the failure that matters in this split, so every signal counts and not just
-the money one.
-
-**A closure AECB did not date** cannot be placed in a window. It joins the older
-bucket, because claiming a recency the payload does not support is the worse of
-the two errors, and the row says *Closed · date not reported* rather than leaving
-the blank where a date would be — which reads as "closed, but not recently".
-
-An empty category is **omitted**, and an empty block with it. §06 is where a
-category's absence is a finding; repeating it here would cost up to sixteen
-headings across four blocks to say nothing.
-
-Two chips were dropped from every row, and both are judgement calls worth
-knowing about. **Frequency** now shows only when AECB delivers one: the old
-*Frequency n/a* appeared on every card and service row, and it was not reporting
-a missing value — frequency is not part of those schemas at all, so there is no
-gap to surface. **Role** shows only when it is *not* main holder: that is the
-default across the book, and a co-holder or guarantor is the exception that
-changes who is liable, which marking every row "Main holder" buried.
-
-The header tag reads **`5 Active · 10 Closed`** — AECB's own words. `ActiveFlag`
-delivers `Active` and `Closed`; "open" was ours and appears nowhere in the
-payload.
-
-**Row signals added 9 Sep 2026, every one only-when-delivered.** A severity-
-toned **Worst ever** chip from the contract's dated lifetime fields
-(`WorstStatus`/`MaxDaysPaymentDelay`/`MaxOverdueAmount` with their dates),
-rendered only when adverse or unrankable — its hover says it can predate the
-36-month window, which is exactly why it exists. Amber chips for **Open
-dispute** (`FlagOpenDispute`), **Holder not liable** and a **non-AED
-`OriginalCurrency`** (the page otherwise renders everything as AED). Stats for
-the original **`TotalAmount`** (paydown context beside OS), **`MethodOfPayment`**
-(salary-transfer conduct is largely involuntary) and **`SecurityType`**. The OS
-stat hovers its **as-at date** (`Current_ReferenceDate` — the "current"
-snapshot can lag the report date). Three honesty fixes travelled with them: a
-month whose status arrived with a null `DaysPaymentDelay` paints **not
-reported, never "0 DPD"** (the `noDpd` list in the blob); DPD-cell tooltips
-carry that **month's own** delivered balance/overdue (`bal`/`od` maps) instead
-of repeating the current balance in all 36 cells; and coverage — the section
-line and the per-row `Reported n/m` chip — counts **only months the facility
-was open** (`possible_months`), so a fully-reported short loan is complete,
-not thin. Deliberately still unread: `PaymentBehaviour` (undocumented coding)
-and the sparse card-activity fields (`AmountSpent`, `CardUsedFlag`,
-`MinimumPaymentFlag`, `BilledAmount`), which feed the AI brief instead.
-
-**Where §07's height went** (652 → 571). The rows were driven by the *label*
-column, not the heatmap: at 250px the stat line wrapped to three rows while the
-36 cells beside it needed only 51px. Widening the label to 320px and dropping
-the two dead chips put every stat line back on one row. The DPD band is also
-explicitly 20px now rather than square — see below.
-
-**Three strips, one column grid, and that is the constraint.** A row stacks a
-status strip, a DPD strip and (for cards) a utilisation strip: three separate
-`repeat(36,1fr)` grids, one above the other. The only thing keeping their
-columns in register is **every cell filling its own track**, so all three share
-`grid-template-columns`, `gap` and `min-width`, and each has an explicit height.
-
-`.cell` used to be `aspect-ratio:1/1`, which filled the track by accident. Giving
-it a `max-height` during the compression pass broke that: the ratio drove the
-*width* down to match the capped height — 23px inside a 27.55px track — and every
-DPD block sat inset inside a column the strips above and below still filled.
-**Do not reintroduce `aspect-ratio` here.** A square cell and a shared column
-cannot both hold at an arbitrary width, and the shared column is the one that
-matters: a month has to line up with itself across all three strips. The band is
-`calc(20px + 4 * var(--f,0px))`, which also bounds a growth the ratio never did
-(it reached 29.5px).
-
-**`.hm`'s `min-width` is tied to the label width.** The three strips share a
-`min-width:16px` per cell, so the 36 cells need `36*16 + 35*2 = 646px` before
-they overflow. `.hm`'s floor is `320 + 24 + 646` rounded up to 1000. Move the
-label column and this must move with it; change one cell's `min-width` and the
-other two must follow, or the strips stop overflowing together at narrow widths
-and the register breaks exactly where nobody looks.
-
-### §08 recent applications — a split time axis
-
-One chart, and nothing else. The four counter tiles it used to lead with
-(5 / 6 / 4 / 15) answered a question nobody was asking, while the thing an
-underwriter actually needs — *when* the customer went looking, and how the
-recent weeks compare to the years behind them — was not on the screen at all.
-
-**Two exception marks, delivered-only** (9 Sep 2026). A `FlagOpenDispute`
-rings its marker amber; a non-main-holder `Role` puts the letter beside the
-provider code above the marker (`B04 · G` — §07's A/C/G vocabulary) and the
-full role name in the hover. Main holder is the default and earns nothing;
-each mark's legend entry renders only when the payload actually has the
-exception, so a clean file's legend promises nothing the chart does not show.
-The hover names the dispute state in both directions — a delivered `False`
-reads *No dispute*, an absent flag says nothing.
-
-**The axis is split.** AECB delivers applications spanning years while the
-underwriting question is about the last 90 days: in the reference payload that
-window is 90 of 990 days, so on a linear axis the cluster that matters most
-would be crushed into 9% of the width. The last 90 days therefore take **62%**
-of the axis and everything older is compressed into the rest. Both zones are
-linear within themselves and meet exactly at the boundary, so a marker never
-jumps. When every application already sits inside the window there is nothing
-to compress: the split lands at 0% and the focus takes the whole axis, rather
-than reserving a compressed zone with nothing in it.
-
-**The distortion is drawn, not just stated** — the focus window carries a wash,
-the boundary a dashed rule, and the two zones are labelled in different units
-(`30d` / `60d` / `90d` against calendar years). A legend line says it in words
-too. An axis that is not linear but looks linear is a lie, not a simplification.
-
-**Positions are percentages computed in `derive/applications.py`**, not in
-`report.js`: what counts as the focus window is a business fact about the
-payload, not a drawing detail, so the same rule that puts §07's bucketing in
-Python applies. Percentages rather than an SVG viewBox because the chart has to
-scale across two rail states and ten widths — a viewBox would magnify the 8.5px
-axis labels along with it. The shared axis in `render/svgtime.py` is
-deliberately **not** used: §04 and §05 share it so their timelines cannot drift,
-and this one is non-linear by design.
-
-**The phase codes are configured** (24 Sep 2026) in `config/status_codes.json`
-`application_phases`: B Disbursed, D Declined, J Rejected, N Not taken up,
-R Requested. The payload may send the code or the description; both match.
-Disbursed is a **filled** marker, Requested **hollow**, and Declined, Rejected,
-Not taken up (or an unconfigured phase) **dashed**, with the key naming the
-dashed phases present. The marker letter is the AECB category the
-rest of the page uses (I / C / S), matched on a keyword so a new wording still
-lands somewhere sensible; an unmatched type renders a **blank** marker and says
-so on hover rather than being filed under a category nobody chose.
-
-Markers are brand blue and never a risk colour. One application is a fact; it is
-the *cluster* that an underwriter reads as a signal, and the focus wash already
-carries that. The header pill grades the delivered `Applications90D`.
-
-**The 90-day window is `< 90` days, not `<= 90`.** That is what reconciles the
-rows against the delivered `Applications90D` exactly — five, not six, because
-one application sits on day 90 itself. The inclusive bound made the section
-display a conflict with the bureau that was our own off-by-one. The mismatch
-detector is still there and still fires, as a second pill, if a payload really
-does disagree.
-
-**Lane stacking is capped at four.** Applications close in time are lifted to a
-lane above rather than nudged along the axis, which would put them at the wrong
-date. Without a cap the section's height becomes a function of how many
-applications share a day — a payload with fifteen on one date produced a 565px
-chart. Beyond the cap markers overlap; the pill still counts them all.
-
-## Offline deployment (Python 3.9, air-gapped Linux)
-
-`streamlit==1.50.0` is pinned because it is the **last release supporting Python
-3.9** — 1.51.0 and later require ≥3.10. It also excludes Python 3.9.7 exactly
-(`!=3.9.7,>=3.9`); `install_offline.sh` checks for this.
-
-On a connected machine:
-
-```bash
-bash scripts/build_wheels.sh          # cross-downloads cp39 manylinux x86_64
+```
+app_api.py            production/UAT entry point
+app.py                development harness (not deployed)
+aecb/                 the package: loader, dates, coerce, context, api, ntlm,
+                      archive, logsetup, ui; derive/ (payload interpretation);
+                      render/ (HTML, CSS, JS, sections/); brief/ (AI brief)
+config/               policy and vocabulary JSON (7 files)
+assets/fonts/         base64-inlined fonts + OFL licence
+resources/            optional logo (see resources/README.md)
+ReferenceJSON/        committed anonymized/synthetic fixtures
+deploy/               build, release, install scripts; systemd unit; env template
+.streamlit/           Streamlit server settings
+tests/                pytest suite
+scripts/              developer QA tooling (not deployed)
+docs/                 documentation
+requirements.txt      runtime pin; requirements.lock: hashed full tree
 ```
 
-This produces `wheels/` and `wheels.tgz` (~103 MB, 36 wheels) and **fails loudly**
-if any dependency resolved to a source archive or the wrong architecture — either
-would only surface as a broken install on the server. Each build also writes
-`requirements.lock`, a committed manifest of exactly which wheels went into the
-bundle, so a deployment is auditable without unpacking the archive.
+## Documentation
 
-For a different architecture:
-
-```bash
-PLAT_ARCH=aarch64 bash scripts/build_wheels.sh
-```
-
-Copy `wheels.tgz` and the source tree to the server, then:
-
-```bash
-tar xzf wheels.tgz
-bash scripts/install_offline.sh       # --no-index; never touches the network
-.venv/bin/python -m streamlit run app_api.py --server.address 0.0.0.0 --server.headless true
-```
-
-### Fonts
-
-`assets/fonts/fonts_inline.css` holds Archivo, IBM Plex Sans, IBM Plex Mono and
-IBM Plex Sans Arabic as base64 `@font-face` rules (~930 KB), generated by
-`scripts/fetch_fonts.py`. **That script needs the internet and must be re-run on
-a connected machine** if the font set ever changes. Without the file the page
-still renders, but in system fallback fonts. The licences travel with the
-faces: `assets/fonts/OFL.txt` carries the SIL Open Font License text and
-attribution for all four families.
-
-## Payload notes
-
-Traits of the AECB format that the loader normalises, and that will matter when
-wiring sections:
-
-- **Version state is a suffix, not a flag** — `Passport` vs
-  `Passport(Historical)`, `Mobile Number` vs `Mobile Number (Historical)`.
-- **Rows repeat per reporting provider**, not per fact — one passport appears
-  five times. Dedup by value, keeping the provider set.
-- **Three date formats**: ISO, `25 July 2016`, and `311023` (DDMMYY).
-- **Trailing spaces on enum values** (`"Requested "`, `"Other "`) — stripped on
-  load, since they silently break equality checks.
-- **`ContractCategory` has two spellings** — single letters in `contracts`,
-  full phrases in `contractsSummary`. Canonicalised to letters.
-- **Status arrives as display text** (`Active Payments`), not the letter code the
-  heatmap draws. `ReportContext.status()` resolves either.
-- **History coverage is uneven.** In the reference payload only one contract has
-  a full 36 months; the median is about five. "Not reported" must never render
-  as "current".
-
-### The reference payload has been edited
-
-`ReferenceJSON/aecb_payload_archive_170623.json` shipped with `paymentOrder: []`.
-**Four synthetic returns were added on 6 August 2026** so §05 renders visibly
-when the app runs — a cheque and a direct debit inside the six-month window and
-one of each outside it, carrying this file's own subject id and archive date.
-Everything else in the file follows the genuine AECB payload structure, but the
-subject is **fully anonymized** — names, identifiers and contact details do not
-belong to a real person, so the file is safe to commit and share as the
-reference fixture. Prefer a real (anonymized) adverse payload if one arrives,
-and drop these. Note the file's `summary` counters still
-read `Amount_checks_returned_3mon: 0`, which disagrees with the injected
-September return — harmless today because §05 does not read those counters, but
-do not wire them elsewhere without resolving it.
-
-## Keeping the documentation current
-
-Four documents describe this project, and **all four are part of the
-deliverable**:
-
-| file | holds | audience |
+| Document | Audience | Contents |
 |---|---|---|
-| `README.md` | how the thing works — architecture, config, payload traps, per-section design rules | anyone reading the code |
-| `HANDOFF.md` | the state of play — what is done, what is open, what was last worked on, what comes next | an AI or engineer starting a fresh session |
-| `ARCHITECTURE.md` | the technical map — components, data flow, and why the design rules are what they are | an engineer orienting in the code |
-| `OVERVIEW.md` | the product, non-technically — what it is, the workflow, what the screen shows | stakeholders, and anyone before the code |
-
-### Standing instruction for an AI working on this repo
-
-The user switches context windows. `HANDOFF.md` is what the next session reads
-to pick up, so it has to be true at the moment it is read — not true as of some
-earlier week.
-
-**Start every session by reading `README.md` then `HANDOFF.md`.** That is the
-whole handover. Do not ask the user to paste either file, and do not start work
-on the next task until they have given you direction on it — `HANDOFF.md`'s
-*Next task* section says what is next and what is still undecided about it.
-(`ARCHITECTURE.md` and `OVERVIEW.md` are reference companions — read them when
-orienting, and keep them current like the other two.)
-
-**Use `scripts/measure/` for any change to `report.css` or to a section's
-markup — do not rebuild an equivalent by hand.** It is committed precisely so
-that no session has to. The workflow is in
-[scripts/measure/README.md](scripts/measure/README.md): commit, capture a
-baseline *from a git worktree of the pre-change commit*, change, capture
-again, `compare.py`, `synthetic.py`, `shots.py`. Keeping it working is part of
-the job:
-
-- **Add to `scripts/measure/watch.py`** when a section gains a class family,
-  or the comparator silently stops watching the thing you changed.
-- **Add a case to `scripts/measure/synthetic.py`** when you touch a path the
-  reference customer does not exercise — an empty category, an adverse value,
-  a missing date. Every case must assert the shape it meant to create.
-- **Record any new trap** in `scripts/measure/README.md` under *Things that
-  have already gone wrong here*, so the next session pays for it once.
-
-**After completing any piece of work, before reporting back, update both files
-if the work changed anything they assert.** Specifically:
-
-- **Always update `HANDOFF.md`** when you: finish or start a section; change a
-  design rule, class vocabulary or house pattern; add, remove or rename a
-  module, config file or CSS family; edit `ReferenceJSON/`; discover a payload
-  trap; resolve an open item, or open a new one; or receive a decision from the
-  user (record the decision *and its reason* — the reason is what stops it being
-  relitigated).
-- **Always update `README.md`** when the change affects how the code works:
-  architecture, configuration, the per-section design rules, or the known-gaps
-  table.
-- **Update `ARCHITECTURE.md` and `OVERVIEW.md`** when a change moves what they
-  map: a module added, removed or renamed; the pipeline reshaped; a
-  user-visible behaviour changed. Most changes touch neither; a rename or a
-  new file always does. They drifted once precisely because they sat outside
-  this rule.
-- **Refresh the "Last updated" line and the "Next task" section of
-  `HANDOFF.md` every time**, even when nothing else moved. "Nothing in flight"
-  is a valid and useful answer.
-- Keep the section table in `HANDOFF.md` honest, including measured heights —
-  they are how the next session knows where the compression work stands.
-- Say so in your reply when you have updated them, so the user can see the
-  documentation kept pace with the code.
-
-Treat a change that leaves any of the four documents stale as unfinished work,
-in the same way that a change failing `scripts/check_report.py` is unfinished.
+| [docs/OVERVIEW.md](docs/OVERVIEW.md) | Business, reviewers | What the product does, in non-technical terms |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Engineering, security | Components, pipeline, security model, design rationale |
+| [docs/LowLevelArchitecture.md](docs/LowLevelArchitecture.md) | Engineering, RRM | Label-by-label reference: code, config and payload for every screen element |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | All | Settled product and data decisions, payload traps, open items |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Operations | Build, release, install, run, logs, archive retention, troubleshooting |
+| [docs/DEPENDENCY_RISK.md](docs/DEPENDENCY_RISK.md) | Security | Dependency vulnerability register for the Python 3.9 runtime |
+| [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) | Security | Expected Sonar/Mend findings and their disposition |
+| [docs/AI_BRIEF_MRM.md](docs/AI_BRIEF_MRM.md) | Model risk | AI brief model documentation (development harness only) |
+| [CHANGELOG.md](CHANGELOG.md) | All | Release history |
+| `docs/BRD.docx` | Business | Business requirements |

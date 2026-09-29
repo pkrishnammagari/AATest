@@ -31,10 +31,9 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir,
 PK = 284917
 CB = "B07742318"
 
-# The report is pulled 28 Jul 2026 and the file is read on 19 Aug 2026 -- 22
-# days into the configured 30-day window, so section 01 renders the "still
-# valid" branch. The reference payload is 2.8 years stale and only ever
-# exercises the expired branch.
+# The report is pulled 28 Jul 2026. The fixture is fixed in time, so its
+# validity state in the top bar depends on the day it is rendered (valid for
+# the configured window after that date, expired afterwards).
 PULL = "2026-07-28T10:14:22.431"
 ARCHIVE = "2026-08-02T09:31:05.118"
 REPORT = datetime.date(2026, 7, 28)
@@ -430,10 +429,8 @@ def main():
             days=rnd.randint(20, 1400))).isoformat(),
     } for _ in range(9)]
 
-    EMPLOYERS = ["EMIRATES NBD", "DU TELECOM", "GULF LOGISTICS LLC",
-                 "AL FUTTAIM GROUP", "DUBAI HOLDING"]
     # Employment is written out explicitly rather than generated, because the point
-    # of these rows is WHICH OF THE THREE DATES each one carries. the income section reads
+    # of these rows is WHICH OF THE THREE DATES each one carries. The income section reads
     # DateOfEmployment (S), DateOfTermination (E) and DateOfLastUpdate (U), and its
     # whole reading turns on the combination -- S and E describe the job, U only
     # describes the record, so U may qualify a claim but never establish one.
@@ -455,7 +452,7 @@ def main():
     #
     # E-before-S is deliberately NOT here: it is a data error, not a bureau state,
     # and baking a permanent error marker into the demo payload would misrepresent
-    # it. That path is covered by the date-combination test instead.
+    # it.
     #
     # The configured confirmation window is 12 months and the report is pulled
     # 28 Jul 2026, so "fresh" means after Jul 2025.

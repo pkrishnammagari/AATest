@@ -68,13 +68,18 @@ _TOKENS = (("undefined", re.compile(r"\bundefined\b")),
 WIDTH = 1560   # the design viewport (scripts/measure/paths.py)
 
 
-def find_chrome():
-    """Chrome's path, or None. Honours AECB_CHROME like the measure tools."""
+def _measure_paths():
+    """scripts/measure/paths.py -- the shared Chrome finder and CSP helper."""
     if _MEASURE not in sys.path:
         sys.path.insert(0, _MEASURE)
+    import paths
+    return paths
+
+
+def find_chrome():
+    """Chrome's path, or None. Honours AECB_CHROME like the measure tools."""
     try:
-        import paths   # scripts/measure/paths.py
-        return paths.chrome()
+        return _measure_paths().chrome()
     except SystemExit:
         return None
     except Exception:   # noqa: BLE001
@@ -82,6 +87,8 @@ def find_chrome():
 
 
 def _instrument(html):
+    # The page's CSP admits only its own script; the probes need it removed.
+    html = _measure_paths().without_csp(html)
     head = html.find("<head>")
     if head >= 0:
         html = html[:head + 6] + _ERRCAP + html[head + 6:]

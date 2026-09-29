@@ -1,4 +1,4 @@
-"""Applications placed on a split time axis for section 08.
+"""Applications placed on a split time axis for the applications section.
 
 AECB delivers applications spanning years while the underwriting question is
 about the last 90 days. On a linear axis that window is a sliver -- in the
@@ -12,12 +12,13 @@ jumps. This is a deliberate distortion and the section states it on screen --
 an axis that is not linear but looks linear is a lie, not a simplification.
 
 The positions are computed HERE rather than in report.js for the same reason
-section 07's buckets are: what counts as the focus window is a business fact
+the heatmap's buckets are: what counts as the focus window is a business fact
 about the payload, not a drawing detail. report.js only places what it is given.
 
-The shared linear axis in render/svgtime.py is deliberately NOT used. Sections
-03 and 04 share it so their two timelines cannot drift; this one has a
-different scale by design and could not share it without becoming linear again.
+The shared linear axis in render/svgtime.py is deliberately NOT used. The
+income and returns sections share it so their two timelines cannot drift;
+this one has a different scale by design and could not share it without
+becoming linear again.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from __future__ import annotations
 import datetime
 
 from .. import dates
+from ..coerce import flag, number
 
 # The window RRM asks about. Also the split point.
 FOCUS_DAYS = 90
@@ -36,8 +38,9 @@ FOCUS_FRACTION = 0.62
 # Marker glyph by contract type, matched on a keyword so a new wording ("Auto
 # Loan", "Personal Finance") still lands somewhere sensible. The letters are the
 # AECB category set the rest of the page uses -- I / C / S -- so a reader who has
-# looked at section 06 or 07 already knows them. An unmatched type gets no
-# glyph and says so on hover rather than being filed under a category we guessed.
+# looked at the facilities or detail section already knows them. An unmatched
+# type gets no glyph and says so on hover rather than being filed under a
+# category we guessed.
 _GLYPHS = (
     ("credit card", "C"),
     ("card", "C"),
@@ -79,22 +82,15 @@ def _glyph(contract_type):
     return None
 
 
-def _truthy_flag(value) -> bool:
-    """Payload booleans arrive as True, 1 or 'Y' variants; None stays False."""
-    if value is None:
-        return False
-    return str(value).strip().upper() in ("1", "Y", "YES", "TRUE")
-
-
 def _role_letter(ctx, row):
     """The row's role letter; None for main holder or no Role; '?' for a
     delivered role the config cannot read.
 
     Main holder is the default across the book and earns no mark -- a
     guarantor or co-holder application is the exception that changes whose
-    credit hunger the marker records. Same A/C/G vocabulary as section 07,
-    and the same rule since 24 Sep 2026: an unrecognised role is never
-    assumed to be main holder.
+    credit hunger the marker records. Same A/C/G vocabulary and the same rule
+    as the detail heatmap: an unrecognised role is never assumed to be main
+    holder.
     """
     text = str(row.get("Role") or "").strip()
     if not text:
@@ -148,91 +144,111 @@ def in_window_at(anchor, rows, days=FOCUS_DAYS):
     return out
 
 
-def timeline(ctx, rows):
-    """Everything section 08's chart needs, or None when it cannot be drawn.
+class _SplitAxis:
+    """Days-ago to a percentage of the axis width: the focus window linear
+    on the right, everything older compressed linearly on the left, the two
+    meeting exactly at the FOCUS_DAYS boundary."""
 
-    Returns {'events', 'ticks', 'split', 'focusDays', 'lanes'}. Positions are
-    percentages of the axis width, left to right, oldest to newest.
-    """
-    report_date = ctx.report_date
-    if not report_date or not rows:
-        return None
+    def __init__(self, oldest_days):
+        self.oldest_days = oldest_days
+        # When every dated application sits inside the focus window there is
+        # no older zone to compress: the focus takes the whole axis, split
+        # lands at 0 and the renderer draws no break -- claiming a compressed
+        # zone that holds nothing would misstate the axis.
+        self.focus_fraction = FOCUS_FRACTION if oldest_days > FOCUS_DAYS else 1.0
+        self.split_pct = (1.0 - self.focus_fraction) * 100.0
 
+    def x_of(self, days_ago):
+        if days_ago <= FOCUS_DAYS:
+            return 100.0 - (days_ago / float(FOCUS_DAYS)) * self.focus_fraction * 100.0
+        span = max(1.0, self.oldest_days - FOCUS_DAYS)
+        travelled = (days_ago - FOCUS_DAYS) / span
+        return (1.0 - travelled) * self.split_pct
+
+
+def _dated(report_date, rows):
+    """[(days ago, date, row)] for rows with a usable date, oldest first."""
     dated = []
     for row in rows:
         when = applied_on(row)
         if when:
             dated.append((max(0, (report_date - when).days), when, row))
+    dated.sort(key=lambda item: -item[0])
+    return dated
+
+
+def _assign_lane(x, lane_ends):
+    """First lane whose last marker is far enough to the left, capped.
+
+    Lanes stack upward, so a collision lifts the newer marker rather than
+    shifting it along the axis, which would put it at the wrong date.
+    """
+    lane = 0
+    while lane < len(lane_ends) and x - lane_ends[lane] < _LANE_GAP:
+        lane += 1
+    lane = min(lane, MAX_LANES - 1)
+    if lane == len(lane_ends):
+        lane_ends.append(x)
+    else:
+        lane_ends[lane] = x
+    return lane
+
+
+def _event(ctx, x, lane, days_ago, when, row):
+    phase = ctx.phase(row.get("Phase"))
+    event = {
+        "x": round(x, 3),
+        "lane": lane,
+        "days": days_ago,
+        "focus": days_ago < FOCUS_DAYS,
+        "glyph": _glyph(row.get("ContractType")),
+        # Filled = Disbursed (B), hollow = Requested (R). Every other phase --
+        # Declined, Rejected, Not taken up, or one the config does not know
+        # -- is neither, so it draws dashed and the legend names the phases
+        # present.
+        "taken": phase["code"] == "B",
+        "otherPhase": phase["code"] not in ("B", "R"),
+        "phase": phase["label"],
+        "provider": ctx.provider(row.get("ProviderNo"))["code"],
+        "info": _info(row, when, days_ago, ctx),
+    }
+    # Exceptions only: a marker gets a dispute ring or a role letter only when
+    # the payload delivers one, and the keys are omitted otherwise.
+    if flag(row.get("FlagOpenDispute")):
+        event["disp"] = True
+    role = _role_letter(ctx, row)
+    if role:
+        event["role"] = role
+    return event
+
+
+def timeline(ctx, rows):
+    """Everything the applications chart needs, or None when it cannot be drawn.
+
+    Returns {'events', 'ticks', 'split', 'focusDays', 'lanes', ...}.
+    Positions are percentages of the axis width, left to right, oldest to
+    newest.
+    """
+    report_date = ctx.report_date
+    if not report_date or not rows:
+        return None
+    dated = _dated(report_date, rows)
     if not dated:
         return None
 
-    dated.sort(key=lambda item: -item[0])          # oldest first
-    oldest_days = dated[0][0]
-
-    # When every dated application sits inside the focus window there is no
-    # older zone to compress: the focus takes the whole axis, split lands at 0
-    # and the renderer draws no break -- claiming a compressed zone that holds
-    # nothing would misstate the axis.
-    focus_fraction = FOCUS_FRACTION if oldest_days > FOCUS_DAYS else 1.0
-    split_pct = (1.0 - focus_fraction) * 100.0
-
-    def x_of(days_ago):
-        """Days-ago to a percentage. Piecewise, continuous at the boundary."""
-        if days_ago <= FOCUS_DAYS:
-            return 100.0 - (days_ago / float(FOCUS_DAYS)) * focus_fraction * 100.0
-        span = max(1.0, oldest_days - FOCUS_DAYS)
-        travelled = (days_ago - FOCUS_DAYS) / span
-        return (1.0 - travelled) * split_pct
-
+    axis = _SplitAxis(dated[0][0])
     events, lane_ends = [], []
     for days_ago, when, row in dated:
-        x = x_of(days_ago)
-
-        # First lane whose last marker is far enough to the left. Lanes stack
-        # upward, so a collision lifts the newer marker rather than shifting it
-        # along the axis, which would put it at the wrong date.
-        lane = 0
-        while lane < len(lane_ends) and x - lane_ends[lane] < _LANE_GAP:
-            lane += 1
-        if lane >= MAX_LANES:
-            lane = MAX_LANES - 1
-        if lane == len(lane_ends):
-            lane_ends.append(x)
-        else:
-            lane_ends[lane] = x
-
-        phase = ctx.phase(row.get("Phase"))
-        event = {
-            "x": round(x, 3),
-            "lane": lane,
-            "days": days_ago,
-            "focus": days_ago < FOCUS_DAYS,
-            "glyph": _glyph(row.get("ContractType")),
-            # Filled = Disbursed (B), hollow = Requested (R). Every other
-            # phase -- Declined, Rejected, Not taken up, or one the config
-            # does not know -- is neither, so it draws dashed and the legend
-            # names the phases present (24 Sep 2026).
-            "taken": phase["code"] == "B",
-            "otherPhase": phase["code"] not in ("B", "R"),
-            "phase": phase["label"],
-            "provider": ctx.provider(row.get("ProviderNo"))["code"],
-            "info": _info(row, when, days_ago, ctx),
-        }
-        # Exceptions only: a marker gets a dispute ring or a role letter only
-        # when the payload delivers one, and the keys are omitted otherwise.
-        if _truthy_flag(row.get("FlagOpenDispute")):
-            event["disp"] = True
-        role = _role_letter(ctx, row)
-        if role:
-            event["role"] = role
-        events.append(event)
+        x = axis.x_of(days_ago)
+        events.append(_event(ctx, x, _assign_lane(x, lane_ends), days_ago,
+                             when, row))
 
     lanes = len(lane_ends)
     role_letters = sorted(set(e["role"] for e in events if e.get("role")))
     return {
         "events": events,
-        "ticks": _ticks(ctx, x_of, oldest_days, report_date),
-        "split": round(split_pct, 3),
+        "ticks": _ticks(axis, report_date),
+        "split": round(axis.split_pct, 3),
         "focusDays": FOCUS_DAYS,
         "lanes": lanes,
         "lanePitch": LANE_PITCH,
@@ -257,35 +273,37 @@ def _phase_order(ctx, labels):
             + sorted(labels - set(configured)))
 
 
-def _ticks(ctx, x_of, oldest_days, report_date):
+def _ticks(axis, report_date):
     """Day marks inside the focus window, calendar years outside it.
 
     The two zones are labelled in different units on purpose: it is the
     clearest way to show that they are not the same scale.
     """
-    out = [{"x": round(x_of(0), 3), "label": "report", "lead": True}]
+    out = [{"x": round(axis.x_of(0), 3), "label": "report", "lead": True}]
     for days in (30, 60, FOCUS_DAYS):
-        if days <= oldest_days:
-            out.append({"x": round(x_of(days), 3), "label": "%dd" % days,
+        if days <= axis.oldest_days:
+            out.append({"x": round(axis.x_of(days), 3), "label": "%dd" % days,
                         "lead": days == FOCUS_DAYS})
+    if axis.oldest_days > FOCUS_DAYS:
+        out.extend(_year_ticks(axis, report_date))
+    return out
 
-    # Year boundaries in the compressed zone, newest first, dropped once they
-    # would collide -- the zone can hold years in a few percent of the width.
-    if oldest_days > FOCUS_DAYS:
-        oldest = report_date - datetime.timedelta(days=oldest_days)
-        placed = []
-        for year in range(report_date.year, oldest.year - 1, -1):
-            when = datetime.date(year, 1, 1)
-            if not (oldest <= when <= report_date):
-                continue
-            days = (report_date - when).days
-            if days <= FOCUS_DAYS:
-                continue
-            x = x_of(days)
-            if any(abs(x - p) < 7.0 for p in placed):
-                continue
-            placed.append(x)
-            out.append({"x": round(x, 3), "label": str(year), "lead": False})
+
+def _year_ticks(axis, report_date):
+    """Year boundaries in the compressed zone, newest first, dropped once they
+    would collide -- the zone can hold years in a few percent of the width."""
+    oldest = report_date - datetime.timedelta(days=axis.oldest_days)
+    placed, out = [], []
+    for year in range(report_date.year, oldest.year - 1, -1):
+        when = datetime.date(year, 1, 1)
+        days = (report_date - when).days
+        if not oldest <= when <= report_date or days <= FOCUS_DAYS:
+            continue
+        x = axis.x_of(days)
+        if any(abs(x - p) < 7.0 for p in placed):
+            continue
+        placed.append(x)
+        out.append({"x": round(x, 3), "label": str(year), "lead": False})
     return out
 
 
@@ -313,9 +331,9 @@ def _info(row, when, days_ago, ctx):
                      % str(row.get("Role")).strip())
     elif role:
         parts.append("Role: %s" % _role_label(ctx, role))
-    flag = row.get("FlagOpenDispute")
-    if flag is not None:
-        parts.append("Open dispute" if _truthy_flag(flag) else "No dispute")
+    disputed = flag(row.get("FlagOpenDispute"))
+    if disputed is not None:
+        parts.append("Open dispute" if disputed else "No dispute")
 
     amount = _aed(row.get("TotalAmount"))
     limit = _aed(row.get("CreditLimit"))
@@ -340,10 +358,10 @@ def _info(row, when, days_ago, ctx):
 def _aed(value):
     """'AED 12,500', or None when the payload delivers nothing numeric.
 
-    Amounts are untrusted input: a value like '12,500' must drop out of the
-    hover line, not raise mid-render and take the whole report with it.
+    Amounts are untrusted input: a non-numeric value drops out of the hover
+    line rather than raising mid-render and taking the report with it.
     """
-    try:
-        return "AED {:,.0f} (currency assumed)".format(float(value))
-    except (TypeError, ValueError):
+    amount = number(value)
+    if amount is None:
         return None
+    return "AED {:,.0f} (currency assumed)".format(amount)

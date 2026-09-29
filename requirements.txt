@@ -1,4 +1,4 @@
-# AECB Analyzer V2 -- runtime dependencies.
+# FH AECB Analyzer -- direct runtime dependencies.
 #
 # streamlit 1.50.0 is the LAST release that supports Python 3.9; 1.51.0 and
 # later require >=3.10. Do not bump this pin without first confirming the
@@ -8,8 +8,8 @@
 # excluded upstream. Check `python3 -V` on the server before deploying.
 #
 # The application itself has no other direct dependency; everything else in the
-# wheel bundle is pulled in transitively by streamlit. The transitive tree that
-# actually ships is recorded in requirements.lock, written by
-# scripts/build_wheels.sh on every bundle build -- commit it alongside any
-# deployed bundle so dependency scanners can see what the server really runs.
+# wheel bundle is pulled in transitively by streamlit. The exact tree that ships
+# -- every package pinned by version and sha256 -- is requirements.lock,
+# regenerated only by `bash deploy/build_wheels.sh --relock` and committed.
+# The server installs from the lock, never from this file.
 streamlit==1.50.0

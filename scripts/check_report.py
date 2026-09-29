@@ -82,7 +82,8 @@ def check_page(ctx, raw):
 
     # Values the payload genuinely carries must reach the page. The score is
     # the dial's whole number: numeric text such as '732.0' is still 732
-    # (PayLoadRead.md, section 02), so it is looked for as the page shows it.
+    # (docs/LowLevelArchitecture.md, score), so it is looked for as the page
+    # shows it.
     score = scoring.score_value(ctx)
     expected = [
         (ctx.customer.get("FullNameEN"), "customer name"),
@@ -266,12 +267,12 @@ def check_page(ctx, raw):
     # signals are asserted against the window.__AECB blob rather than markup
     # (the chip wording lives verbatim in report.js and would always match).
     # json.dumps writes '"key": value', which is what these needles rely on.
-    from aecb.render.js import _truthy_flag  # local import: test helper only
+    from aecb.coerce import flag  # the same flag rules the blob builder uses
     contracts = ctx.rows("contracts")
     blob_wants = []
-    if any(_truthy_flag(r.get("FlagOpenDispute")) for r in contracts):
+    if any(flag(r.get("FlagOpenDispute")) for r in contracts):
         blob_wants.append(('"dispute": true', "a contract's open dispute"))
-    if any(r.get("SecurityType") or _truthy_flag(r.get("SecuredContractFlag"))
+    if any(r.get("SecurityType") or flag(r.get("SecuredContractFlag"))
            for r in contracts):
         blob_wants.append(('"secured":', "a contract's security"))
     if any(str(r.get("OriginalCurrency") or "").strip() not in ("", "AED")
@@ -280,7 +281,7 @@ def check_page(ctx, raw):
 
     # Section 08's exception marks, same blob-level reasoning.
     applications = ctx.rows("applications")
-    if any(_truthy_flag(r.get("FlagOpenDispute")) for r in applications):
+    if any(flag(r.get("FlagOpenDispute")) for r in applications):
         blob_wants.append(('"disp": true', "a disputed application"))
     role_map = ctx.status_codes.get("role_labels") or {}
     if any(role_map.get(str(r.get("Role") or "").strip(), "A") != "A"

@@ -108,7 +108,6 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
   width:26px; height:26px; border-radius:7px; display:grid; place-items:center; flex:none; margin-top:1px}
 .sec-htxt{flex:1; min-width:0}
 .sec-title{font-size:17px; font-weight:700; line-height:1.15}
-.sec-purpose{font-size:11.5px; color:var(--ink-3); margin-top:2px}
 .sec-aside{margin-left:auto; flex:none; display:flex; align-items:center; gap:8px}
 .tag{font-size:11px; font-weight:500; padding:3px 9px; border-radius:6px; background:var(--surface-3);
   color:var(--ink-2); border:1px solid var(--line); display:inline-flex; align-items:center; gap:5px; white-space:nowrap}
@@ -136,7 +135,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .sec.coll.closed .sec-body{display:none}
 .sec.coll.closed .sec-toggle{transform:rotate(-90deg)}
 
-/* ========== 02 IDENTITY ========== */
+/* ========== IDENTITY & DEMOGRAPHICS ========== */
 /* The name in both scripts shares one row and mirrors from opposite margins;
    the traits sit on a quieter line beneath. Splitting them this way means a long
    name in either script grows into open space rather than colliding with
@@ -176,7 +175,6 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .facts.id-grid{grid-template-columns:repeat(6,1fr)}
 .fact.c2{grid-column:span 2}
 .fact.c3{grid-column:span 3}
-.fact.c6{grid-column:span 6}
 .fact{background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:11px 13px}
 .mob-list{display:flex; flex-direction:column; gap:5px}
 .mob{display:flex; align-items:center; gap:7px}
@@ -184,8 +182,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .mob .when{font-size:9.5px; color:var(--ink-4); margin-left:auto; white-space:nowrap; font-family:var(--font-mono)}
 .fact .k{font-family:var(--font-mono); font-size:9px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); font-weight:500; display:flex; align-items:center; gap:5px}
 .fact .v{font-size:13.5px; font-weight:600; margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
-/* One rule for the mono value: size here, wrapping behaviour with it (the
-   wrap half used to live as a duplicate selector after the .c3/.c6 sizes). */
+/* One rule for the mono value: size and wrapping behaviour together. */
 .fact .v .mono{font-size:12.5px; overflow-wrap:anywhere; min-width:0}
 /* The passport's expiry, ON the value line rather than under it. It belongs to
    the number it qualifies, and as its own block it gave the passport tile a
@@ -200,7 +197,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .v-sub.expired{color:var(--red-ink)}
 .v-sub.expired b{color:var(--red-ink)}
 /* The wider tiles carry longer values -- keep them a touch smaller. */
-.fact.c3 .v,.fact.c6 .v{font-size:13px}
+.fact.c3 .v{font-size:13px}
 .chevron{font-size:9.5px; color:var(--fh-blue-ink); cursor:pointer; font-weight:600; user-select:none;
   background:var(--fh-blue-wash); border:1px solid var(--fh-blue-line); padding:0 5px; border-radius:4px; white-space:nowrap}
 .chevron:hover{background:var(--fh-blue); color:#fff; border-color:var(--fh-blue)}
@@ -212,14 +209,13 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .hist-row .when{font-size:9px; color:var(--ink-4); margin-left:auto; white-space:nowrap; font-family:var(--font-mono)}
 .histflag{font-size:8px; font-weight:600; color:var(--ink-3); background:var(--surface-3); padding:0 5px; border-radius:3px; border:1px solid var(--line)}
 
-/* ========== 02 SCORE & BUREAU HISTORY ==========
-   Half-width card (24 Sep 2026, user decision), paired with 03 Worst Statuses
-   in a .sec-pair row: a dial (a 120-degree arc) -- FH band zones, marker at the
+/* ========== SCORE & BUREAU HISTORY ==========
+   Half-width card, paired with Worst Statuses in a .sec-pair row: a dial (a 120-degree arc) -- FH band zones, marker at the
    score, the score in the bowl -- and a column of the FH chip, the AECB chip,
    the vintage bar and the file length to its right. The dial is inline SVG
    built in sections/score.py; the zone colours come from tokens there.
 
-   The dial is the hero (28 Sep 2026). The side column is only as wide as its
+   The dial is the hero. The side column is only as wide as its
    widest tile and sits hard against the card's right edge (its items align
    right, so the tiles do too even when the file-length line is wider); the
    dial takes everything to its left. The side gives way first when space runs short
@@ -298,7 +294,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 /* Two halves: delivered records left, what can be drawn from them right. The
    left half never depends on the right -- with nothing drawable the records
    still stand on their own, so the split holds in every payload state.
-   Shared by sections 04 and 05, which follow the same grammar. */
+   Shared by the income and returns sections, which follow the same grammar. */
 /* Columns stretch rather than sitting at their own heights, so the divider
    runs the full card whichever half is taller. */
 .inc-split{display:grid; grid-template-columns:1fr 1.08fr; align-items:stretch}
@@ -364,7 +360,8 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
   vertical-align:middle}
 
 /* ---------- record tiles ----------
-   The shared unit for the delivered-record lists in sections 03 and 04 and
+   The shared unit for the delivered-record lists in the income and returns
+   sections and
    for their empty statements. One vocabulary, so an employer, a returned
    cheque and a "none reported" all read as members of the same family --
    the same treatment the not-on-the-chart tray established. */
@@ -383,7 +380,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 
 .emp-name{font-size:13px; font-weight:600}
 .emp-cur{font-size:9px; font-weight:600; color:#fff; background:var(--fh-blue); padding:1px 6px; border-radius:4px}
-/* 6px to match .fact .v in section 02, where the same provider set sits in a
+/* 6px to match .fact .v in the identity section, where the same provider set sits in a
    flex row with that gap -- '+N' then lands 9px from its badge in both. */
 .emp-prov{display:inline-flex; align-items:center; gap:6px}
 .other-inc{margin-top:18px; padding-top:16px; border-top:1px dashed var(--line-2)}
@@ -427,8 +424,8 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
   color:#fff; font-size:8.5px; font-weight:700; display:inline-grid;
   place-items:center; font-style:normal}
 
-/* The application timeline, rendered section 08 (report.js applicationTimeline,
-   drawn into .enq-tl). */
+/* The application timeline (report.js applicationTimeline, drawn into
+   .enq-tl). */
 .tl-axis{position:absolute; left:0; right:0; bottom:24px; height:2px; background:var(--line-2)}
 .tl-mo{position:absolute; bottom:8px; transform:translateX(-50%); font-family:var(--font-mono); font-size:8.5px; color:var(--ink-4)}
 .tl-mo.lead{color:var(--fh-blue-ink); font-weight:600}
@@ -437,7 +434,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .tl-event .mk{border-radius:50%; border:2px solid #fff; box-shadow:0 2px 6px rgba(20,30,44,.25); display:grid; place-items:center; color:#fff; font-size:9px; font-weight:700}
 .tl-event .amt{font-family:var(--font-mono); font-size:9px; font-weight:600; margin-bottom:3px; white-space:nowrap}
 
-/* ========== 08 RECENT APPLICATIONS ==========
+/* ========== RECENT APPLICATIONS ==========
    A split axis: the last 90 days occupy the right ~62% and everything older is
    compressed into the left. Positions arrive as percentages from
    derive/applications.py, so this is absolute placement and nothing here knows
@@ -488,9 +485,9 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .wsx{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
 /* Flex column with `margin:auto 0` on the figure, so the figure sits centred in
    whatever space is left under the label rather than pinned to the top of it.
-   The panels stretch to the tallest of the row, and today the tallest is the
-   pending one -- without this, a one-word status floats above ~90px of void and
-   the panel reads as broken rather than as short. */
+   The panels stretch to the tallest of the row -- without this, a one-word
+   status floats above a void and the panel reads as broken rather than as
+   short. */
 .wsx-panel{border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface-2);
   padding:11px 13px; display:flex; flex-direction:column}
 .wsx-win{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); font-weight:500}
@@ -499,33 +496,30 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .wsx-worst.red{color:var(--red)}
 /* The magnitude under the grade. Laid out inline rather than
    justify-content:space-between, which in a wide panel flings the label and
-   the value to opposite edges with a void between them -- the mistake the old
-   .wsx-row family made and needed a density rule to undo. */
+   the value to opposite edges with a void between them. */
 .wsx-sub{margin-top:9px; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
 .wsx-sub .k{font-family:var(--font-mono); font-size:9px; letter-spacing:.06em;
   text-transform:uppercase; color:var(--ink-3); font-weight:500}
 .wsx-sub .v{font-size:12.5px; font-weight:600}
 .wsx-sub .v.red{color:var(--red)}
-/* The pending panel. Same dashed "stated absence" vocabulary as .rec-none and
-   .fac.empty, sized down to sit inside a panel rather than fill a card. It is
-   the tallest member of the row, so it alone sets the section's height -- compressing
-   the other two panels does nothing until this one comes down. */
+/* A panel stating an absence ("Not reported"). Same dashed "stated absence"
+   vocabulary as .rec-none and .fac.empty, sized down to sit inside a panel
+   rather than fill a card. */
 .wsx-panel .empty-state{margin:9px 0 0; padding:9px 10px; text-align:left}
 .wsx-panel .es-msg{font-size:12.5px; line-height:1.2}
 .wsx-panel .es-detail{font-size:10.5px; line-height:1.4; margin-top:3px}
 
-/* ========== 06 ACTIVE CREDIT FACILITIES ========== */
+/* ========== ACTIVE CREDIT FACILITIES ========== */
 .fac-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px}
-/* Compressed 7 Aug 2026: the card was 292px and 60 of them were row-gap alone.
-   The gap is now 5px because .fac-role carries its OWN 7px top padding and a
-   hairline -- the two were doing the same job twice, and a 19px trough before
-   every role heading is what made a card of seven short lines read as tall. */
+/* The gap is 5px because .fac-role carries its OWN 7px top padding and a
+   hairline -- a larger gap would do the same job twice and leave a trough
+   before every role heading. */
 .fac{border:1px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; background:var(--surface-2); display:flex; flex-direction:column; gap:5px}
 .fac-h{display:flex; align-items:center; gap:7px}
-/* ONE brand colour for all four chips (7 Aug 2026, at the user's request). The
-   categorical --cat-i/c/n/s set survives because section 07's heatmap group
-   headers still use it, so the two no longer agree on a category's colour.
-   That is the instruction, not a slip -- do not "restore" it here. */
+/* ONE brand colour for all four chips, by decision. The categorical
+   --cat-i/c/n/s set survives because the detail heatmap's group headers still
+   use it, so the two deliberately do not agree on a category's colour -- do
+   not "restore" it here. */
 .fac-cat{font-family:var(--font-mono); font-size:10px; font-weight:600; color:#fff;
   background:var(--fh-blue); width:18px; height:18px; border-radius:5px;
   display:grid; place-items:center; flex:none}
@@ -581,7 +575,7 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .fac-util-fill{display:block; height:100%; border-radius:4px; background:var(--green)}
 .fac-util-fill.over{background:var(--red)}
 
-/* ========== 09 HEATMAP ========== */
+/* ========== DETAIL HEATMAP ========== */
 .hm-wrap{border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden}
 .hm-scroll{overflow-x:auto}
 /* Raised 920 -> 1000 when the label column went 250 -> 320. This number is not
@@ -616,7 +610,6 @@ body:not(.rail-off) .brief-btn{background:var(--fh-blue-d); border-color:var(--f
 .hm-grouphead{padding:4px 12px; background:var(--surface-3); font-family:var(--font-mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; color:var(--ink-2); display:flex; align-items:center; gap:6px; border-bottom:1px solid var(--line)}
 .hm-gc{font-family:var(--font-mono); font-size:8.5px; font-weight:600; color:#fff; width:15px; height:15px; border-radius:4px; display:grid; place-items:center}
 .hm-gc.I{background:var(--cat-i)} .hm-gc.C{background:var(--cat-c)} .hm-gc.N{background:var(--cat-n)} .hm-gc.S{background:var(--cat-s)}
-.hm-gc.X{background:var(--cat-x)}
 .hm-grouphead .gh-n{color:var(--ink-4); font-weight:500; text-transform:none; letter-spacing:0}
 .hm-fold.closed{display:none}
 .hm-row{display:flex; align-items:center; padding:4px 12px; border-bottom:1px solid var(--surface-3)}
@@ -760,7 +753,7 @@ body.rail-off .rail{display:none}
   .id-name-ar{margin-left:0; width:100%}
   .facts{grid-template-columns:repeat(2,1fr)}
   .facts.id-grid{grid-template-columns:repeat(2,1fr)}
-  .fact.c2,.fact.c3{grid-column:span 1} .fact.c6{grid-column:span 2}
+  .fact.c2,.fact.c3{grid-column:span 1}
 }
 @media (max-width:820px){
   .spine{display:none} .wrap{grid-template-columns:minmax(0,1fr); padding:16px}
@@ -781,12 +774,10 @@ body.rail-off .rail{display:none}
   .inc-latest-s{max-width:150px}
   .sp{flex-wrap:wrap}
   .facts,.facts.id-grid{grid-template-columns:1fr}
-  .fact.c2,.fact.c3,.fact.c6{grid-column:span 1}
+  .fact.c2,.fact.c3{grid-column:span 1}
 }
 /* ---------- FOLDED SUB-SECTION (shared) ----------
-   The returns section's "Earlier" fold. This used to also carry section 06's "Card
-   utilisation" block, whose .card-behaviour / .cb-* family went with the
-   06 rebuild on 7 Aug 2026 -- but .sub-wrap itself is SHARED and must stay. */
+   The returns section's "Earlier" fold. */
 .sub-wrap{margin-top:16px; padding-top:14px; border-top:1px dashed var(--line-2)}
 .sub-bar{display:flex; align-items:center; gap:11px; cursor:pointer; user-select:none}
 .sub-bar-t{font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); font-weight:600}
@@ -813,7 +804,7 @@ body.rail-off .rail{display:none}
   background:var(--surface-3); border:1px solid var(--line); border-radius:3px; padding:0 3px;
   margin-left:3px; cursor:help}
 
-/* ---- provenance marks (section 06) ----
+/* ---- provenance marks (delivered vs derived) ----
    A bureau-delivered figure and one we computed must be distinguishable. The
    36-month worst status is derived; the 24-month one is not. */
 .prov-mark{font-family:var(--font-mono); font-size:8px; font-weight:600; letter-spacing:.04em;
@@ -824,7 +815,7 @@ body.rail-off .rail{display:none}
 .wsx-worst.green{color:var(--green)}
 .wsx-worst.amber{color:var(--amber)}
 
-/* ---- step 2 additions ---- */
+/* ---- validity pill states ---- */
 .tb-valid.expired{background:var(--red-wash); border-color:var(--red-line); color:var(--red-ink)}
 .tb-valid.expired .pd{background:var(--red)}
 .tb-valid.unknown{background:var(--surface-3); border-color:var(--line); color:var(--ink-2)}
@@ -958,13 +949,13 @@ body.rail-off .rail{display:none}
 
 /* The meter is the one piece of visualisation the bar carries, so it gets the
    flexible space. Its 100px floor is what lets 1280/1440 windows keep the
-   dates / EnquiryType chip (measured 24 Sep 2026). */
+   dates / EnquiryType chip (measured). */
 .tv-meter{position:relative; flex:1; min-width:100px; max-width:300px;
   height:12px; cursor:help}
-/* Two colours only (user decision, 24 Sep 2026): the fill is the days elapsed,
-   green while the report is valid and red once it is not; the plain neutral
-   track is the days remaining. No zones -- an amber/red band inside the
-   window once painted a valid report's marker red beside a green pill. */
+/* Two colours only: the fill is the days elapsed, green while the report is
+   valid and red once it is not; the plain neutral track is the days
+   remaining. No zones -- a coloured band inside the window would paint a
+   valid report's marker red beside a green pill. */
 .tv-track{position:absolute; top:3px; left:0; right:0; height:6px; border-radius:4px;
   background:var(--line)}
 .tv-fill{position:absolute; top:3px; left:0; height:6px; border-radius:4px;
@@ -979,9 +970,9 @@ body.rail-off .rail{display:none}
    ReportType chip's hover), then the dates, then the meter. The pill is the
    part that must never disappear.
 
-   Re-measured 24 Sep 2026 after the scope chips arrived: with both chips the
-   full strip needed ~1400px, so every 1280/1366 laptop ran the meter under
-   the AI Analysis button. The breakpoints below come from a headless-Chrome
+   With both scope chips the full strip needs ~1400px, so 1280/1366 laptops
+   would run the meter under the AI Analysis button. The breakpoints below
+   come from a headless-Chrome
    sweep of both reference payloads in every validity state (worst case: the
    expired strip, "2.1 years ago" + "Valid until") -- verified unclipped at
    every 20px from 800 to 1600px plus 1110/1280/1366/1440/1536. 1440 and
@@ -1073,8 +1064,8 @@ body.rail-off .rail{display:none}
   @media (max-width:1180px){body,body.rail-off{--colw:calc(100vw - 106px)}}
   @media (max-width:820px){body,body.rail-off{--colw:calc(100vw - 32px)}}
 
-  /* --- 02 SCORE: the surplus is spent on SIZE ---
-     The dial is SVG and fills its box up to its height budget (see the 02
+  /* --- SCORE: the surplus is spent on SIZE ---
+     The dial is SVG and fills its box up to its height budget (see the score
      block above); the side column's type grows a little instead. */
   .ss-hv{font-size:calc(22px + 3 * var(--f,0px))}
 
@@ -1088,7 +1079,7 @@ body.rail-off .rail{display:none}
   .ss-vint{font-size:calc(14px + 1.5 * var(--f,0px))}
   .ss-hs{font-size:calc(11.5px + .5 * var(--f,0px))}
 
-  /* --- 01 IDENTITY: the name line only ---
+  /* --- IDENTITY: the name line only ---
      The tiles below it spend the surplus on a COLUMN instead, so their type
      is deliberately absent from this block. See the density note further
      down for why the two cannot both be taken. */
@@ -1101,7 +1092,7 @@ body.rail-off .rail{display:none}
      see the note in the density query), so it can take the size outright. */
   .wsx-worst{font-size:calc(26px + 4 * var(--f,0px))}
 
-  /* --- 06 ACTIVE CREDIT FACILITIES ---
+  /* --- ACTIVE CREDIT FACILITIES ---
      No density move exists here and none should be invented: .fac-grid is
      repeat(4,1fr) because AECB has exactly four contract categories, so the
      column count is the data, not a layout choice. The cards go 245px -> 343px
@@ -1115,7 +1106,7 @@ body.rail-off .rail{display:none}
   .fac-row{font-size:calc(11.5px + .5 * var(--f,0px))}
   .fac-util-h .v{font-size:calc(15px + 2 * var(--f,0px))}
 
-  /* --- 07 FACILITIES DETAIL: the heatmap ---
+  /* --- DETAIL HEATMAP ---
      The cells USED to grow on their own, because .cell was aspect-ratio:1/1
      inside repeat(36,1fr) -- 18.7px to 29.6px across the range -- while the
      type inside them stayed pinned at 7px, which is why the wide heatmap once
@@ -1138,18 +1129,16 @@ body.rail-off .rail{display:none}
      track, and 9px would push it into its neighbour. .hm-rl is likewise left
      at 320px -- widening the label column would take the space straight back
      off the cells, which are the point of the section. */
-  .cell{font-size:calc(7px + 2.5 * var(--f,0px))}
+  /* The DPD band's height gain is stated explicitly -- and so bounded -- rather
+     than tied by an aspect ratio to a track that widens. */
+  .cell{font-size:calc(7px + 2.5 * var(--f,0px)); height:calc(20px + 4 * var(--f,0px))}
   .scell{font-size:calc(7px + 2 * var(--f,0px)); height:calc(11px + 2 * var(--f,0px))}
-  /* The DPD band used to grow on its own, because aspect-ratio tied its height
-     to a track that widens. It no longer has one, so the gain is stated -- and
-     stated here it is bounded, which the ratio never was: it reached 29.5px. */
-  .cell{height:calc(20px + 4 * var(--f,0px))}
   .ucell{height:calc(7px + 2 * var(--f,0px))}
   .hm-gc{width:calc(17px + 2 * var(--f,0px)); height:calc(17px + 2 * var(--f,0px));
     font-size:calc(9px + 1 * var(--f,0px))}
   .hm-rl-t{font-size:calc(12px + .5 * var(--f,0px))}
 
-  /* --- 08 RECENT APPLICATIONS ---
+  /* --- RECENT APPLICATIONS ---
      Nothing to scale, and that is by construction. The timeline positions every
      marker as a PERCENTAGE of the axis, so the chart already fills whatever
      column it is given at every width without a gain -- which is exactly why it
@@ -1185,12 +1174,11 @@ body.rail-off .rail{display:none}
   .rec-meta{font-size:calc(11px + .5 * var(--f,0px))}
 }
 
-/* ---------- 01 IDENTITY: DENSITY STEP ----------
-   The rail gives back 392px. Section 01 spends it on a fourth column rather
+/* ---------- IDENTITY: DENSITY STEP ----------
+   The rail gives back 392px. The identity section spends it on a fourth column rather
    than on slack inside the existing three: row one carries Emirates ID,
    passport, mobile AND e-mail, and the address -- the one long value -- takes
-   the row beneath at full width, which is the shape .c6 already produces on a
-   payload with no e-mail at all.
+   the row beneath at full width.
 
    TWELVE TRACKS, NOT SIX. A span of 2k-of-12 is exactly a span of k-of-6 at
    the same gap: with gap g and content width W, span2-of-6 = 2(W-5g)/6 + g =
@@ -1202,7 +1190,7 @@ body.rail-off .rail{display:none}
 
    auto-fit/minmax() is the wrong tool here and is deliberately not used: an
    unnameable track count against an explicit `span 3` produces orphan holes
-   at some widths, and c2/c3/c6 encode MEANING ("a third of a row", "half a
+   at some widths, and c2/c3 encode MEANING ("a third of a row", "half a
    row"), which auto-fit cannot express -- it only says "as many as fit".
 
    1510 IS DERIVED, NOT CHOSEN. A span-3-of-12 tile is W/4 - 6 wide. The tuned
@@ -1216,9 +1204,8 @@ body.rail-off .rail{display:none}
 
    r2-2 says the second row was built from two tiles -- Python knows, CSS
    cannot ask without :has(), which is Chrome 105 like container queries.
-   Since 24 Sep 2026 row two is always E-mail + Address (an absent e-mail
-   states "Not reported" instead of vanishing), so the old r2-1 shape and
-   its rule are gone.
+   Row two is always E-mail + Address (an absent e-mail states "Not
+   reported" instead of vanishing).
 
    minmax(0,1fr) rather than 1fr: 1fr is minmax(auto,1fr), and the unbreakable
    mono Emirates ID can force a track past its share. .fact .v .mono already
@@ -1252,7 +1239,7 @@ body.rail-off .rail{display:none}
 }
 
 /* The two long values sit a step below their tile's own size. These were
-   inline styles in sections/identity.py; they live here so section 01's type is
+   inline styles in sections/identity.py; they live here so the identity section's type is
    all in one file and the density rule above can override the address. */
 .fact .v .mono.v-mail{font-size:11.5px}
 .fact .v .v-addr{font-size:12.5px}

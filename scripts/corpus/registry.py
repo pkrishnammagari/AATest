@@ -103,7 +103,8 @@ _CHECKS = (
     ("nodrop.history_future", WARN, "no-drop",
      "History rows dated after the report month are dropped",
      "history_by_contract discards months < 0. Usually the report date "
-     "(enquiry ladder) predates the data pull; see PayLoadRead.md top bar."),
+     "(enquiry ladder) predates the data pull; see docs/LowLevelArchitecture.md "
+     "(top bar)."),
     ("nodrop.contacts_type", WARN, "no-drop",
      "Contacts of a type the page never shows",
      "sections/identity.py renders Mobile Number, Phone Number and E-mail "

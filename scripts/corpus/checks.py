@@ -11,7 +11,8 @@ harness can raise for it, in seven layers:
              assertions, plus contracts, history months, applications,
              contacts and summary rows the page could lose silently;
   recompute  headline figures and pills re-derived from the RAW payload by
-             the rules in PayLoadRead.md, then compared with the page. These
+             the rules in docs/LowLevelArchitecture.md, then compared with
+             the page. These
              restate the spec rather than call the code under test, so a
              regression cannot certify itself;
   hygiene    the page never shows None / NaN / undefined / an empty value /
@@ -145,7 +146,7 @@ def plural(n, word):
 
 
 def ladder(ctx):
-    """The report date, restated from PayLoadRead.md (top bar): the latest
+    """The report date, restated from docs/LowLevelArchitecture.md (top bar): the latest
     parseable sectionStatus 'Last EnquiryDate', array order breaking ties,
     else score.DataPullDate, else None. Returns (date, basis)."""
     best = None

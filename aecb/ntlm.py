@@ -1,7 +1,7 @@
 """Minimal NTLMv2 client authentication (MS-NLMP), stdlib only.
 
 The bureau-report API sits behind IIS Windows authentication (WWW-Authenticate:
-Negotiate/NTLM, confirmed by the API team 9 Sep 2026). The deployment server is
+Negotiate/NTLM). The deployment server is
 air-gapped with a deliberately one-line requirements.txt, so rather than adding
 pyspnego + cryptography wheels to the offline bundle, the three-message NTLMv2
 handshake is implemented here from the MS-NLMP specification:
@@ -17,9 +17,9 @@ reject them). The NT hash needs MD4, which OpenSSL 3 removed from the default
 provider, so a pure-Python MD4 (RFC 1320) is included and used when
 hashlib.new("md4") is unavailable.
 
-Correctness is anchored to the official MS-NLMP 4.2.4 NTLMv2 test vectors --
-scripts/check_report.py's suite does not cover this module; run
-python3 -m aecb.ntlm to execute the self-test.
+Correctness is anchored to the published test vectors (RFC 1320 for MD4,
+MS-NLMP 4.2.4 for NTLMv2) in tests/test_ntlm.py, and the full handshake is
+exercised against a proof-checking local server in tests/test_api.py.
 """
 
 from __future__ import annotations
@@ -43,13 +43,51 @@ _FLAGS = 0x00000001 | 0x00000002 | 0x00000004 | 0x00000200 \
 # --- MD4 (RFC 1320) ----------------------------------------------------------
 # OpenSSL 3 moved MD4 to the legacy provider, so hashlib.new("md4") raises on
 # most modern builds. NTLM's NT hash is defined over MD4 and nothing newer,
-# hence this fallback. Constant-table-free reference implementation.
+# hence this fallback. MD4 is used here ONLY because the NTLM protocol
+# mandates it; it protects nothing on its own (see the module docstring).
+
+_MASK = 0xFFFFFFFF
+
+
+def _lrot(value, n):
+    value &= _MASK
+    return ((value << n) | (value >> (32 - n))) & _MASK
+
+
+def _f(x, y, z):
+    return (x & y) | (~x & z)
+
+
+def _g(x, y, z):
+    return (x & y) | (x & z) | (y & z)
+
+
+def _h(x, y, z):
+    return x ^ y ^ z
+
+
+# (round function, message-word order, shift per step mod 4, additive constant)
+_MD4_ROUNDS = (
+    (_f, tuple(range(16)), (3, 7, 11, 19), 0),
+    (_g, (0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15),
+     (3, 5, 9, 13), 0x5A827999),
+    (_h, (0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15),
+     (3, 9, 11, 15), 0x6ED9EBA1),
+)
+
+
+def _md4_round(state, words, fn, order, shifts, const):
+    """One RFC 1320 round. Each step updates the first register and rotates
+    the four, so the register roles (a, d, c, b) cycle exactly as the RFC
+    writes them out long-hand."""
+    a, b, c, d = state
+    for i, k in enumerate(order):
+        a = _lrot(a + fn(b, c, d) + words[k] + const, shifts[i % 4])
+        a, b, c, d = d, a, b, c
+    return a, b, c, d
+
 
 def _md4_pure(data: bytes) -> bytes:
-    def lrot(value, n):
-        value &= 0xFFFFFFFF
-        return ((value << n) | (value >> (32 - n))) & 0xFFFFFFFF
-
     message = bytearray(data)
     bit_len = (8 * len(message)) & 0xFFFFFFFFFFFFFFFF
     message.append(0x80)
@@ -57,61 +95,14 @@ def _md4_pure(data: bytes) -> bytes:
         message.append(0)
     message += struct.pack("<Q", bit_len)
 
-    a, b, c, d = 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476
+    state = (0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476)
     for chunk in range(0, len(message), 64):
-        x = struct.unpack("<16I", message[chunk:chunk + 64])
-        aa, bb, cc, dd = a, b, c, d
-
-        def f(x_, y_, z_):
-            return (x_ & y_) | (~x_ & z_)
-
-        def g(x_, y_, z_):
-            return (x_ & y_) | (x_ & z_) | (y_ & z_)
-
-        def h(x_, y_, z_):
-            return x_ ^ y_ ^ z_
-
-        # Round 1
-        for i, s in zip(range(16), (3, 7, 11, 19) * 4):
-            if i % 4 == 0:
-                a = lrot(a + f(b, c, d) + x[i], s)
-            elif i % 4 == 1:
-                d = lrot(d + f(a, b, c) + x[i], s)
-            elif i % 4 == 2:
-                c = lrot(c + f(d, a, b) + x[i], s)
-            else:
-                b = lrot(b + f(c, d, a) + x[i], s)
-        # Round 2
-        order2 = (0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15)
-        for i, k in enumerate(order2):
-            s = (3, 5, 9, 13)[i % 4]
-            if i % 4 == 0:
-                a = lrot(a + g(b, c, d) + x[k] + 0x5A827999, s)
-            elif i % 4 == 1:
-                d = lrot(d + g(a, b, c) + x[k] + 0x5A827999, s)
-            elif i % 4 == 2:
-                c = lrot(c + g(d, a, b) + x[k] + 0x5A827999, s)
-            else:
-                b = lrot(b + g(c, d, a) + x[k] + 0x5A827999, s)
-        # Round 3
-        order3 = (0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15)
-        for i, k in enumerate(order3):
-            s = (3, 9, 11, 15)[i % 4]
-            if i % 4 == 0:
-                a = lrot(a + h(b, c, d) + x[k] + 0x6ED9EBA1, s)
-            elif i % 4 == 1:
-                d = lrot(d + h(a, b, c) + x[k] + 0x6ED9EBA1, s)
-            elif i % 4 == 2:
-                c = lrot(c + h(d, a, b) + x[k] + 0x6ED9EBA1, s)
-            else:
-                b = lrot(b + h(c, d, a) + x[k] + 0x6ED9EBA1, s)
-
-        a = (a + aa) & 0xFFFFFFFF
-        b = (b + bb) & 0xFFFFFFFF
-        c = (c + cc) & 0xFFFFFFFF
-        d = (d + dd) & 0xFFFFFFFF
-
-    return struct.pack("<4I", a, b, c, d)
+        words = struct.unpack("<16I", message[chunk:chunk + 64])
+        block = state
+        for fn, order, shifts, const in _MD4_ROUNDS:
+            block = _md4_round(block, words, fn, order, shifts, const)
+        state = tuple((x + y) & _MASK for x, y in zip(state, block))
+    return struct.pack("<4I", *state)
 
 
 def _md4(data: bytes) -> bytes:
@@ -226,44 +217,3 @@ def split_account(username: str):
         domain, user = username.split("\\", 1)
         return user, domain
     return username, ""
-
-
-# --- self-test: the official MS-NLMP 4.2.4 NTLMv2 vectors -------------------
-
-def self_test() -> None:
-    # RFC 1320 MD4 vectors, forcing the pure implementation.
-    assert _md4_pure(b"").hex() == "31d6cfe0d16ae931b73c59d7e0c089c0"
-    assert _md4_pure(b"abc").hex() == "a448017aaf21d8525fc10ae87aa6729d"
-
-    # MS-NLMP 4.2.4: User="User", Domain="Domain", Password="Password",
-    # server challenge 0x0123456789abcdef, client challenge 0xaa*8, time 0,
-    # target info = NbDomain "Domain" + NbComputer "Server" + EOL.
-    key = _response_key_nt("User", "Domain", "Password")
-    assert key.hex() == "0c868a403bfd7a93a3001ef22ef02e3f", key.hex()
-
-    server_challenge = bytes.fromhex("0123456789abcdef")
-    client_challenge = b"\xaa" * 8
-    target_info = (struct.pack("<HH", 2, 12) + "Domain".encode("utf-16-le")
-                   + struct.pack("<HH", 1, 12) + "Server".encode("utf-16-le")
-                   + struct.pack("<HH", 0, 0))
-    temp = (b"\x01\x01" + b"\x00" * 6 + b"\x00" * 8 + client_challenge
-            + b"\x00" * 4 + target_info + b"\x00" * 4)
-    proof = _nt_proof(key, server_challenge, temp)
-    assert proof.hex() == "68cd0ab851e51c96aabc927bebef6a1c", proof.hex()
-
-    lm = hmac.new(key, server_challenge + client_challenge, "md5").digest()
-    assert lm.hex() == "86c35097ac9cec102554764a57cccc19", lm.hex()
-
-    # Round-trip: our own challenge parses, and the authenticate message the
-    # header helpers build carries the same proof.
-    msg = authenticate_message("User", "Domain", "Password", server_challenge,
-                               target_info, client_challenge=client_challenge,
-                               timestamp=b"\x00" * 8)
-    assert msg[:8] == _SIGNATURE and struct.unpack("<I", msg[8:12])[0] == 3
-    nt_len, _max, nt_off = struct.unpack("<HHI", msg[20:28])
-    assert msg[nt_off:nt_off + 16].hex() == "68cd0ab851e51c96aabc927bebef6a1c"
-
-
-if __name__ == "__main__":
-    self_test()
-    print("ok: MD4 (RFC 1320) and NTLMv2 (MS-NLMP 4.2.4) vectors all match")

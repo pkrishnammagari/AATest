@@ -1,18 +1,31 @@
 """Shared locations and helpers for the measurement tools.
 
 Everything here is derived or overridable, never hard-coded, because these
-scripts have to run from a checkout at any path AND against a backup tree as
-well as the live one -- capturing the "before" baseline from a backup is how a
-before/after comparison stays honest (see scripts/measure/README.md).
+scripts have to run from a checkout at any path AND against a second
+checkout of an older revision -- capturing the "before" baseline from the old
+code is how a before/after comparison stays honest (see
+scripts/measure/README.md).
 
 Python 3.9 compatible, like the rest of the repo.
 """
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import tempfile
+
+# The report's Content-Security-Policy allows exactly one inline script, by
+# hash. A probe script injected by these tools would be blocked, so every
+# injection goes through without_csp(). That the unmodified page runs under
+# its own policy is asserted separately by the test suite (tests/).
+_CSP_META = re.compile(r'<meta http-equiv="Content-Security-Policy"[^>]*>\n?')
+
+
+def without_csp(html: str) -> str:
+    """The page minus its CSP <meta>, so an injected probe script can run."""
+    return _CSP_META.sub("", html, count=1)
 
 # scripts/measure/paths.py -> the repo root is two directories up.
 ROOT = os.environ.get("AECB_ROOT") or os.path.dirname(
@@ -20,10 +33,9 @@ ROOT = os.environ.get("AECB_ROOT") or os.path.dirname(
 
 # Scratch space for rendered HTML, captures and screenshots.
 #
-# NEVER inside ROOT. app.py's list_payloads() scans ReferenceJSON/ and would
-# offer stray copies in the sidebar; the py39 sweep in HANDOFF walks every
-# *.py under the tree; and check_report.py reads rendered output. Keeping
-# the work area outside the repo keeps all three honest.
+# NEVER inside ROOT: app.py's list_payloads() scans ReferenceJSON/ and would
+# offer stray copies in the sidebar, and repository-wide checks (tests, the
+# Python 3.9 syntax test) would pick up generated files.
 WORK = os.environ.get("AECB_WORK") or os.path.join(
     tempfile.gettempdir(), "aecb-measure")
 
@@ -119,7 +131,7 @@ def shoot(html: str, width: int, height: int, png: str, scale: int = 1) -> None:
          "--hide-scrollbars", "--force-device-scale-factor=%d" % scale,
          "--window-size=%d,%d" % (width, height),
          "--virtual-time-budget=6000", "--screenshot=" + png,
-         "file://" + page], capture_output=True, text=True)
+         "file://" + page], capture_output=True, text=True, timeout=180)
     # A Chrome crash otherwise surfaces later as a missing PNG with no clue.
     if done.returncode != 0:
         raise RuntimeError("Chrome exited %d taking the screenshot: %s"
@@ -142,13 +154,13 @@ def probe(html: str, script: str, width: int, sentinel: str = "M") -> dict:
 
     page = work("_probe.html")
     with open(page, "w") as handle:
-        handle.write(html.replace("</body>", script + "</body>"))
+        handle.write(without_csp(html).replace("</body>", script + "</body>"))
     done = subprocess.run(
         [chrome(), "--headless", "--disable-gpu", "--no-sandbox",
          "--hide-scrollbars", "--force-device-scale-factor=1",
          "--window-size=%d,1200" % width, "--virtual-time-budget=6000",
          "--dump-dom", "file://" + page],
-        capture_output=True, text=True)
+        capture_output=True, text=True, timeout=180)
     # Fail on the crash, not on the cryptic "no probe payload" it causes.
     if done.returncode != 0:
         raise RuntimeError("Chrome exited %d probing at width %d: %s"

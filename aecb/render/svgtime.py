@@ -1,4 +1,5 @@
-"""Shared time axis for the inline-SVG timelines (sections 03 and 04).
+"""Shared time axis for the inline-SVG timelines (the income and returns
+sections).
 
 Both sections draw events against calendar time ending at the report date, so
 the tick strategy, the label-collision rule and the report-date marker live
@@ -26,21 +27,34 @@ def ticks(x0, x1):
     crowds a long file -- the step widens until the labels fit.
     """
     years = (x1.year - x0.year) + 1
-    out = []
-    if years >= 3:
-        step = 1 if years <= 5 else (2 if years <= 10 else 3)
-        for year in range(x0.year + 1, x1.year + 1, step):
-            when = datetime.date(year, 1, 1)
-            if x0 <= when <= x1:
-                out.append((when, str(year)))
-    else:
-        for year in range(x0.year, x1.year + 1):
-            for month in (1, 7):
-                when = datetime.date(year, month, 1)
-                if x0 <= when <= x1:
-                    out.append((when, dates.fmt_mon(when)))
+    out = _year_ticks(x0, x1, years) if years >= 3 else _half_year_ticks(x0, x1)
     # Always anchor the left edge, so the axis says where it starts.
     out.insert(0, (x0, dates.fmt_mon(x0)))
+    return out
+
+
+def _year_step(years) -> int:
+    if years <= 5:
+        return 1
+    return 2 if years <= 10 else 3
+
+
+def _year_ticks(x0, x1, years):
+    out = []
+    for year in range(x0.year + 1, x1.year + 1, _year_step(years)):
+        when = datetime.date(year, 1, 1)
+        if x0 <= when <= x1:
+            out.append((when, str(year)))
+    return out
+
+
+def _half_year_ticks(x0, x1):
+    out = []
+    for year in range(x0.year, x1.year + 1):
+        for month in (1, 7):
+            when = datetime.date(year, month, 1)
+            if x0 <= when <= x1:
+                out.append((when, dates.fmt_mon(when)))
     return out
 
 

@@ -11,10 +11,9 @@ needs both windows side by side rather than one figure that answers only half
 the book.
 
 AECB delivers the 24-month worst status and the life-time count; it delivers
-nothing for 36 months. That panel was held open ("To be built") until RRM
-settled the defaults (9 Sep 2026): derive it from the delivered conduct
-evidence, whole book including closed contracts, and mark it derived --
-ALWAYS, because nothing in it is a bureau figure.
+nothing for 36 months. That panel is derived from the delivered conduct
+evidence -- whole book, closed contracts included -- and always marked
+derived, because nothing in it is a bureau figure.
 
 Delivered values are printed VERBATIM. Beyond the 36-month derivation, the
 only thing this module derives is the colour, and it grades nothing it cannot
@@ -24,6 +23,7 @@ recognise: see _known_status().
 from __future__ import annotations
 
 from ... import dates
+from ...coerce import integer
 from ...derive import facilities
 from .. import components as c
 
@@ -59,7 +59,7 @@ def _delivered_24m(ctx):
                       state="absent")
 
     status = _known_status(ctx, value)
-    tone, state = _grade(status)
+    tone, state = _grade(ctx, status)
     return _panel(label, _tag_delivered(),
                   c.esc(value) + _summary_conflict(ctx, value, status),
                   sub=_delay_line(ctx), tone=tone, state=state)
@@ -100,10 +100,9 @@ def _delay_line(ctx):
     if days is None:
         value = '<span class="na">Not reported</span>'
     else:
-        try:
-            count = int(days)
-        except (TypeError, ValueError):
-            # Delivered but not a number. Show it as it arrived, ungraded.
+        count = integer(days)
+        if count is None:
+            # Delivered but not a whole number. Show it as it arrived, ungraded.
             value = '<span class="v">%s</span>' % c.esc(days)
         else:
             value = ('<span class="v%s">%s days</span>'
@@ -115,8 +114,8 @@ def _delay_line(ctx):
 def _derived_36m(ctx):
     """The window AECB does not deliver, derived from what it does deliver.
 
-    Built 9 Sep 2026 with the RRM defaults: every contract in the window
-    counts -- closed ones and every role included -- and evidence is the
+    RRM defaults: every contract in the window counts -- closed ones and
+    every role included -- and evidence is the
     monthly conduct rows plus each contract's dated lifetime worst fields
     (see facilities.worst_in_window). A severe status outranks a raw DPD
     number when naming what happened; the bureau's own severity ranking
@@ -130,8 +129,8 @@ def _derived_36m(ctx):
     # be milder than what AECB delivered for 24 months. When the calculation
     # comes out milder -- sparse monthly rows can miss what the bureau saw --
     # the delivered figure is shown and the calculated one moves to the
-    # hover of an amber '!' (user decision, 24 Sep 2026: show what is
-    # delivered; the calculation never overrules it).
+    # hover of an amber '!': what is delivered is shown; the calculation
+    # never overrules it.
     d_value = ctx.totals.get("WorstStatus24M")
     d_status = _known_status(ctx, d_value) if d_value else None
 
@@ -156,19 +155,19 @@ def _derived_36m(ctx):
                 ("no ranked status" if worst else "not derivable — no "
                  "evidence falls in the window"),
                 d_value,
-                (" Calculated detail: " + _event_info(worst)) if worst else ""))
-        tone, state = _grade(d_status)
+                (" Calculated detail: " + _event_info(ctx, worst)) if worst else ""))
+        tone, state = _grade(ctx, d_status)
         info = ""
     elif calc is not None:
         headline = c.esc(calc["label"])
-        tone, state = _grade(calc)
-        info = _event_info(worst)
+        tone, state = _grade(ctx, calc)
+        info = _event_info(ctx, worst)
     else:
         # Delays may still exist without a single rankable status; the
         # sub-line carries them, and the headline claims nothing.
         headline = "Status not reported"
         tone, state = "", "unknown"
-        info = _event_info(worst)
+        info = _event_info(ctx, worst)
 
     # A window that looks clean but carries statuses the config cannot rank
     # is not provably clean -- unknown, never green.
@@ -191,10 +190,7 @@ def _delay_line_36(ctx, worst):
     calculated one in an amber '!'.
     """
     days = worst["max_dpd"] if worst else None
-    try:
-        d_days = int(ctx.totals.get("MaxPaymentDelay24M"))
-    except (TypeError, ValueError):
-        d_days = None
+    d_days = integer(ctx.totals.get("MaxPaymentDelay24M"))
     mark = ""
     if d_days is not None and (days is None or d_days > days):
         mark = _attn("Calculated from the monthly conduct and dated contract "
@@ -213,7 +209,7 @@ def _delay_line_36(ctx, worst):
             '&middot; 36m</span>%s</div>' % value)
 
 
-def _event_info(worst):
+def _event_info(ctx, worst):
     """Hover on the figure: the event behind the grade, when there is one."""
     if worst["clean"]:
         text = ("No payment delay and no below-normal status in the evidence "
@@ -227,7 +223,8 @@ def _event_info(worst):
                      % worst["unknown"])
         return text
     parts = []
-    if worst["status"] is not None and worst["status"]["rank"] < 100:
+    if (worst["status"] is not None
+            and ctx.severity(worst["status"]["rank"]) != "normal"):
         parts.append("Worst status: %s" % worst["status"]["label"])
     if worst["max_dpd"]:
         parts.append("deepest delay %s days" % c.format_number(worst["max_dpd"]))
@@ -253,7 +250,8 @@ def _lifetime_count(ctx):
     Delivered as a number rather than a status code, unlike the 24-month field
     beside it, so it is formatted as a figure and graded on being zero or not.
     A count says how many, never how deep, so a non-zero one cannot be graded
-    red here -- it is amber, and §07's per-facility detail carries the depth.
+    red here -- it is amber, and the detail heatmap's per-facility rows
+    carry the depth.
     """
     label = "Life-time worst status count &middot; non-services"
     value = ctx.summary.get("Worststatus")
@@ -265,9 +263,8 @@ def _lifetime_count(ctx):
                                     "count."),
                       state="absent")
 
-    try:
-        count = int(value)
-    except (TypeError, ValueError):
+    count = integer(value)
+    if count is None:
         # Delivered, but not the number the field is meant to be. Show it as it
         # arrived and grade nothing -- guessing at a tone would be inventing a
         # reading of a value we do not understand.
@@ -301,16 +298,15 @@ def _known_status(ctx, value):
     return None
 
 
-def _grade(status):
+_GRADES = {"severe": ("red", "severe"), "adverse": ("amber", "adverse"),
+           "normal": ("green", "clean")}
+
+
+def _grade(ctx, status):
     """(tone, state) for a resolved status. Unrecognised is left uncoloured."""
     if not status:
         return "", "unknown"
-    rank = status.get("rank", 100)
-    if rank <= 60:
-        return "red", "severe"
-    if rank < 100:
-        return "amber", "adverse"
-    return "green", "clean"
+    return _GRADES.get(ctx.severity(status.get("rank")), ("", "unknown"))
 
 
 def _aside(panels):

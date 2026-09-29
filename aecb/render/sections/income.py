@@ -28,6 +28,7 @@ rather than as an underwriting screen.
 from __future__ import annotations
 
 from ... import dates
+from ...coerce import number
 from ...derive import income
 from .. import components as c
 from .. import svgtime
@@ -87,58 +88,9 @@ def _latest_label(model) -> str:
                 % ("No usable figure" if placeholder else "Not reported"))
 
     rec = latest["record"]
-    if latest["basis"] == "current":
-        # Named for the employer, not the figure: this header answers "who do
-        # they work for and on what" and the employer half is the part that is
-        # always known here.
-        key = "Current salary" if rec.income_usable else "Current employer"
-        basis = ("The most recent start date among the employers AECB has not "
-                 "marked finished. Employment carries no current/prior flag, "
-                 "so the newest start is the only evidence of which job is "
-                 "the live one.")
-        if rec.stale:
-            basis += (" Last updated %s, outside the confirmation window in "
-                      "config/income.json -- still the current employer on the "
-                      "payload's own evidence, but nobody has refreshed it "
-                      "since." % dates.fmt_month_year(rec.updated))
-    elif latest["basis"] == "newest":
-        key = "Latest salary"
-        basis = ("No employer qualifies as current -- each is marked prior or "
-                 "carries an end date -- so this is the newest figure the "
-                 "bureau dated.")
-    else:
-        key = "Salary on file"
-        basis = ("AECB dated no figure on any row, so this is an employer's "
-                 "figure rather than a current one.")
-
-    # The current employer's own figure or nothing: filling the slot from a
-    # different employer's row would state a salary for this one that the
-    # payload never reported.
-    if rec.income_usable:
-        value = ('<span data-info="%s">%s<small>/yr</small></span>'
-                 % (c.attr(_currency_note(model)), c.aed(rec.income)))
-    elif rec.placeholder:
-        value = '<span class="na">No usable figure</span>'
-    else:
-        value = '<span class="na">Salary not reported</span>'
-
-    # Tenure answers "since when" better than the figure's own date does, and is
-    # what an underwriter reads the header for. Where no hire date arrived, the
-    # figure's date stands in and says which it is.
-    bits = [c.esc(_short(rec.name, 30))]
-    if rec.started and rec.ended:
-        # "since 2020" on a job the bureau says ended in 2024 reads as ongoing.
-        # A closed job gets both ends or it gets misread.
-        bits.append("%s to %s" % (dates.fmt_month_year(rec.started),
-                                  dates.fmt_month_year(rec.ended)))
-    elif rec.started:
-        bits.append("since %s" % dates.fmt_month_year(rec.started))
-    elif rec.ended:
-        bits.append("ended %s" % dates.fmt_month_year(rec.ended))
-    elif rec.point_date:
-        bits.append("as at %s" % dates.fmt_month_year(rec.point_date))
-    if rec.stale:
-        bits.append("last confirmed %s" % dates.fmt_month_year(rec.updated))
+    key, basis = _latest_basis(latest["basis"], rec)
+    value = _latest_value(model, rec)
+    bits = [c.esc(_short(rec.name, 30))] + _tenure_bits(rec)
 
     # The section loads folded, so this line is all a reader sees until they
     # open it: a dispute on the record behind the figure has to be here too.
@@ -152,6 +104,64 @@ def _latest_label(model) -> str:
             '<span class="inc-latest-s">%s</span>%s</div>'
             % (c.attr("%s, reported by %s. %s" % (rec.name, providers, basis)),
                key, value, " · ".join(bits), dispute))
+
+
+def _latest_basis(basis, rec):
+    """(header key, hover sentence) for the latest-figure basis."""
+    if basis == "current":
+        # Named for the employer, not the figure: this header answers "who do
+        # they work for and on what" and the employer half is the part that is
+        # always known here.
+        key = "Current salary" if rec.income_usable else "Current employer"
+        text = ("The most recent start date among the employers AECB has not "
+                "marked finished. Employment carries no current/prior flag, "
+                "so the newest start is the only evidence of which job is "
+                "the live one.")
+        if rec.stale:
+            text += (" Last updated %s, outside the confirmation window in "
+                     "config/income.json -- still the current employer on the "
+                     "payload's own evidence, but nobody has refreshed it "
+                     "since." % dates.fmt_month_year(rec.updated))
+        return key, text
+    if basis == "newest":
+        return "Latest salary", ("No employer qualifies as current -- each is "
+                                 "marked prior or carries an end date -- so "
+                                 "this is the newest figure the bureau dated.")
+    return "Salary on file", ("AECB dated no figure on any row, so this is an "
+                              "employer's figure rather than a current one.")
+
+
+def _latest_value(model, rec) -> str:
+    """The current employer's own figure or nothing: filling the slot from a
+    different employer's row would state a salary for this one that the
+    payload never reported."""
+    if rec.income_usable:
+        return ('<span data-info="%s">%s<small>/yr</small></span>'
+                % (c.attr(_currency_note(model)), c.aed(rec.income)))
+    if rec.placeholder:
+        return '<span class="na">No usable figure</span>'
+    return '<span class="na">Salary not reported</span>'
+
+
+def _tenure_bits(rec) -> list:
+    """Tenure answers "since when" better than the figure's own date does,
+    and is what an underwriter reads the header for. Where no hire date
+    arrived, the figure's date stands in and says which it is."""
+    bits = []
+    if rec.started and rec.ended:
+        # "since 2020" on a job the bureau says ended in 2024 reads as
+        # ongoing. A closed job gets both ends or it gets misread.
+        bits.append("%s to %s" % (dates.fmt_month_year(rec.started),
+                                  dates.fmt_month_year(rec.ended)))
+    elif rec.started:
+        bits.append("since %s" % dates.fmt_month_year(rec.started))
+    elif rec.ended:
+        bits.append("ended %s" % dates.fmt_month_year(rec.ended))
+    elif rec.point_date:
+        bits.append("as at %s" % dates.fmt_month_year(rec.point_date))
+    if rec.stale:
+        bits.append("last confirmed %s" % dates.fmt_month_year(rec.updated))
+    return bits
 
 
 def _currency_note(model) -> str:
@@ -172,7 +182,7 @@ def _chart_block(ctx, model) -> str:
             '%s</div>' % _provenance(model))
 
     if model["chart"] == "none":
-        return head + _no_chart(model)
+        return head + _no_chart()
 
     return ('%s%s%s%s%s' % (head, _svg(ctx, model), _legend(model),
                             _chart_note(model), _undated(model)))
@@ -220,7 +230,7 @@ def _svg(ctx, model) -> str:
     for i, rec in enumerate(lanes):
         lane_top[id(rec)] = axis_y + _AXIS_H + i * _LANE_H
     for rec in lanes:
-        parts.append(_lane(ctx, model, rec, sx, lane_top[id(rec)]))
+        parts.append(_lane(rec, sx, lane_top[id(rec)]))
 
     if has_income:
         parts.append(_points(model, sx, axis_y, lane_top))
@@ -274,7 +284,7 @@ def _axis(ctx, model, sx, axis_y) -> str:
                         _W, _PAD_L, _PAD_R, _PAD_T, ctx.report_date)
 
 
-def _lane(ctx, model, rec, sx, top) -> str:
+def _lane(rec, sx, top) -> str:
     """One employer's span: name above, bar below."""
     x_start = sx(rec.started)
     bar_y = top + 13
@@ -425,7 +435,7 @@ def _chart_note(model) -> str:
     return ""
 
 
-def _no_chart(model) -> str:
+def _no_chart() -> str:
     """Nothing is datable. Says what AECB would have to carry, not what it lacks."""
     return c.empty_state(
         "Nothing can be placed in time",
@@ -580,40 +590,37 @@ def _income_cell(model, rec) -> str:
                 % (c.esc(model["currency"]), c.format_number(rec.income),
                    c.esc(model["currency"]), c.format_number(model["floor"]),
                    mark))
-    if not float(rec.income):
+    if not number(rec.income):
         return ('<b>%s 0</b>/yr <span class="histflag">reported as zero</span>%s'
                 % (c.esc(model["currency"]), mark))
     return "<b>%s</b>/yr%s" % (c.aed(rec.income), mark)
 
 
+def _other_income_amount(amount) -> str:
+    if amount is None:
+        return '<span class="na">Amount not reported</span>'
+    if number(amount) == 0:
+        return ('%s/yr <span class="histflag">reported as zero</span>'
+                % c.aed(amount))
+    return "%s/yr" % c.aed(amount)
+
+
+def _other_income_line(row) -> str:
+    when = dates.fmt_month_year(row.get("DateOfLastUpdate"), dash="")
+    source = (c.esc(row.get("Source")) if row.get("Source")
+              else '<span class="na">Source not reported</span>')
+    stamp = ((' <span class="when">%s · %s</span>'
+              % (c.esc(row.get("ProviderNo")), when)) if when else "")
+    return ('<div class="oi-line"><span>%s%s</span><span>%s</span></div>'
+            % (source, stamp, _other_income_amount(row.get("GrossAnnualIncome"))))
+
+
 def _other_income(ctx) -> str:
-    """Every incomes row that carries a source or an amount -- a row with an
-    amount and no Source used to be dropped, figure and all (24 Sep 2026).
-    A delivered 0 is a fact, stated as one; only a missing amount is absent."""
+    """Every incomes row that carries a source or an amount. A delivered 0 is
+    a fact, stated as one; only a missing amount is absent."""
     rows = [r for r in ctx.rows("incomes")
             if r.get("Source") or r.get("GrossAnnualIncome") is not None]
     if not rows:
         return ""
-    items = []
-    for row in rows:
-        amount = row.get("GrossAnnualIncome")
-        when = dates.fmt_month_year(row.get("DateOfLastUpdate"), dash="")
-        source = (c.esc(row.get("Source")) if row.get("Source")
-                  else '<span class="na">Source not reported</span>')
-        if amount is None:
-            shown = '<span class="na">Amount not reported</span>'
-        else:
-            try:
-                zero = float(amount) == 0
-            except (TypeError, ValueError):
-                zero = False
-            shown = (('%s/yr <span class="histflag">reported as zero</span>'
-                      % c.aed(amount)) if zero else "%s/yr" % c.aed(amount))
-        items.append(
-            '<div class="oi-line"><span>%s%s</span><span>%s</span></div>'
-            % (source,
-               (' <span class="when">%s · %s</span>'
-                % (c.esc(row.get("ProviderNo")), when)) if when else "",
-               shown))
     return ('<div class="other-inc"><div class="trend-title">Other income</div>'
-            '%s</div>' % "".join(items))
+            '%s</div>' % "".join(_other_income_line(r) for r in rows))

@@ -2,13 +2,18 @@
   "_comment": [
     "AECB Contract Status Type. Codes, display wording and severity ranking are",
     "all bureau-supplied -- this file mirrors what AECB publishes, it does not",
-    "invent cut-offs. Rank drives the heatmap colour band:",
-    "  rank <= 60   severe   (class 'ss')",
-    "  rank 65-95   adverse  (class 'sa')",
-    "  rank 100     normal   (class 'sn')",
+    "invent codes or ranks. Rank drives the colour band through the",
+    "`severity` cut-offs below (FH presentation policy):",
+    "  rank <= severe_max          severe   (red,   heatmap class 'ss')",
+    "  severe_max < rank < normal_min  adverse  (amber, class 'sa')",
+    "  rank >= normal_min          normal   (class 'sn')",
     "The payload delivers status as display text ('Active Payments'), not the",
     "letter code, so ReportContext.status() also matches on label."
   ],
+  "severity": {
+    "severe_max": 60,
+    "normal_min": 100
+  },
   "codes": {
     "D": {"label": "Deceased", "rank": 10},
     "L": {"label": "Left country", "rank": 20},

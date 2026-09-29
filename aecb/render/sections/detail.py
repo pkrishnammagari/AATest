@@ -59,11 +59,13 @@ def render(ctx, meta) -> str:
           <div class="stl-head" id="stlHead"></div>
           <div class="stl-all" id="stlAll">
             <div class="stl-grid" id="stlGrid"></div>
-            <div class="stl-note">Codes, wording and severity ranking are supplied by AECB. Colour follows the bureau ranking — red at 60 or below, amber above 60 and below 100, grey at 100. A code missing from the table is ringed: its severity is unknown, never assumed clean.</div>
+            <div class="stl-note">Codes, wording and severity ranking are supplied by AECB. Colour follows the bureau ranking — red at {severe} or below, amber above {severe} and below {normal}, grey at {normal} and above. A code missing from the table is ringed: its severity is unknown, never assumed clean.</div>
           </div>
         </div>
       </div>
-    """.format(coverage=coverage)
+    """.format(coverage=coverage,
+               severe=ctx.status_codes["severity"]["severe_max"],
+               normal=ctx.status_codes["severity"]["normal_min"])
 
     # AECB's own words. ActiveFlag delivers "Active" and "Closed", so the tag
     # says Active and Closed -- not "open", which is ours and does not appear

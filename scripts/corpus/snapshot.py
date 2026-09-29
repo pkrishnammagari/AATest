@@ -31,7 +31,9 @@ def _iso(value):
 
 
 def _sha(text):
-    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+    # A change fingerprint, not a security control: SHA-1 keeps approved
+    # baselines comparable across runs.
+    return hashlib.sha1(text.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _safe(fn):

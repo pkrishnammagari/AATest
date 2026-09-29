@@ -1,0 +1,7 @@
+# Development and CI dependencies -- never installed on the server.
+# Versions chosen to support Python 3.9, the production runtime, so the suite
+# can (and in CI should) run on 3.9.
+-r requirements.txt
+pytest==8.4.2
+pytest-cov==7.1.0
+coverage==7.10.7

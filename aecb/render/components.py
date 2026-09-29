@@ -1,6 +1,6 @@
 """Shared HTML primitives.
 
-The section-card markup exists here and nowhere else, so the nine sections
+The section-card markup exists here and nowhere else, so the sections
 cannot drift apart. Everything returns an HTML string.
 
 esc() is applied to any value that could come from the payload. Bureau data is
@@ -9,6 +9,8 @@ Arabic mojibake run should render as text, not break the document.
 """
 
 from __future__ import annotations
+
+from ..coerce import number
 
 _ESCAPES = (
     ("&", "&amp;"),
@@ -37,20 +39,18 @@ def attr(value) -> str:
 
 # --- section card -----------------------------------------------------------
 
-def section_card(sid, no, title, purpose="", body="", aside="",
+def section_card(sid, no, title, body="", aside="",
                  collapsible=False, closed=False) -> str:
     """One numbered report section.
 
     collapsible adds the fold toggle and wraps `body` in .sec-body, which is
-    what the JS in js.py hooks. closed starts it folded.
+    what report.js hooks. closed starts it folded.
     """
     classes = ["sec"]
     if collapsible:
         classes.append("coll")
         if closed:
             classes.append("closed")
-
-    purpose_html = ('<p class="sec-purpose">%s</p>' % purpose) if purpose else ""
 
     aside_parts = []
     if aside:
@@ -70,13 +70,13 @@ def section_card(sid, no, title, purpose="", body="", aside="",
         '<section class="{cls}" id="{sid}">'
         '<div class="sec-head">'
         '<span class="sec-no">{no}</span>'
-        '<div class="sec-htxt"><h2 class="sec-title">{title}</h2>{purpose}</div>'
+        '<div class="sec-htxt"><h2 class="sec-title">{title}</h2></div>'
         '{aside}'
         '</div>'
         '{inner}'
         '</section>'
     ).format(cls=" ".join(classes), sid=sid, no=no, title=title,
-             purpose=purpose_html, aside=aside_html, inner=inner)
+             aside=aside_html, inner=inner)
 
 
 # --- small pieces -----------------------------------------------------------
@@ -93,7 +93,7 @@ def hint(text) -> str:
 
 
 def fact(key, value, extra="", css="") -> str:
-    """A labelled cell in the .facts grid (section 01, identity).
+    """A labelled cell in the .facts grid (the identity section).
 
     extra is appended inside the cell, after the value -- used for the
     in-cell history expanders.
@@ -116,7 +116,12 @@ def cell_hist(target_id, rows) -> str:
 
 
 def hist_row(text, when="") -> str:
-    when_html = ('<span class="when">%s</span>' % when) if when else ""
+    """One row of a cell_hist block.
+
+    `text` is markup the caller built (and escaped); `when` is plain text --
+    a provider code and a date -- and is escaped here.
+    """
+    when_html = ('<span class="when">%s</span>' % esc(when)) if when else ""
     return '<div class="hist-row"><span>%s</span>%s</div>' % (text, when_html)
 
 
@@ -133,7 +138,7 @@ def prov_badges(codes) -> str:
     set rather than a single source. Naming them all inline would bury the
     value; the count carries that they exist and the hover names them.
 
-    Shared by sections 01 and 03 so a provider set looks the same wherever it
+    Shared across sections so a provider set looks the same wherever it
     appears. Empty when nothing was reported -- the caller decides what to show
     in its place, since 'no provider' is not the same fact everywhere.
     """
@@ -153,22 +158,20 @@ def aed(amount, decimals=0) -> str:
     """'AED 12,345' with the currency mark styled down."""
     if amount is None:
         return "—"
-    try:
-        number = float(amount)
-    except (TypeError, ValueError):
+    value = number(amount)
+    if value is None:
         return esc(amount)
-    return '<span class="aed">AED</span>%s' % format_number(number, decimals)
+    return '<span class="aed">AED</span>%s' % format_number(value, decimals)
 
 
 def format_number(value, decimals=0) -> str:
     """Thousands-separated, fixed decimals. '—' when there is no value."""
     if value is None:
         return "—"
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
+    parsed = number(value)
+    if parsed is None:
         return esc(value)
-    return "{:,.{d}f}".format(number, d=decimals)
+    return "{:,.{d}f}".format(parsed, d=decimals)
 
 
 def delivered_mark(info) -> str:

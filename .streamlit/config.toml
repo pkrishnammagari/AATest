@@ -1,0 +1,32 @@
+# Streamlit server settings for FH AECB Analyzer (read from the working
+# directory the app is started in). Deployment-specific values -- port and
+# bind address -- are passed on the command line by the service definition
+# (deploy/aecb-analyzer.service); see docs/OPERATIONS.md.
+
+[server]
+headless = true
+runOnSave = false
+# No file watching on a server: the code does not change under a running app.
+fileWatcherType = "none"
+enableXsrfProtection = true
+enableCORS = true
+# Only the development harness (app.py) has an uploader; a bureau payload is a
+# few hundred KB.
+maxUploadSize = 10
+
+[browser]
+# The server is air-gapped; never attempt to send usage statistics.
+gatherUsageStats = false
+
+[client]
+# Uncaught exceptions must not reveal tracebacks, paths or code in the browser
+# (CWE-209). Full details are always in the server log.
+showErrorDetails = "none"
+# Hide developer options from the menu.
+toolbarMode = "viewer"
+
+[runner]
+magicEnabled = false
+
+[logger]
+level = "info"

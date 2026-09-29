@@ -9,7 +9,7 @@ fixtures.
 
 Each feature is (key, section, label, test). A test reads the Env and returns
 a truthy value when the payload exhibits the variant; one that raises simply
-does not count (the harness records the exception, it never guesses).
+does not count -- an unmeasurable variant is never guessed.
 
 Python 3.9 compatible.
 """

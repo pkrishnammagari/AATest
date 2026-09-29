@@ -7,7 +7,7 @@ and any count the screen shows is a count of the rows beneath it.
 The summary block also carries return counters (Amount_checks_returned_3mon,
 Amount_DD_returned_3mon). This section deliberately does NOT read them: their
 three-month window cannot describe a list that reaches back years, and whether
-the figure is an amount or a count is unverified. RRM decision, Aug 2026 --
+the figure is an amount or a count is unverified. RRM decision --
 the section is built from paymentOrder alone.
 
 Type and Severity arrive as display text with no vocabulary alongside, so both
@@ -19,6 +19,7 @@ rather than being guessed into a risk colour.
 from __future__ import annotations
 
 from .. import dates
+from ..coerce import flag, number
 
 
 class Return:
@@ -28,7 +29,7 @@ class Return:
         self.type_text = row.get("Type")
         self.kind = _kind(self.type_text, cfg)      # 'cheque' | 'dd' | None
 
-        self.amount = _number(row.get("Amount"))
+        self.amount = number(row.get("Amount"))
         self.reason = row.get("Reason")
         self.beneficiary = row.get("BeneficiaryName")
         self.iban = row.get("IBAN")
@@ -40,8 +41,7 @@ class Return:
         tones = cfg.get("severity_tones") or {}
         self.severity_tone = _lookup(tones, self.severity) or "neutral"
 
-        flag = row.get("FlagOpenDispute")
-        self.disputed = None if flag is None else bool(flag)
+        self.disputed = flag(row.get("FlagOpenDispute"))
 
     def __repr__(self):
         return "<Return %s %r on %s>" % (self.kind, self.amount, self.date)
@@ -65,8 +65,7 @@ def build(ctx) -> dict:
     # Newest first for the list -- the most recent return is the one an
     # underwriter acts on. Undated rows sink to the end rather than sorting
     # as if they were oldest.
-    records.sort(key=lambda r: (r.date is None,
-                                -(r.date.toordinal() if r.date else 0)))
+    records.sort(key=_newest_first)
 
     dated = [r for r in records if r.date]
     undated = [r for r in records if not r.date]
@@ -75,21 +74,8 @@ def build(ctx) -> dict:
     window_months = cfg["window_months"]
     window_start = (dates.add_months(ctx.report_date, -window_months)
                     if ctx.report_date else None)
-    if window_start:
-        recent = [r for r in dated if r.date >= window_start]
-        older = [r for r in dated if r.date < window_start]
-    else:
-        recent, older = [], list(dated)
-
-    x0 = min((r.date for r in dated), default=None)
-    x1 = ctx.report_date
-    if dated and (x1 is None or max(r.date for r in dated) > x1):
-        x1 = max(r.date for r in dated)
-    # With returns inside the window, the whole window belongs on the axis --
-    # the band must not start mid-air because the earliest event is newer
-    # than the window's left edge.
-    if recent and window_start and window_start < x0:
-        x0 = window_start
+    recent, older = _split_window(dated, window_start)
+    x0, x1 = _axis_span(ctx.report_date, dated, recent, window_start)
 
     return {
         "records": records,
@@ -103,6 +89,37 @@ def build(ctx) -> dict:
         "x0": x0,
         "x1": x1,
     }
+
+
+def _newest_first(record):
+    return (record.date is None,
+            -(record.date.toordinal() if record.date else 0))
+
+
+def _split_window(dated, window_start):
+    """(recent, older) around the window start; no split without one."""
+    if not window_start:
+        return [], list(dated)
+    return ([r for r in dated if r.date >= window_start],
+            [r for r in dated if r.date < window_start])
+
+
+def _axis_span(report_date, dated, recent, window_start):
+    """(x0, x1) for the returns timeline.
+
+    x1 is the report date, or the newest return when one post-dates it. With
+    returns inside the window the whole window belongs on the axis -- the band
+    must not start mid-air because the earliest event is newer than the
+    window's left edge.
+    """
+    if not dated:
+        return None, report_date
+    x0 = min(r.date for r in dated)
+    newest = max(r.date for r in dated)
+    x1 = newest if report_date is None or newest > report_date else report_date
+    if recent and window_start and window_start < x0:
+        x0 = window_start
+    return x0, x1
 
 
 def _kind(type_text, cfg):
@@ -138,10 +155,3 @@ def _lookup(mapping, key):
     return None
 
 
-def _number(value):
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None

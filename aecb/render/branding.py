@@ -17,8 +17,7 @@ from . import tokens
 
 # The product name, everywhere it appears: the top bar, the browser tab, the
 # downloaded report's <title> and both Streamlit sidebars. Defined once so the
-# spelling cannot drift again ("Analyser" in the bar vs "Analyzer" in the tab
-# until 24 Sep 2026).
+# spelling cannot drift between them.
 APP_NAME = "FH AECB Analyzer"
 
 _HERE = os.path.dirname(os.path.abspath(__file__))

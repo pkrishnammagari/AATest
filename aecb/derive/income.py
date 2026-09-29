@@ -27,6 +27,7 @@ from __future__ import annotations
 import datetime
 
 from .. import dates
+from ..coerce import flag, number
 from . import identity
 
 class Record:
@@ -90,11 +91,6 @@ class Record:
         """
         return not self.historical and self.ended is None
 
-    @property
-    def dated(self) -> bool:
-        """Has any date at all -- otherwise it cannot appear on the timeline."""
-        return bool(self.started or self.updated)
-
     def __repr__(self):
         return "<Record %r income=%r point=%r/%s>" % (
             self.name, self.income, self.point_date, self.point_basis)
@@ -132,15 +128,7 @@ def build(ctx) -> dict:
                    key=lambda r: r.started)
     undated = [r for r in records if r.income is not None and not r.plottable]
 
-    if len(points) >= 2:
-        chart = "trend"
-    elif len(points) == 1:
-        chart = "single"
-    elif spans:
-        chart = "spans"
-    else:
-        chart = "none"
-
+    chart = _chart_kind(points, spans)
     x0, x1 = _domain(ctx, points, spans)
 
     # The scale describes what is DRAWN, so it is set by the plotted points
@@ -149,7 +137,7 @@ def build(ctx) -> dict:
     # Coerced here because rec.income keeps the delivered value verbatim (the
     # renderer prints it), while max() needs comparable numbers -- a payload
     # mixing '18450' and 18450 must not compare strings lexicographically.
-    plotted = [float(r.income) for r in points]
+    plotted = [number(r.income) for r in points]
     return {
         "records": records,
         "current": current,
@@ -164,8 +152,15 @@ def build(ctx) -> dict:
         "floor": floor,
         "currency": cfg["currency"],
         "inferred": any(r.point_basis == "started" for r in points),
-        "rows": len(ctx.rows("employment")),
     }
+
+
+def _chart_kind(points, spans) -> str:
+    if len(points) >= 2:
+        return "trend"
+    if len(points) == 1:
+        return "single"
+    return "spans" if spans else "none"
 
 
 # --- resolution -------------------------------------------------------------
@@ -205,25 +200,8 @@ def _records(ctx):
         rec = by_key.get(identity.base_type(row.get("EmploymentName")).upper())
         if rec is None:
             continue
-
         updated = dates.parse_any(row.get("DateOfLastUpdate"))
-        if updated and (rec.updated is None or updated > rec.updated):
-            rec.updated = updated
-
-        started = dates.parse_any(row.get("DateOfEmployment"))
-        if started and (rec.started is None or started < rec.started):
-            rec.started = started
-
-        ended = dates.parse_any(row.get("DateOfTermination"))
-        if ended and (rec.ended is None or ended > rec.ended):
-            rec.ended = ended
-
-        # A dispute raised with one provider is still a dispute; only when no
-        # provider reported the flag at all does it stay unknown.
-        flag = row.get("FlagOpenDispute")
-        if flag is not None:
-            rec.disputed = bool(rec.disputed) or bool(flag)
-
+        _fold_row(rec, row, updated)
         if row.get("GrossAnnualIncome") is not None:
             candidates.setdefault(id(rec), []).append((
                 not identity.is_historical(row.get("EmploymentName")),
@@ -237,6 +215,23 @@ def _records(ctx):
         _resolve_income(rec, candidates.get(id(rec)) or [])
 
     return records
+
+
+def _fold_row(rec, row, updated) -> None:
+    """Fold one provider's employment row into its Record (see _records)."""
+    if updated and (rec.updated is None or updated > rec.updated):
+        rec.updated = updated
+    started = dates.parse_any(row.get("DateOfEmployment"))
+    if started and (rec.started is None or started < rec.started):
+        rec.started = started
+    ended = dates.parse_any(row.get("DateOfTermination"))
+    if ended and (rec.ended is None or ended > rec.ended):
+        rec.ended = ended
+    # A dispute raised with one provider is still a dispute; only when no
+    # provider reported the flag at all does it stay unknown.
+    disputed = flag(row.get("FlagOpenDispute"))
+    if disputed is not None:
+        rec.disputed = bool(rec.disputed) or disputed
 
 
 def _resolve_income(rec, cands) -> None:
@@ -259,20 +254,14 @@ def _resolve_income(rec, cands) -> None:
         return (current_row, updated is not None,
                 updated or datetime.date.min, order)
 
-    def num(value):
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
     ordered = sorted(cands, key=rank, reverse=True)
     best = ordered[0]
     rec.income = best[3]
 
-    chosen = num(best[3])
+    chosen = number(best[3])
     seen = set()
     for cand in ordered[1:]:
-        value = num(cand[3])
+        value = number(cand[3])
         differs = (str(cand[3]) != str(best[3]) if value is None or chosen is None
                    else value != chosen)
         key = value if value is not None else str(cand[3])
@@ -285,9 +274,8 @@ def _classify_income(rec, floor) -> None:
     """Split a delivered figure into usable / placeholder / not reported."""
     if rec.income is None:
         return
-    try:
-        value = float(rec.income)
-    except (TypeError, ValueError):
+    value = number(rec.income)
+    if value is None:
         rec.income = None
         return
 
@@ -360,8 +348,8 @@ def _confirm(rec, report_date, window_months) -> None:
 
     # dates.months_between is the ONE month-arithmetic in this codebase (it
     # backs off until the day-of-month comes round, so "12 months" means
-    # twelve whole months). A private variant here once made the window up to
-    # a month looser than the configured value.
+    # twelve whole months). A private variant would make the window up to a
+    # month looser than the configured value.
     months = dates.months_between(rec.updated, report_date)
     rec.confirmed = months is not None and months <= window_months
 

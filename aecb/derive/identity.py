@@ -29,6 +29,7 @@ from __future__ import annotations
 import re
 
 from .. import dates
+from ..coerce import flag
 
 HISTORICAL_MARKER = "(historical)"
 
@@ -73,6 +74,7 @@ class Entry:
         self._providers = []     # payload order
         self._provider_dates = {}  # provider -> its own latest update
         self._reports = []       # (provider, parsed date, extras) per row
+        self._spellings = {}     # spelling -> its latest parsed date
 
     @property
     def providers(self):
@@ -93,18 +95,36 @@ class Entry:
     def add(self, provider, updated, extra=None):
         parsed = dates.parse_any(updated)
         if provider:
-            if provider not in self._providers:
-                self._providers.append(provider)
-            prev = self._provider_dates.get(provider)
-            if parsed and (prev is None or parsed > prev):
-                self._provider_dates[provider] = parsed
+            self._note_provider(provider, parsed)
         if parsed and (self.updated is None or parsed > self.updated):
             self.updated = parsed
         self._reports.append((provider, parsed, dict(extra or {})))
-        if extra:
-            for key, val in extra.items():
-                if val is not None and self.extra.get(key) is None:
-                    self.extra[key] = val
+        for key, val in (extra or {}).items():
+            if val is not None and self.extra.get(key) is None:
+                self.extra[key] = val
+
+    def _note_provider(self, provider, parsed):
+        if provider not in self._providers:
+            self._providers.append(provider)
+        prev = self._provider_dates.get(provider)
+        if parsed and (prev is None or parsed > prev):
+            self._provider_dates[provider] = parsed
+
+    def note_spelling(self, spelling, parsed):
+        """Remember one delivered spelling of this value and its latest date."""
+        seen = self._spellings
+        if spelling not in seen or (parsed and (seen[spelling] is None
+                                                or parsed > seen[spelling])):
+            seen[spelling] = parsed if parsed else seen.get(spelling)
+
+    def settle_spelling(self):
+        """Display the most recently reported spelling; keep the others."""
+        if not self._spellings:
+            return
+        ranked = sorted(self._spellings.items(), reverse=True,
+                        key=lambda item: _recency(item[1]))
+        self.value = ranked[0][0]
+        self.alt_spellings = [s for s, _d in ranked[1:]]
 
     def extra_by_recency(self, key):
         """Distinct delivered values of one extra, most recent report first.
@@ -138,10 +158,10 @@ def dedupe(rows, type_key, value_key, provider_key, updated_key, extra_keys=(),
 
     Returns (current, historical), each a list of Entry sorted newest first.
 
-    Current vs historical is decided PER PROVIDER (decision, 24 Sep 2026).
-    '(Historical)' is the bureau's mark on one provider's copy of one
-    spelling -- the archive shows C11 re-submitting 971525881200 as
-    +971525881200 on the same day, the old spelling marked historical. So
+    Current vs historical is decided PER PROVIDER. '(Historical)' is the
+    bureau's mark on one provider's copy of one spelling -- a provider can
+    re-submit the same number with a '+' prefix on the same day, the old
+    spelling marked historical. So
     each provider's OWN latest report of the value is its verdict (a same-day
     tie counts as current), and the value is current when at least one
     provider's verdict is current. One bank dropping a number never makes
@@ -155,7 +175,6 @@ def dedupe(rows, type_key, value_key, provider_key, updated_key, extra_keys=(),
     """
     by_value = {}
     order = []
-    spellings = {}          # id(entry) -> {spelling: latest date}
     verdicts = {}           # id(entry) -> {provider: (date, is_current)}
     for row in rows or []:
         value = row.get(value_key)
@@ -168,35 +187,26 @@ def dedupe(rows, type_key, value_key, provider_key, updated_key, extra_keys=(),
             entry = Entry(value, historical=hist)
             by_value[group] = entry
             order.append(entry)
-            spellings[id(entry)] = {}
             verdicts[id(entry)] = {}
-        _record_verdict(verdicts[id(entry)], row.get(provider_key),
-                        dates.parse_any(row.get(updated_key)), not hist)
-        entry.add(
-            row.get(provider_key),
-            row.get(updated_key),
-            dict((k, row.get(k)) for k in extra_keys),
-        )
-        seen = spellings[id(entry)]
         parsed = dates.parse_any(row.get(updated_key))
-        if value not in seen or (parsed and (seen[value] is None
-                                             or parsed > seen[value])):
-            seen[value] = parsed if parsed else seen.get(value)
+        _record_verdict(verdicts[id(entry)], row.get(provider_key), parsed,
+                        not hist)
+        entry.add(row.get(provider_key), row.get(updated_key),
+                  dict((k, row.get(k)) for k in extra_keys))
+        entry.note_spelling(value, parsed)
 
     for entry in order:
         entry.historical = not any(
             cur for _d, cur in verdicts[id(entry)].values())
-        ranked = sorted(spellings[id(entry)].items(), reverse=True,
-                        key=lambda item: _recency(item[1]))
-        entry.value = ranked[0][0]
-        entry.alt_spellings = [s for s, _d in ranked[1:]]
+        entry.settle_spelling()
 
-    def newest_first(entries):
-        return sorted(entries, key=_newest_first_key, reverse=True)
-
-    current = newest_first([e for e in order if not e.historical])
-    historical = newest_first([e for e in order if e.historical])
+    current = _newest_first([e for e in order if not e.historical])
+    historical = _newest_first([e for e in order if e.historical])
     return current, historical
+
+
+def _newest_first(entries):
+    return sorted(entries, key=_newest_first_key, reverse=True)
 
 
 def _record_verdict(verdicts, provider, date, is_current):
@@ -210,7 +220,7 @@ def _record_verdict(verdicts, provider, date, is_current):
         verdicts[provider] = (prev[0], True)
 
 
-# --- section 01 accessors ----------------------------------------------------
+# --- identity-section accessors ---------------------------------------------
 
 def _document_key(value):
     """Grouping key for a document number: letters and digits only, upper
@@ -223,7 +233,8 @@ def identifiers(ctx, info_type: str):
 
     Spelling variants of one number group together (_document_key). The
     ExpiryDate carried on each entry is the most recent reporter's -- every
-    consumer (section 01, the AI digest) reads that one value; disagreeing
+    consumer (the identity section, the AI digest) reads that one value;
+    disagreeing
     dates stay available through entry.extra_by_recency('ExpiryDate').
     """
     rows = [r for r in ctx.rows("identification")
@@ -240,6 +251,18 @@ def identifiers(ctx, info_type: str):
 _UAE_MOBILE = re.compile(r"5\d{8}")
 
 
+def _national(value):
+    """(all digits, the national part): a leading 00, then 971, then ONE
+    leading 0 come off the digits."""
+    digits = re.sub(r"\D", "", str(value))
+    national = digits[2:] if digits.startswith("00") else digits
+    if national.startswith("971"):
+        national = national[3:]
+    if national.startswith("0"):
+        national = national[1:]
+    return digits, national
+
+
 def mobile_key(value):
     """Grouping key for a UAE mobile number, whatever prefix it arrived with.
 
@@ -250,12 +273,7 @@ def mobile_key(value):
     like 971999999999) keys on its raw digits: it still groups with exact
     repeats of itself, but is never merged with a real number by guesswork.
     """
-    digits = re.sub(r"\D", "", str(value))
-    national = digits[2:] if digits.startswith("00") else digits
-    if national.startswith("971"):
-        national = national[3:]
-    if national.startswith("0"):
-        national = national[1:]
+    digits, national = _national(value)
     if _UAE_MOBILE.fullmatch(national):
         return "971" + national
     return digits or str(value)
@@ -269,12 +287,7 @@ def phone_key(value):
     prefix rules, accepting a UAE landline (area code 2/3/4/6/7/9 + 7 digits)
     as well as a UAE mobile -- the bureau files some mobiles under Phone
     Number. Anything else keys on its raw digits, as with mobiles."""
-    digits = re.sub(r"\D", "", str(value))
-    national = digits[2:] if digits.startswith("00") else digits
-    if national.startswith("971"):
-        national = national[3:]
-    if national.startswith("0"):
-        national = national[1:]
+    digits, national = _national(value)
     if _UAE_MOBILE.fullmatch(national) or _UAE_LANDLINE.fullmatch(national):
         return "971" + national
     return digits or str(value)
@@ -314,8 +327,8 @@ def contacts(ctx, contact_type: str):
     """Deduped contacts for one base type ('Mobile Number', 'E-mail').
 
     Mobile numbers group across prefix spellings (mobile_key), landlines the
-    same way (phone_key), e-mails across letter case (email_key); the entry shows the most recently reported
-    spelling, the others in alt_spellings.
+    same way (phone_key), e-mails across letter case (email_key); the entry
+    shows the most recently reported spelling, the others in alt_spellings.
     """
     rows = [r for r in ctx.rows("contacts")
             if base_type(r.get("ContactType")).lower() == contact_type.lower()]
@@ -344,7 +357,7 @@ def addresses(ctx):
     """Deduped addresses, newest first. No partially-filled row is dropped.
 
     A row contributes nothing only when Address, Emirate, PoBox AND PlotNo are
-    all null (decision, 8 Sep 2026). A row with no Address but an Emirate still
+    all null. A row with no Address but an Emirate still
     places the subject somewhere and becomes an Entry with value None, which
     the renderer states as "Address not provided — Emirate".
 
@@ -353,7 +366,7 @@ def addresses(ctx):
       * Addressed rows collapse on (address, emirate) wherever they appear --
         the same address repeated by five providers is one entry. The
         address compares with case, punctuation and repeated spaces ignored
-        (_address_key, 24 Sep 2026); the entry shows the most recently
+        (_address_key); the entry shows the most recently
         reported spelling, the others in alt_spellings. The same address in
         two emirates stays two entries -- which one is right is unknowable.
       * Emirate-only rows collapse only when CONSECUTIVE in payload order with
@@ -368,62 +381,63 @@ def addresses(ctx):
     The payload carries no historical marker here, so the newest
     DateOfLastUpdate is treated as the latest address and the rest as prior.
     """
-    seen = {}
-    order = []
-    spellings = {}        # id(entry) -> {spelling: latest date}
-    run = None            # the entry of an open emirate-only run, else None
-    run_emirate = None
+    book = _AddressBook()
     for row in ctx.rows("addresses"):
-        text = row.get("Address")
-        emirate = row.get("Emirate")
-        pobox = row.get("PoBox")
-        plot = row.get("PlotNo")
-        if text is None and emirate is None and pobox is None and plot is None:
-            continue
-
-        if text is not None:
-            key = (_address_key(text), _emirate_key(emirate))
-            entry = seen.get(key)
-            if entry is None:
-                entry = Entry(text)
-                seen[key] = entry
-                order.append(entry)
-                spellings[id(entry)] = {}
-            sp = spellings[id(entry)]
-            parsed = dates.parse_any(row.get("DateOfLastUpdate"))
-            if text not in sp or (parsed and (sp[text] is None
-                                              or parsed > sp[text])):
-                sp[text] = parsed if parsed else sp.get(text)
-            run = None
-        elif run is not None and _emirate_key(run_emirate) == _emirate_key(emirate):
-            entry = run
-        else:
-            entry = Entry(None)
-            order.append(entry)
-            run, run_emirate = entry, emirate
-
-        entry.add(row.get("ProviderNo"), row.get("DateOfLastUpdate"),
-                  {"emirate": emirate, "pobox": pobox, "plot": plot,
-                   "type": row.get("AddressType"),
-                   "arabic": row.get("ArabicAddress")})
-
-    for entry in order:
-        if id(entry) in spellings:
-            ranked = sorted(spellings[id(entry)].items(), reverse=True,
-                            key=lambda item: _recency(item[1]))
-            entry.value = ranked[0][0]
-            entry.alt_spellings = [t for t, _d in ranked[1:]]
+        if not _is_blank_address(row):
+            book.add(row)
+    for entry in book.order:
+        entry.settle_spelling()
         for k in _ADDRESS_EXTRAS:
             vals = entry.extra_by_recency(k)
             entry.extra[k] = vals[0][0] if vals else None
-
-    ranked = sorted(order, key=_newest_first_key, reverse=True)
+    ranked = _newest_first(book.order)
     return (ranked[:1], ranked[1:]) if ranked else ([], [])
 
 
-def has_arabic(text) -> bool:
-    """Public face of the mojibake guard, for other Arabic fields."""
-    return _has_arabic(text)
+def _is_blank_address(row) -> bool:
+    return all(row.get(field) is None
+               for field in ("Address", "Emirate", "PoBox", "PlotNo"))
+
+
+class _AddressBook:
+    """The two address dedup rules of addresses(), one row at a time."""
+
+    def __init__(self):
+        self.order = []
+        self._by_key = {}
+        self._run = None          # the entry of an open emirate-only run
+        self._run_emirate = None
+
+    def add(self, row):
+        text, emirate = row.get("Address"), row.get("Emirate")
+        if text is not None:
+            entry = self._addressed(text, emirate)
+            entry.note_spelling(text, dates.parse_any(row.get("DateOfLastUpdate")))
+            self._run = None
+        elif (self._run is not None
+              and _emirate_key(self._run_emirate) == _emirate_key(emirate)):
+            entry = self._run
+        else:
+            entry = Entry(None)
+            self.order.append(entry)
+            self._run, self._run_emirate = entry, emirate
+        entry.add(row.get("ProviderNo"), row.get("DateOfLastUpdate"),
+                  {"emirate": emirate, "pobox": row.get("PoBox"),
+                   "plot": row.get("PlotNo"), "type": row.get("AddressType"),
+                   "arabic": row.get("ArabicAddress")})
+
+    def _addressed(self, text, emirate):
+        key = (_address_key(text), _emirate_key(emirate))
+        entry = self._by_key.get(key)
+        if entry is None:
+            entry = Entry(text)
+            self._by_key[key] = entry
+            self.order.append(entry)
+        return entry
+
+
+_EMPLOYMENT_EXTRAS = ("EmploymentType", "GrossAnnualIncome",
+                      "DateOfEmployment", "DateOfTermination")
 
 
 def employers(ctx):
@@ -446,11 +460,9 @@ def employers(ctx):
             order.append(entry)
         elif not is_historical(name):
             entry.historical = False
-        entry.add(row.get("ProviderNo"), row.get("DateOfLastUpdate") or row.get("DateOfEmployment"))
-        for field in ("EmploymentType", "GrossAnnualIncome",
-                      "DateOfEmployment", "DateOfTermination"):
-            if row.get(field) is not None and entry.extra.get(field) is None:
-                entry.extra[field] = row.get(field)
+        entry.add(row.get("ProviderNo"),
+                  row.get("DateOfLastUpdate") or row.get("DateOfEmployment"),
+                  dict((field, row.get(field)) for field in _EMPLOYMENT_EXTRAS))
 
     current = [e for e in order if not e.historical]
     prior = [e for e in order if e.historical]
@@ -459,19 +471,18 @@ def employers(ctx):
 
 # --- name handling ----------------------------------------------------------
 
-def _has_arabic(text) -> bool:
+# Arabic, Arabic Supplement, Arabic Presentation Forms-A and -B.
+_ARABIC = re.compile("[\u0600-\u06ff\u0750-\u077f\ufb50-\ufdff\ufe70-\ufeff]")
+
+
+def has_arabic(text) -> bool:
     """Whether the string carries any actual Arabic codepoints.
 
     The reference payload delivers '??? ???? ???? ??? ???' -- an encoding loss
     somewhere upstream. Rendering that is worse than rendering nothing, so a
     name with no Arabic codepoints is treated as corrupted and suppressed.
     """
-    for ch in text or "":
-        # Arabic, Arabic Supplement, Arabic Extended-A, Presentation Forms.
-        if "؀" <= ch <= "ۿ" or "ݐ" <= ch <= "ݿ" \
-           or "ﭐ" <= ch <= "﷿" or "ﹰ" <= ch <= "﻿":
-            return True
-    return False
+    return bool(_ARABIC.search(text or ""))
 
 
 def _compose(parts):
@@ -525,29 +536,15 @@ def arabic_name_unreadable(customer):
         (customer.get("FirstnameAR"), customer.get("LastnameAR")))
 
 
-_RESIDENT_TRUE = ("true", "y", "yes", "1")
-_RESIDENT_FALSE = ("false", "n", "no", "0")
-
-
 def resident_flag(customer):
     """ResidentFlag read as (True | False | None, raw value).
 
-    Booleans pass through; the common text and numeric spellings (true/false,
-    Y/N, yes/no, 1/0) are read as the same fact. Anything else is None with
-    the raw value kept, so the screen can show what arrived instead of
-    claiming nothing did.
+    Read with the shared flag rules (aecb.coerce.flag). Anything unreadable
+    is None with the raw value kept, so the screen can show what arrived
+    instead of claiming nothing did.
     """
     raw = customer.get("ResidentFlag")
-    if isinstance(raw, bool):
-        return raw, raw
-    if raw is None:
-        return None, None
-    text = str(raw).strip().lower()
-    if text in _RESIDENT_TRUE:
-        return True, raw
-    if text in _RESIDENT_FALSE:
-        return False, raw
-    return None, raw
+    return flag(raw), raw
 
 
 def arabic_name(customer):
@@ -558,11 +555,11 @@ def arabic_name(customer):
     source wins -- a composed mojibake run is no better than a delivered one.
     """
     text = customer.get("FullNameAR")
-    if text and _has_arabic(text):
+    if text and has_arabic(text):
         return text
     composed = _compose(
         (customer.get("FirstnameAR"), customer.get("LastnameAR")))
-    if composed and _has_arabic(composed):
+    if composed and has_arabic(composed):
         return composed
     return None
 

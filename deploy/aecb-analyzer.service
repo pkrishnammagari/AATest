@@ -1,0 +1,36 @@
+# systemd unit for FH AECB Analyzer (production entry: app_api.py).
+#
+# Install (as root), adjusting /opt/aecb-analyzer to the release directory:
+#   cp deploy/aecb-analyzer.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now aecb-analyzer
+#
+# Binds to localhost: put the TLS-terminating, SSO-authenticating reverse
+# proxy in front of it (docs/OPERATIONS.md). Streamlit's own settings come
+# from .streamlit/config.toml in the working directory.
+
+[Unit]
+Description=FH AECB Analyzer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aecb
+Group=aecb
+WorkingDirectory=/opt/aecb-analyzer
+EnvironmentFile=/etc/aecb-analyzer/aecb.env
+ExecStart=/opt/aecb-analyzer/.venv/bin/python -m streamlit run app_api.py \
+    --server.address 127.0.0.1 --server.port 8501
+Restart=on-failure
+RestartSec=5
+
+# Hardening: read-only system, private /tmp, writable only where configured.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aecb-analyzer /var/log/aecb-analyzer
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

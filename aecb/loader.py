@@ -95,45 +95,77 @@ def _clean(value):
     return value
 
 
-def normalise(payload: dict) -> dict:
-    """Clean strings, canonicalise categories, guarantee every array exists."""
-    data = {}
+def _normalise_rows(rows) -> tuple:
+    """(cleaned object rows, count of rows dropped because they are not objects).
+
+    A single object where an array belongs is accepted as a one-row array.
+    Anything that is not an object (null, a number, a nested list) cannot be
+    read as a row; it is dropped and COUNTED, so the host can say so rather
+    than every row.get() downstream failing on it.
+    """
+    if not isinstance(rows, list):
+        rows = [rows]
+    cleaned, dropped = [], 0
+    for raw in rows:
+        row = _clean(raw)
+        if not isinstance(row, dict):
+            dropped += 1
+            continue
+        for field in _CATEGORY_FIELDS:
+            if field in row:
+                row[field] = canon_category(row[field])
+        cleaned.append(row)
+    return cleaned, dropped
+
+
+def normalise(payload) -> dict:
+    """Clean strings, canonicalise categories, guarantee every array exists.
+
+    Raises ValueError when the document is not a JSON object at all.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("the payload is not a JSON object")
+    data, dropped = {}, {}
     for name in ARRAYS:
-        rows = payload.get(name) or []
-        if not isinstance(rows, list):
-            rows = [rows]
-        cleaned = []
-        for row in rows:
-            row = _clean(row)
-            if isinstance(row, dict):
-                for field in _CATEGORY_FIELDS:
-                    if field in row:
-                        row[field] = canon_category(row[field])
-            cleaned.append(row)
-        data[name] = cleaned
+        data[name], n = _normalise_rows(payload.get(name) or [])
+        if n:
+            dropped[name] = n
 
     # Surface anything the payload carries that we do not know about, rather
     # than dropping it silently -- a new AECB section should be visible. Read
-    # back through ReportContext.unknown_arrays; app.py warns in the sidebar.
-    unknown = sorted(set(payload) - set(ARRAYS))
-    data["_unknownArrays"] = unknown
+    # back through ReportContext.unknown_arrays / dropped_rows; the Streamlit
+    # host warns in the sidebar.
+    data["_unknownArrays"] = sorted(set(payload) - set(ARRAYS))
+    data["_droppedRows"] = dropped
     return data
 
 
+def _reject_constant(name):
+    raise ValueError("the payload carries %s, which is not a number" % name)
+
+
+def _parse(text: str):
+    """json.loads that refuses NaN / Infinity / -Infinity.
+
+    Python's json accepts those non-standard literals by default; downstream
+    they become floats that break int() and date arithmetic mid-render.
+    """
+    return json.loads(text, parse_constant=_reject_constant)
+
+
 def load(path: str) -> dict:
-    with open(path, encoding="utf-8") as fh:
-        return normalise(json.load(fh))
+    # utf-8-sig: tolerate a byte-order mark some Windows tools prepend.
+    with open(path, encoding="utf-8-sig") as fh:
+        return normalise(_parse(fh.read()))
 
 
 def loads(raw) -> dict:
-    """Parse from a string or bytes -- used by the Streamlit file uploader."""
+    """Parse from a string or bytes -- the API response or an upload."""
     if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    return normalise(json.loads(raw))
+        raw = raw.decode("utf-8-sig")
+    return normalise(_parse(raw))
 
 
-def first(rows, default=None):
+def first(rows) -> dict:
     """First row of a single-row array (summary, customerInfo, score, ...)."""
-    if not rows:
-        return default if default is not None else {}
-    return rows[0] or {}
+    return rows[0] if rows else {}

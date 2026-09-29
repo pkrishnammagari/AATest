@@ -2,10 +2,11 @@
 
 Every width in paths.WIDTHS x both rail states, written as one JSON file per
 combination. Run it identically before and after a change so the two captures
-are comparable; capture the BEFORE from a backup tree, not from memory:
+are comparable; capture the BEFORE from a second checkout of the old
+revision (e.g. a git worktree), not from memory:
 
-    # before, from a backup extracted somewhere outside the repo
-    AECB_ROOT=/tmp/backup/AECBAnalyzerV2_V1 .venv/bin/python \
+    # before, from a checkout of the old revision outside the repo
+    AECB_ROOT=<path to the old checkout> .venv/bin/python \
         scripts/measure/harness.py before
 
     # after, from the live tree

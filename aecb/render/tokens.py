@@ -66,7 +66,7 @@ TOKENS = {
     "red-line": "#E6C4C7",   "red-ink": "#8f1a24",
     # The brand's own triad is fh-blue-wash / fh-blue-line / fh-blue-ink above.
 
-    # --- DPD severity ramp (section 07 heatmap) -----------------------------
+    # --- DPD severity ramp (detail heatmap) ---------------------------------
     "dpd0": "#3D9C74",   # current, 0 DPD
     "dpd1": "#E7B84B",   # 1-29
     "dpd2": "#DE8C3A",   # 30-59
@@ -90,7 +90,6 @@ TOKENS = {
     "cat-c": "#0C6B73",   # Credit cards
     "cat-n": "#7a5ea0",   # Non-installments
     "cat-s": "#9A7B3F",   # Services (same hue as brass)
-    "cat-x": "#8a97a4",   # Closed
 
     # --- elevation ----------------------------------------------------------
     "shadow": "0 1px 2px rgba(20,30,44,.03),0 1px 3px rgba(20,30,44,.05)",
@@ -132,4 +131,5 @@ def token(name: str) -> str:
     try:
         return TOKENS[name]
     except KeyError:
-        raise KeyError("unknown design token %r -- add it to tokens.TOKENS" % name)
+        raise KeyError("unknown design token %r -- add it to tokens.TOKENS"
+                       % name) from None

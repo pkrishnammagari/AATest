@@ -1,0 +1,19 @@
+# Paths left out of the release archive (deploy/make_release.sh uses
+# `git archive`, which honours export-ignore). The server gets the production
+# entry point (app_api.py), the aecb package, config, assets, resources, the
+# synthetic fixture used by the install smoke test, and deploy/.
+
+app.py                                        export-ignore
+tests/                                        export-ignore
+scripts/                                      export-ignore
+docs/                                         export-ignore
+ReferenceJSON/aecb_payload_archive_170623.json export-ignore
+requirements-dev.txt                          export-ignore
+pytest.ini                                    export-ignore
+.coveragerc                                   export-ignore
+sonar-project.properties                      export-ignore
+.gitattributes                                export-ignore
+.gitignore                                    export-ignore
+
+# Line endings: shell scripts must stay LF to run on the Linux server.
+*.sh text eol=lf

@@ -2,10 +2,9 @@
 
 Sources: applications, contractsTotalSummary.Applications90D.
 
-The section is one chart. The counts it used to lead with are gone: four tiles
-saying 5 / 6 / 4 / 15 answered a question nobody was asking, while the thing an
-underwriter actually needs -- WHEN the customer went looking, and how the recent
-weeks compare to the years behind them -- was not on the screen at all.
+The section is one chart, because what an underwriter needs is WHEN the
+customer went looking and how the recent weeks compare to the years behind
+them -- not a row of counts.
 
 The axis maths lives in derive/applications.py, beside the payload decisions it
 depends on. This module only lays out what that returns.
@@ -19,6 +18,7 @@ does not know -- dashed, with the legend naming the phases present.
 from __future__ import annotations
 
 from ... import dates
+from ...coerce import integer
 from ...derive import applications
 from .. import components as c
 
@@ -97,12 +97,9 @@ def _chart(chart) -> str:
 
 def _as_count(value):
     """Applications90D as an int, or None. The field is untrusted payload data
-    and is compared and formatted below -- a string here must not grade (or
-    crash) the pill. s06 applies the same guard to its delivered numbers."""
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    and is compared and formatted below -- a non-count must not grade (or
+    crash) the pill."""
+    return integer(value)
 
 
 def _aside(ctx, rows, delivered_90d):
@@ -127,8 +124,8 @@ def _aside(ctx, rows, delivered_90d):
                 tone)
 
     # The delivered counter and the rows delivered beside it should agree. When
-    # they do not, that is a finding rather than something to smooth over -- but
-    # it is one line, not the banner it used to be.
+    # they do not, that is a finding rather than something to smooth over --
+    # stated in one line.
     counted = len(applications.in_window(ctx, rows))
     if counted != delivered_90d:
         label = "%d row%s in window" % (counted, "" if counted == 1 else "s")

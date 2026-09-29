@@ -1,4 +1,5 @@
-"""Contract and conduct derivation -- the join behind sections 06 and 07.
+"""Contract and conduct derivation -- the join behind the facilities and
+detail sections.
 
 The critical rule in here concerns coverage. `contractsHistory` is sparse: in the
 reference payload one contract has all 36 months and most have between one and
@@ -16,6 +17,7 @@ maturity -- L32755409 in the reference payload is Active with ClosedDate
 from __future__ import annotations
 
 from .. import dates
+from ..coerce import number, truncated
 from ..loader import CATEGORY_LABEL
 
 WINDOW_MONTHS = 36
@@ -110,11 +112,11 @@ class Facility:
                 out.append(None)
                 continue
             out.append({
-                "dpd": _as_days(row.get("DaysPaymentDelay")),
+                "dpd": truncated(row.get("DaysPaymentDelay")),
                 "status": self.ctx.status(row.get("ContractStatus")),
                 "balance": row.get("Balance"),
                 "overdue": row.get("OverdueAmount"),
-                "utilisation": _as_number(row.get("UtilizationRate")),
+                "utilisation": number(row.get("UtilizationRate")),
             })
         return out
 
@@ -148,7 +150,7 @@ class Facility:
     @property
     def max_dpd(self):
         """Deepest delay in the window, or None if nothing was reported."""
-        seen = [_as_days(row.get("DaysPaymentDelay"))
+        seen = [truncated(row.get("DaysPaymentDelay"))
                 for row in self.history.values()]
         seen = [v for v in seen if v is not None]
         return max(seen) if seen else None
@@ -185,16 +187,16 @@ class Facility:
 
     @property
     def utilisation(self):
-        return _as_number(self.raw.get("Current_UtilizationRate"))
+        return number(self.raw.get("Current_UtilizationRate"))
 
     @property
     def role_code(self):
         """Role as a letter code; the payload delivers the display text.
 
         A missing Role reads as main holder (the book's default). A DELIVERED
-        role the config does not know returns None -- it used to fall back to
-        "A" too, which hid a possibly different liability behind the one role
-        that shows no chip; see role_text.
+        role the config does not know returns None -- falling back to "A"
+        would hide a possibly different liability behind the one role that
+        shows no chip; see role_text.
         """
         text = str(self.raw.get("Role") or "").strip()
         if not text:
@@ -256,13 +258,102 @@ def by_category(facilities):
 
 # --- worst statuses: the derived worst-status window -----------------------------
 
+class _WindowWorst:
+    """Accumulates the evidence worst_in_window() weighs, one event at a time."""
+
+    def __init__(self, ctx, months):
+        self.ctx = ctx
+        self.months = months
+        self.worst_dpd = self.dpd_fac = self.dpd_when = None
+        self.worst_status = self.st_fac = self.st_when = None
+        self.dpd_reported = False
+        self.unknown = 0
+        self.reported = 0
+        self.lifetime_events = 0
+        self.covered = set()
+
+    def _in_window(self, at) -> bool:
+        idx = month_index(self.ctx.report_date, at)
+        return idx is not None and 0 <= idx < self.months
+
+    def consider_dpd(self, dpd, facility, at) -> None:
+        if dpd is None:
+            return
+        self.dpd_reported = True
+        if dpd and (self.worst_dpd is None or dpd > self.worst_dpd):
+            self.worst_dpd, self.dpd_fac, self.dpd_when = dpd, facility, at
+
+    def consider_status(self, value, facility, at) -> None:
+        if value is None:
+            return
+        status = self.ctx.status(value)
+        if status["rank"] is None:
+            self.unknown += 1
+            return
+        if self.worst_status is None or status["rank"] < self.worst_status["rank"]:
+            self.worst_status = status
+            if self.ctx.severity(status["rank"]) != "normal":
+                self.st_fac, self.st_when = facility, at
+
+    def add_history(self, facility) -> None:
+        """The facility's monthly rows inside the window."""
+        for month, row in facility.history.items():
+            if month >= self.months:
+                continue
+            self.reported += 1
+            self.covered.add(id(facility))
+            at = dates.parse_any(row.get("ReferenceDate"))
+            self.consider_dpd(truncated(row.get("DaysPaymentDelay")), facility, at)
+            self.consider_status(row.get("ContractStatus"), facility, at)
+
+    def add_lifetime(self, facility) -> None:
+        """The facility's dated lifetime worst fields, when dated in-window."""
+        raw = facility.raw
+        w_at = dates.parse_any(raw.get("WorstStatusDate"))
+        if self._in_window(w_at) and raw.get("WorstStatus") is not None:
+            self.lifetime_events += 1
+            self.covered.add(id(facility))
+            self.consider_status(raw.get("WorstStatus"), facility, w_at)
+
+        d_at = dates.parse_any(raw.get("MaxDaysPaymentDelayDate"))
+        dpd = truncated(raw.get("MaxDaysPaymentDelay"))
+        if self._in_window(d_at) and dpd is not None:
+            self.lifetime_events += 1
+            self.covered.add(id(facility))
+            self.consider_dpd(dpd, facility, d_at)
+
+    def result(self, facilities_total):
+        if not self.reported and not self.lifetime_events:
+            return None
+        clean = (not self.worst_dpd
+                 and (self.worst_status is None
+                      or self.ctx.severity(self.worst_status["rank"]) == "normal"))
+        named_by_status = self.st_fac is not None
+        max_dpd = self.worst_dpd
+        if max_dpd is None:
+            max_dpd = 0 if self.dpd_reported else None
+        return {
+            "status": self.worst_status,
+            "max_dpd": max_dpd,
+            "facility": None if clean else (
+                self.st_fac if named_by_status else self.dpd_fac),
+            "when": None if clean else (
+                self.st_when if named_by_status else self.dpd_when),
+            "clean": clean,
+            "unknown": self.unknown,
+            "reported_months": self.reported,
+            "facilities_covered": len(self.covered),
+            "facilities_total": facilities_total,
+            "months": self.months,
+        }
+
+
 def worst_in_window(ctx, months=WINDOW_MONTHS):
     """Deepest delinquency across the whole book in the last `months`.
 
-    Reinstated 9 Sep 2026 (deleted 2 Sep 2026; git history) when RRM settled
-    the defaults: EVERY contract counts -- closed ones and every role included,
-    because a closure inside the window does not erase the conduct that
-    preceded it. Two rules survive from the original implementation:
+    EVERY contract counts -- closed ones and every role included, because a
+    closure inside the window does not erase the conduct that preceded it.
+    Two further rules:
 
       * a clean book must not attribute a "worst" to whichever contract
         iterated first -- only a real delay or a below-normal status names a
@@ -292,89 +383,14 @@ def worst_in_window(ctx, months=WINDOW_MONTHS):
         months              the window, echoed for the renderer
     """
     facs = all_facilities(ctx)
-    report_date = ctx.report_date
-
-    worst_dpd, dpd_fac, dpd_when = None, None, None
-    worst_status, st_fac, st_when = None, None, None
-    dpd_reported = False
-    unknown = 0
-    reported = 0
-    covered = set()
-    lifetime_events = 0
-
-    def consider_dpd(dpd, facility, at):
-        nonlocal worst_dpd, dpd_fac, dpd_when, dpd_reported
-        if dpd is None:
-            return
-        dpd_reported = True
-        if dpd and (worst_dpd is None or dpd > worst_dpd):
-            worst_dpd, dpd_fac, dpd_when = dpd, facility, at
-
-    def consider_status(value, ctx_status, facility, at):
-        nonlocal worst_status, st_fac, st_when, unknown
-        if value is None:
-            return
-        if ctx_status["rank"] is None:
-            unknown += 1
-            return
-        if worst_status is None or ctx_status["rank"] < worst_status["rank"]:
-            worst_status = ctx_status
-            if ctx_status["rank"] < 100:
-                st_fac, st_when = facility, at
-
+    acc = _WindowWorst(ctx, months)
     for facility in facs:
-        for month, row in facility.history.items():
-            if month >= months:
-                continue
-            reported += 1
-            covered.add(id(facility))
-            at = dates.parse_any(row.get("ReferenceDate"))
-            consider_dpd(_as_days(row.get("DaysPaymentDelay")), facility, at)
-            consider_status(row.get("ContractStatus"),
-                            ctx.status(row.get("ContractStatus")), facility, at)
-
-        raw = facility.raw
-        w_at = dates.parse_any(raw.get("WorstStatusDate"))
-        idx = month_index(report_date, w_at)
-        if idx is not None and 0 <= idx < months and raw.get("WorstStatus") is not None:
-            lifetime_events += 1
-            covered.add(id(facility))
-            consider_status(raw.get("WorstStatus"),
-                            ctx.status(raw.get("WorstStatus")), facility, w_at)
-
-        d_at = dates.parse_any(raw.get("MaxDaysPaymentDelayDate"))
-        idx = month_index(report_date, d_at)
-        if idx is not None and 0 <= idx < months:
-            dpd = _as_days(raw.get("MaxDaysPaymentDelay"))
-            if dpd is not None:
-                lifetime_events += 1
-                covered.add(id(facility))
-                consider_dpd(dpd, facility, d_at)
-
-    if not reported and not lifetime_events:
-        return None
-
-    clean = (not worst_dpd
-             and (worst_status is None or worst_status["rank"] >= 100))
-    naming_fac = st_fac if st_fac is not None else dpd_fac
-    naming_when = st_when if st_fac is not None else dpd_when
-
-    return {
-        "status": worst_status,
-        "max_dpd": worst_dpd if worst_dpd is not None
-                   else (0 if dpd_reported else None),
-        "facility": None if clean else naming_fac,
-        "when": None if clean else naming_when,
-        "clean": clean,
-        "unknown": unknown,
-        "reported_months": reported,
-        "facilities_covered": len(covered),
-        "facilities_total": len(facs),
-        "months": months,
-    }
+        acc.add_history(facility)
+        acc.add_lifetime(facility)
+    return acc.result(len(facs))
 
 
-# --- section 06 aggregates ---------------------------------------------------
+# --- facilities-section aggregates ------------------------------------------
 
 def financial_summary(ctx, role="A"):
     """{category: contractsFinancialSummary row} for one role."""
@@ -390,24 +406,3 @@ def count_summary(ctx, role="A"):
                 if r.get("ContractRole") == role)
 
 
-def _as_number(value):
-    """UtilizationRate arrives as a string ('57'). None stays None."""
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _as_days(value):
-    """DaysPaymentDelay as an int. Anything non-numeric counts as not reported.
-
-    The payload usually delivers an int, but the field is untrusted input that
-    is compared and interpolated downstream -- a string here would corrupt both
-    the DPD bucketing and the heatmap markup.
-    """
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None

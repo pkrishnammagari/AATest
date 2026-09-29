@@ -34,6 +34,7 @@ sorted most-severe first.
 from __future__ import annotations
 
 import re
+from decimal import Decimal, InvalidOperation
 
 _SEVERITIES = ("severe", "adverse", "watch", "info")
 _CONFIDENCES = ("low", "medium", "high")
@@ -76,14 +77,17 @@ def _numbers(text) -> set:
     a date '2025-03' contributes '2025' and '3'. Facts and claims pass through
     the same canonicalisation, so a figure matches however it was punctuated --
     and only actual figures are compared, never wording.
+
+    Exact decimal arithmetic, never float formatting: '%g' keeps six
+    significant digits, which made 1,234,570 match a fact of 1,234,567.
     """
     out = set()
     for token in _NUM_RE.findall(text or ""):
         try:
-            value = float(token.replace(",", ""))
-        except ValueError:
+            value = Decimal(token.replace(",", ""))
+        except InvalidOperation:
             continue
-        out.add("%g" % value)
+        out.add(format(value.normalize(), "f"))
     return out
 
 
@@ -120,66 +124,140 @@ def _entities(text) -> set:
     return out
 
 
+def _mentions(haystack: str, token: str) -> bool:
+    """Whether `token` occurs in `haystack` as a word (plural allowed).
+
+    A whole-word match, not a substring one: 'ali' must not be vouched for by
+    'alignment'.
+    """
+    return re.search(r"\b%s(?:s|es)?\b" % re.escape(token), haystack) is not None
+
+
 def _unvouched(text, source_text) -> list:
     """Entities in `text` that `source_text` never mentions."""
     haystack = (source_text or "").lower()
-    return sorted(t for t in _entities(text) if t not in haystack)
+    return sorted(t for t in _entities(text) if not _mentions(haystack, t))
+
+
+# Drop reasons per channel. The wording is part of the contract: the reasons
+# are shown in the brief's provenance and asserted by the test suite.
+_FINDING_MSG = {
+    "empty": "empty claim",
+    "only_refs": "claim was only fact references",
+    "no_cites": "no cites",
+    "unknown_cites": "cites unknown fact(s) %s",
+    "figures": "figures not present in cited facts: %s",
+    "names": "names not present in cited facts: %s",
+}
+_BACKGROUND_MSG = {
+    "empty": "empty background note",
+    "only_refs": "background note was only fact references",
+    "no_cites": "background note has no cites",
+    "unknown_cites": "background note cites unknown fact(s) %s",
+    "figures": "background note carries figures not in cited facts: %s",
+    "names": "background note carries names not in cited facts: %s",
+}
+_UNKNOWN_MSG = {
+    "empty": "empty unknown",
+    "only_refs": "unknown was only fact references",
+    "figures": "unknown carries figures not in the digest: %s",
+    "names": "unknown carries names not in the digest: %s",
+}
+
+
+def _prose(value, msg):
+    """(text with fact references stripped, '') or ('', drop reason)."""
+    if not isinstance(value, str) or not value.strip():
+        return "", msg["empty"]
+    text = _strip_fact_refs(value)
+    if not text:
+        return "", msg["only_refs"]
+    return text, ""
+
+
+def _resolve_cites(cites, facts_by_id, msg):
+    """(cleaned cite list, '') or (None, drop reason)."""
+    if not isinstance(cites, list) or not cites:
+        return None, msg["no_cites"]
+    cites = [str(c).strip() for c in cites]
+    missing = [c for c in cites if c not in facts_by_id]
+    if missing:
+        return None, msg["unknown_cites"] % ", ".join(missing)
+    return cites, ""
+
+
+def _vouch(text, source_text, msg) -> str:
+    """'' when every figure and name in `text` is in `source_text`; else why."""
+    invented = _numbers(text) - _numbers(source_text)
+    if invented:
+        return msg["figures"] % ", ".join(sorted(invented))
+    unvouched = _unvouched(text, source_text)
+    if unvouched:
+        return msg["names"] % ", ".join(unvouched)
+    return ""
+
+
+def _capped(items, cap, label, dropped):
+    """items[:cap], recording one drop reason per item over the cap."""
+    dropped.extend("over the %d-%s cap" % (cap, label) for _ in items[cap:])
+    return items[:cap]
+
+
+def _cited_text(cites, facts_by_id) -> str:
+    return " ".join(facts_by_id[cite]["text"] for cite in cites)
 
 
 def _clean_finding(raw, facts_by_id):
     """The validated finding, or (None, reason)."""
     if not isinstance(raw, dict):
         return None, "finding is not an object"
-
-    claim = raw.get("claim")
-    if not isinstance(claim, str) or not claim.strip():
-        return None, "empty claim"
-    claim = _strip_fact_refs(claim)
-    if not claim:
-        return None, "claim was only fact references"
+    claim, reason = _prose(raw.get("claim"), _FINDING_MSG)
+    if reason:
+        return None, reason
     severity = raw.get("severity")
     if severity not in _SEVERITIES:
         return None, "unknown severity %r" % (severity,)
     confidence = raw.get("confidence")
     if confidence not in _CONFIDENCES:
         return None, "unknown confidence %r" % (confidence,)
-
-    cites = raw.get("cites")
-    if not isinstance(cites, list) or not cites:
-        return None, "no cites"
-    cites = [str(c).strip() for c in cites]
-    missing = [c for c in cites if c not in facts_by_id]
-    if missing:
-        return None, "cites unknown fact(s) %s" % ", ".join(missing)
+    cites, reason = _resolve_cites(raw.get("cites"), facts_by_id, _FINDING_MSG)
+    if reason:
+        return None, reason
 
     action = raw.get("suggested_action")
     action = _strip_fact_refs(action) if isinstance(action, str) else ""
-
-    cited_text = " ".join(facts_by_id[cite]["text"] for cite in cites)
-    cited_numbers = _numbers(cited_text)
-    claimed = _numbers(claim) | _numbers(action)
-    invented = claimed - cited_numbers
-    if invented:
-        return None, ("figures not present in cited facts: %s"
-                      % ", ".join(sorted(invented)))
-
-    unvouched = _unvouched(claim + " " + action, cited_text)
-    if unvouched:
-        return None, ("names not present in cited facts: %s"
-                      % ", ".join(unvouched))
+    reason = _vouch(claim + " " + action, _cited_text(cites, facts_by_id),
+                    _FINDING_MSG)
+    if reason:
+        return None, reason
 
     # The verify-at pointer comes from the facts, never the model. Cited facts
     # can span sections; the first cite is the finding's primary evidence.
-    section = facts_by_id[cites[0]]["section"]
-
     return {
         "claim": claim.strip(),
         "severity": severity,
         "confidence": confidence,
         "cites": cites,
         "suggested_action": action,
-        "section": section,
+        "section": facts_by_id[cites[0]]["section"],
     }, ""
+
+
+def _clean_note(raw, facts_by_id):
+    """One validated background note, or (None, reason)."""
+    if not isinstance(raw, dict):
+        return None, "background entry is not an object"
+    note, reason = _prose(raw.get("note"), _BACKGROUND_MSG)
+    if reason:
+        return None, reason
+    cites, reason = _resolve_cites(raw.get("cites"), facts_by_id,
+                                   _BACKGROUND_MSG)
+    if reason:
+        return None, reason
+    reason = _vouch(note, _cited_text(cites, facts_by_id), _BACKGROUND_MSG)
+    if reason:
+        return None, reason
+    return {"note": note.strip(), "cites": cites}, ""
 
 
 def _clean_background(raw_list, facts_by_id, dropped):
@@ -193,44 +271,12 @@ def _clean_background(raw_list, facts_by_id, dropped):
         return []
     notes = []
     for raw in raw_list:
-        if not isinstance(raw, dict):
-            dropped.append("background entry is not an object")
-            continue
-        note = raw.get("note")
-        cites = raw.get("cites")
-        if not isinstance(note, str) or not note.strip():
-            dropped.append("empty background note")
-            continue
-        note = _strip_fact_refs(note)
-        if not note:
-            dropped.append("background note was only fact references")
-            continue
-        if not isinstance(cites, list) or not cites:
-            dropped.append("background note has no cites")
-            continue
-        cites = [str(c).strip() for c in cites]
-        missing = [c for c in cites if c not in facts_by_id]
-        if missing:
-            dropped.append("background note cites unknown fact(s) %s"
-                           % ", ".join(missing))
-            continue
-        cited_text = " ".join(facts_by_id[c]["text"] for c in cites)
-        invented = _numbers(note) - _numbers(cited_text)
-        if invented:
-            dropped.append("background note carries figures not in cited "
-                           "facts: %s" % ", ".join(sorted(invented)))
-            continue
-        unvouched = _unvouched(note, cited_text)
-        if unvouched:
-            dropped.append("background note carries names not in cited "
-                           "facts: %s" % ", ".join(unvouched))
-            continue
-        notes.append({"note": note.strip(), "cites": cites})
-    if len(notes) > _MAX_BACKGROUND:
-        dropped.extend("over the %d-background cap" % _MAX_BACKGROUND
-                       for _ in notes[_MAX_BACKGROUND:])
-        notes = notes[:_MAX_BACKGROUND]
-    return notes
+        note, reason = _clean_note(raw, facts_by_id)
+        if reason:
+            dropped.append(reason)
+        else:
+            notes.append(note)
+    return _capped(notes, _MAX_BACKGROUND, "background", dropped)
 
 
 def _clean_unknowns(raw_list, facts, dropped):
@@ -240,39 +286,19 @@ def _clean_unknowns(raw_list, facts, dropped):
             dropped.append("unknowns is not a list")
         return []
     digest_text = " ".join(f["text"] for f in facts)
-    digest_numbers = _numbers(digest_text)
-
     unknowns = []
     seen = set()
     for raw in raw_list:
-        if not isinstance(raw, str) or not raw.strip():
-            dropped.append("empty unknown")
+        text, reason = _prose(raw, _UNKNOWN_MSG)
+        reason = reason or _vouch(text, digest_text, _UNKNOWN_MSG)
+        if not reason and text.lower() in seen:
+            reason = "duplicate unknown"
+        if reason:
+            dropped.append(reason)
             continue
-        text = _strip_fact_refs(raw)
-        if not text:
-            dropped.append("unknown was only fact references")
-            continue
-        invented = _numbers(text) - digest_numbers
-        if invented:
-            dropped.append("unknown carries figures not in the digest: %s"
-                           % ", ".join(sorted(invented)))
-            continue
-        unvouched = _unvouched(text, digest_text)
-        if unvouched:
-            dropped.append("unknown carries names not in the digest: %s"
-                           % ", ".join(unvouched))
-            continue
-        key = text.lower()
-        if key in seen:
-            dropped.append("duplicate unknown")
-            continue
-        seen.add(key)
+        seen.add(text.lower())
         unknowns.append(text)
-    if len(unknowns) > _MAX_UNKNOWNS:
-        dropped.extend("over the %d-unknown cap" % _MAX_UNKNOWNS
-                       for _ in unknowns[_MAX_UNKNOWNS:])
-        unknowns = unknowns[:_MAX_UNKNOWNS]
-    return unknowns
+    return _capped(unknowns, _MAX_UNKNOWNS, "unknown", dropped)
 
 
 def validate(raw_output, facts):
@@ -305,10 +331,7 @@ def validate(raw_output, facts):
         findings.append(finding)
 
     findings.sort(key=lambda f: _SEVERITIES.index(f["severity"]))
-    if len(findings) > _MAX_FINDINGS:
-        dropped.extend("over the %d-finding cap" % _MAX_FINDINGS
-                       for _ in findings[_MAX_FINDINGS:])
-        findings = findings[:_MAX_FINDINGS]
+    findings = _capped(findings, _MAX_FINDINGS, "finding", dropped)
 
     background = _clean_background(raw_output.get("background"), facts_by_id,
                                    dropped)

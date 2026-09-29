@@ -1,25 +1,29 @@
 """Bureau-report API client -- the live source app_api.py renders from.
 
-Stdlib only, like aecb/brief/client.py: the deployment is air-gapped from the
-internet and requirements.txt is deliberately one line long. The endpoint is
-an internal host configured in config/api.json -- the single source of the
-URL, no overrides; the response body is the AECB payload document itself,
-which flows into context.from_bytes() -- the seam this integration was always
-going to use.
+Stdlib only: the deployment is air-gapped and requirements.txt is
+deliberately one line long. The endpoint is an internal host configured in
+config/api.json; the response body is the AECB payload document itself, which
+flows into context.from_bytes().
 
-The endpoint sits behind IIS Windows authentication (confirmed by the API
-team, 9 Sep 2026), so requests authenticate as the configured service account
-via NTLMv2 (aecb/ntlm.py -- implemented from MS-NLMP, spec-vector tested).
-NTLM authenticates the TCP CONNECTION, not the request: both legs of the
-handshake must travel on one socket, which is why this module speaks
-http.client directly instead of urllib -- urllib does not guarantee
+The endpoint sits behind IIS Windows authentication, so requests authenticate
+as a service account via NTLMv2 (aecb/ntlm.py, implemented from MS-NLMP and
+tested against its published vectors). NTLM authenticates the TCP CONNECTION,
+not the request: both legs of the handshake must travel on one socket, which
+is why this module speaks http.client directly -- urllib does not guarantee
 connection reuse.
 
-Nothing in this module touches disk: it returns the payload bytes to the
-caller, and app_api.py archives a reference copy of each successful response
-via aecb/archive.py. Error responses are logged in
-full (status, headers, body) to the "aecb.api" logger -- app_api.py routes
-that to aecb_api.log; successful payloads are never logged.
+Credentials never live in a file in the application tree. They are read from
+the environment of the server process:
+
+    AECB_API_USERNAME   the account, as DOMAIN\\account or a bare name
+    AECB_API_DOMAIN     optional: the Windows domain, for a bare account name
+                        (avoids backslash escaping in service env files)
+    AECB_API_PASSWORD   the account's password
+
+Nothing in this module touches disk. Error responses are logged in full
+(status, headers, body) to the "aecb.api" logger; on screen the user sees a
+short message with no internal addresses, bodies or tracebacks (CWE-209).
+Successful payloads are never logged.
 """
 
 from __future__ import annotations
@@ -28,7 +32,6 @@ import http.client
 import json
 import logging
 import os
-import re
 from urllib.parse import urlsplit
 
 from . import ntlm
@@ -38,43 +41,63 @@ _LOG = logging.getLogger("aecb.api")
 _HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(os.path.dirname(_HERE), "config", "api.json")
 
-# How much of an HTTP error body to quote back ON SCREEN. Enough to carry an
-# API error message, not enough to dump a stack trace into the sidebar. The
-# log gets the full picture (up to _LOG_BODY) -- diagnosis must never depend
-# on what fits in an st.error box.
-_BODY_SNIPPET = 300
+ENV_USERNAME = "AECB_API_USERNAME"
+ENV_DOMAIN = "AECB_API_DOMAIN"
+ENV_SECRET = "AECB_API_PASSWORD"
+
+# How much of an error response body the log keeps.
 _LOG_BODY = 16000
 
 # An NTLM token, base64-encoded, always opens with this ("NTLMSSP\0").
 _NTLM_B64_PREFIX = "TlRMTVNTUA"
 
+_DEFAULT_TIMEOUT_S = 30
+
 
 class ApiError(Exception):
     """The API could not produce a payload. The message is user-safe -- it
-    names what failed and where, never a traceback or a payload fragment."""
+    says what failed, never an internal address, a response body, a
+    traceback or a payload fragment. Detail goes to the log."""
 
 
 def load_config() -> dict:
-    """config/api.json -- the single source of the endpoint, no overrides.
+    """config/api.json -- the endpoint and timeout.
 
-    The URL is the one from the integration Postman collection; changing
-    environments means editing the config file, nothing else. Raises ApiError
-    with a plain message when the file is missing or malformed -- an API
-    entry that silently pointed nowhere would read as "subject not found"
-    and mislead.
+    Raises ApiError when the file is missing or malformed: an API entry that
+    silently pointed nowhere would read as "subject not found" and mislead.
+    A file that still carries credentials is refused outright -- they belong
+    in the environment (see the module docstring), and a password left in a
+    file inside the application tree must not keep working unnoticed.
     """
     if not os.path.exists(CONFIG_PATH):
         raise ApiError("config/api.json is missing -- the API entry cannot "
-                       "run without an endpoint. See the file's _comment for "
-                       "what it must carry.")
+                       "run without an endpoint.")
     try:
         with open(CONFIG_PATH, encoding="utf-8") as fh:
             cfg = json.load(fh)
     except ValueError as exc:
-        raise ApiError("config/api.json is not valid JSON: %s" % exc)
-    if not cfg.get("base_url"):
+        _LOG.error("config/api.json is not valid JSON: %s", exc)
+        raise ApiError("config/api.json is not valid JSON.") from None
+    if not isinstance(cfg, dict) or not cfg.get("base_url"):
         raise ApiError("config/api.json carries no base_url.")
+    if "auth" in cfg:
+        raise ApiError("config/api.json must not carry credentials. Remove "
+                       "its \"auth\" block and set %s and %s in the server's "
+                       "environment instead." % (ENV_USERNAME, ENV_SECRET))
     return cfg
+
+
+def credentials() -> tuple:
+    """(user, domain, password) from the environment. Raises ApiError."""
+    username = (os.environ.get(ENV_USERNAME) or "").strip()
+    if not username:
+        raise ApiError("The bureau-report API service account is not "
+                       "configured: set %s (and %s) in the server's "
+                       "environment." % (ENV_USERNAME, ENV_SECRET))
+    user, domain = ntlm.split_account(username)
+    if not domain:
+        domain = (os.environ.get(ENV_DOMAIN) or "").strip()
+    return user, domain, os.environ.get(ENV_SECRET) or ""
 
 
 def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
@@ -82,24 +105,18 @@ def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
 
     The request mirrors the integration Postman collection exactly:
     {"cbSubjectId": "<id>"} with a JSON content type, authenticated as the
-    configured service account over NTLMv2. Validation of what comes back is
-    the caller's job (context.from_bytes plus the same is-this-an-AECB-payload
-    test the uploader applies) -- this module only moves bytes and turns
-    transport failures into readable ApiErrors.
+    service account over NTLMv2. Validation of what comes back is the
+    caller's job (context.from_bytes plus context.require_aecb_payload) --
+    this module only moves bytes and turns transport failures into readable
+    ApiErrors.
     """
     if cfg is None:
         cfg = load_config()
-    auth = cfg.get("auth") or {}
-    if not auth.get("username"):
-        raise ApiError("config/api.json carries no auth.username -- the "
-                       "bureau-report API requires the service account "
-                       "(IIS Windows authentication).")
+    user, domain, password = credentials()
 
     url = cfg["base_url"]
-    timeout = cfg.get("timeout_seconds") or 30
+    timeout = cfg.get("timeout_seconds") or _DEFAULT_TIMEOUT_S
     body = json.dumps({"cbSubjectId": str(subject_id).strip()}).encode("utf-8")
-    user, domain = ntlm.split_account(str(auth["username"]))
-    password = str(auth.get("password") or "")
 
     parts = urlsplit(url)
     path = parts.path + (("?" + parts.query) if parts.query else "")
@@ -116,7 +133,7 @@ def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
         headers["Authorization"] = ntlm.negotiate_header()
         conn.request("POST", path, body=body, headers=headers)
         response = conn.getresponse()
-        payload = response.read()
+        payload = _read(response)
         if response.status == 200:
             return payload
         if response.status != 401:
@@ -124,14 +141,13 @@ def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
 
         challenge = _challenge_from(response)
         if challenge is None:
-            _raise_http(
-                subject_id, url, response, payload,
-                extra="The server answered the NTLM negotiation without a "
-                      "challenge -- it may not accept the NTLM scheme.")
+            _raise_http(subject_id, url, response, payload,
+                        hint="The server did not offer an NTLM challenge.")
         if "close" in (response.getheader("Connection") or "").lower():
-            raise ApiError("The server closed the connection mid-NTLM "
-                           "handshake; NTLM authenticates the connection and "
-                           "needs keep-alive. Raise with the API team.")
+            _LOG.warning("Bureau API closed the connection mid-NTLM handshake "
+                         "(%s); NTLM needs keep-alive.", url)
+            raise ApiError("The bureau-report API closed the connection during "
+                           "authentication. Raise it with the API team.")
 
         # Leg 2: answer the challenge on the SAME connection.
         headers = dict(base_headers)
@@ -139,22 +155,38 @@ def fetch_report(subject_id: str, cfg: dict = None) -> bytes:
             user, domain, password, challenge)
         conn.request("POST", path, body=body, headers=headers)
         response = conn.getresponse()
-        payload = response.read()
+        payload = _read(response)
         if response.status == 200:
             return payload
-        extra = None
+        hint = None
         if response.status == 401:
-            extra = ("The service-account credentials were rejected -- "
-                     "check auth.username / auth.password in config/api.json "
-                     "(username may need the DOMAIN\\account form).")
-        _raise_http(subject_id, url, response, payload, extra=extra)
+            hint = ("The service-account credentials were rejected -- check "
+                    "%s / %s (the username may need the DOMAIN\\account "
+                    "form)." % (ENV_USERNAME, ENV_SECRET))
+        _raise_http(subject_id, url, response, payload, hint=hint)
     except ApiError:
         raise
     except (http.client.HTTPException, OSError) as exc:
-        raise ApiError("The bureau-report API is not reachable at %s (%s). "
-                       "Check config/api.json and the network." % (url, exc))
+        _LOG.warning("Bureau API not reachable at %s: %s", url, exc)
+        raise ApiError("The bureau-report API is not reachable. Details are "
+                       "in the server log.") from None
     finally:
         conn.close()
+
+
+# A bureau payload is a few hundred KB. Anything this large is not one, and
+# reading it unbounded would let a misbehaving endpoint exhaust memory.
+_MAX_RESPONSE_BYTES = 20 * 1024 * 1024
+
+
+def _read(response) -> bytes:
+    data = response.read(_MAX_RESPONSE_BYTES + 1)
+    if len(data) > _MAX_RESPONSE_BYTES:
+        _LOG.warning("Bureau API response exceeded %d bytes; discarded.",
+                     _MAX_RESPONSE_BYTES)
+        raise ApiError("The bureau-report API returned an oversized response. "
+                       "Details are in the server log.")
+    return data
 
 
 def _challenge_from(response):
@@ -175,30 +207,23 @@ def _challenge_from(response):
     return None
 
 
-def _raise_http(subject_id, url, response, payload, extra=None):
-    """Log the full error response, raise the concise on-screen ApiError."""
+def _raise_http(subject_id, url, response, payload, hint=None):
+    """Log the full error response; raise a short, user-safe ApiError.
+
+    The log gets every header (WWW-Authenticate included) and the body up to
+    _LOG_BODY characters -- diagnosis must never depend on what fits in an
+    error box. The screen gets the status and, where one applies, a hint
+    naming what to check; never the body, which can carry server internals.
+    """
     raw_body = payload[:_LOG_BODY].decode("utf-8", "replace")
-    # The FULL response goes to the log: every header (WWW-Authenticate
-    # included) and the untruncated body. Error bodies carry no bureau data --
-    # successful payloads are never logged.
     _LOG.warning(
         "Bureau API HTTP %d for subject %r\nURL: %s\n"
         "--- response headers ---\n%s"
         "--- response body (first %d chars) ---\n%s\n"
         "--- end of response ---",
         response.status, subject_id, url, response.headers, _LOG_BODY, raw_body)
-
-    # IIS error bodies are HTML; strip the markup so the human-readable
-    # sentence survives on screen instead of a snippet of doctype.
-    body = re.sub(r"<[^>]+>", " ", raw_body)
-    body = re.sub(r"\s+", " ", body).strip()[:_BODY_SNIPPET]
-    detail = (" -- %s" % body) if body else ""
-    if extra:
-        detail += " [%s]" % extra
-    elif response.status == 401:
-        scheme = response.getheader("WWW-Authenticate")
-        detail += (" [server expects authentication: %s]" % scheme
-                   if scheme else
-                   " [the response names no WWW-Authenticate scheme]")
-    raise ApiError("The bureau-report API answered HTTP %d for subject "
-                   "%r%s" % (response.status, subject_id, detail))
+    message = ("The bureau-report API answered HTTP %d for subject %r."
+               % (response.status, subject_id))
+    if hint:
+        message += " " + hint
+    raise ApiError(message + " Details are in the server log.")

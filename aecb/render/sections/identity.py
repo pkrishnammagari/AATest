@@ -40,8 +40,8 @@ def render(ctx, meta) -> str:
     #   E-mail      |  Address              (two, three columns each)
     #
     # Row two is always E-mail + Address. The e-mail tile states "Not
-    # reported" rather than vanishing (24 Sep 2026): a missing tile hid the
-    # fact that the bureau had no e-mail on file.
+    # reported" rather than vanishing: a missing tile would hide the fact
+    # that the bureau has no e-mail on file.
     row_one = [
         _document_fact(ctx, "Emirates ID", "EmiratesId", "eidHist", css="c2"),
         _document_fact(ctx, "Passport", "Passport", "ppHist", css="c2"),
@@ -150,10 +150,9 @@ def _subject_trait(ctx) -> str:
 def _dob_trait(ctx, dob) -> str:
     """Age and date of birth, stating exactly which part is missing.
 
-    Age is computed at the report date. "Age not reported" used to cover
-    three different facts; each now says its own: no DOB delivered, a DOB
-    that cannot be read (shown verbatim), and a readable DOB with no report
-    date to age it against.
+    Age is computed at the report date. Three different absences each say
+    their own: no DOB delivered, a DOB that cannot be read (shown verbatim),
+    and a readable DOB with no report date to age it against.
     """
     if not dob:
         return '<span class="na">DOB not reported</span>'
@@ -218,10 +217,9 @@ def _document_fact(ctx, label, info_type, hist_id, css=""):
     """An identity document tile -- Emirates ID or Passport: the number and
     its expiry in one tile.
 
-    Number and expiry were once two tiles; the expiry is meaningless without
-    the number it belongs to, so it reads on the value line. Both documents
-    use this one builder, so the Emirates ID shows its expiry exactly as the
-    passport does (24 Sep 2026 -- it was read and never shown).
+    The expiry is meaningless without the number it belongs to, so it reads
+    on the value line. Both documents use this one builder, so the Emirates
+    ID shows its expiry exactly as the passport does.
     """
     current, prior = identity.identifiers(ctx, info_type)
     if not current and not prior:
@@ -251,10 +249,10 @@ def _document_fact(ctx, label, info_type, hist_id, css=""):
 
     sub = _expiry_line(ctx, entry.extra.get("ExpiryDate"), _expiry_conflict(entry))
 
-    # The expiry sits INSIDE .v, on the value line. It used to be a sibling of
-    # .v and .v-sub made it a block, which gave the tile a third line while
-    # every other tile on the row has two -- and .facts stretches tiles to the
-    # tallest in the row, so one extra line here left dead space in all of them.
+    # The expiry sits INSIDE .v, on the value line. As a sibling of .v it
+    # would become a block and give the tile a third line while every other
+    # tile on the row has two -- and .facts stretches tiles to the tallest in
+    # the row, so one extra line here would leave dead space in all of them.
     return ('<div class="fact %s"><span class="k">%s</span>'
             '<span class="v">%s%s</span>%s</div>'
             % (css, key, value, sub, extra))
@@ -328,9 +326,8 @@ def _mobile_fact(ctx, css=""):
     """The Phone tile: current mobiles listed, prior mobiles and every
     landline folded.
 
-    Landlines (contacts 'Phone Number') joined this tile on 24 Sep 2026 --
-    they were the one identity array never shown. They sit behind their own
-    chevron so the grid does not change: collapsed, they take no height.
+    Landlines (contacts 'Phone Number') sit behind their own chevron so the
+    grid does not change: collapsed, they take no height.
     """
     current, prior = identity.contacts(ctx, "Mobile Number")
     land_cur, land_prior = identity.contacts(ctx, "Phone Number")
@@ -531,6 +528,8 @@ def _provider_badge(entry):
 
 def _when(entry):
     """'B09 · May 2026': the most recent reporter and ITS OWN update date.
+
+    Plain text (the provider code is payload data); c.hist_row escapes it.
 
     Pairing the first provider in the array with the newest date from any
     provider once named B02 beside a date only T03 had reported.
