@@ -326,13 +326,15 @@ def is_email(value) -> bool:
 def contacts(ctx, contact_type: str):
     """Deduped contacts for one base type ('Mobile Number', 'E-mail').
 
-    Mobile numbers group across prefix spellings (mobile_key), landlines the
-    same way (phone_key), e-mails across letter case (email_key); the entry
-    shows the most recently reported spelling, the others in alt_spellings.
+    Mobile numbers (primary and Additional) group across prefix spellings
+    (mobile_key), landlines the same way (phone_key), e-mails across letter
+    case (email_key); the entry shows the most recently reported spelling,
+    the others in alt_spellings.
     """
     rows = [r for r in ctx.rows("contacts")
             if base_type(r.get("ContactType")).lower() == contact_type.lower()]
     key = {"mobile number": mobile_key,
+           "additional mobile number": mobile_key,
            "phone number": phone_key,
            "e-mail": email_key}.get(contact_type.lower())
     return dedupe(rows, "ContactType", "Contact", "ProviderNo",

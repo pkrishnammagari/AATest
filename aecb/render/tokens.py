@@ -76,10 +76,9 @@ TOKENS = {
     "dpd-closed": "#AEB9C4",  # after closure
 
     # --- contract-category accents ------------------------------------------
-    # Promoted out of .fac-cat / .hm-gc so category colour is addressable from
-    # Python when building the facility cards and heatmap group heads. Those
-    # rules now refer to these tokens rather than reaching past them, which is
-    # what the promotion was for.
+    # Tokens rather than .fac-cat / .hm-gc literals, so category colour is
+    # addressable from Python when building the facility cards and heatmap
+    # group heads, and those rules refer to these tokens.
     #
     # This is a CATEGORICAL set, not brand and not risk: five hues chosen to be
     # told apart at 17px, carrying no ordering. It is the one place a colour on

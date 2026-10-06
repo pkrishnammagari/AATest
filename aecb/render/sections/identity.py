@@ -19,8 +19,9 @@ META = {
 }
 
 _PROVIDER_HINT = (
-    "Mobile numbers are listed; older mobiles and all landlines fold behind "
-    "their own chevrons. Credit providers each report their own copy of a "
+    "Mobile numbers are listed; older mobiles, all landlines and all "
+    "additional mobiles fold behind their own chevrons. Credit providers "
+    "each report their own copy of a "
     "number, so one fact can arrive many times. Repeats are collapsed -- "
     "including the same number written with a +971, 971 or 0 prefix, whose "
     "other spellings show on hover. The badge shows the most recent reporter "
@@ -31,7 +32,7 @@ _PROVIDER_HINT = (
 def render(ctx, meta) -> str:
     # An empty customerInfo empties the name line only. The tiles read
     # identification, contacts and addresses -- separate arrays that can be
-    # full when customerInfo is not, and hiding them was information loss.
+    # full when customerInfo is not, and hiding them would lose information.
     cust = ctx.customer
 
     # Tiles on a six-column grid so the two rows can be split unevenly:
@@ -48,25 +49,18 @@ def render(ctx, meta) -> str:
         _mobile_fact(ctx, css="c2"),
     ]
 
-    builders = [_email_fact, _address_fact]
-    span = "c%d" % (6 // len(builders))
-
     # Two markers the stylesheet cannot work out for itself, both about the
     # shape of row two rather than about any value in it.
     #
-    # v-wide: the address is always last and always carries the longest value,
-    # so it is the tile that takes the whole row when the grid goes four-up.
-    # r2-N: how many tiles row two was built from. Wide enough, row one takes
-    # a fourth column by pulling the e-mail up. Row two is always two tiles
-    # now, so this is always r2-2; the marker stays so the stylesheet keeps
-    # asking the question explicitly rather than assuming the answer.
-    row_two = []
-    for i, build in enumerate(builders):
-        last = i == len(builders) - 1
-        row_two.append(build(ctx, css=span + (" v-wide" if last else "")))
+    # v-wide: the address carries the longest value, so it is the tile that
+    # takes the whole row when the grid goes four-up.
+    # r2-2: row two is built from two tiles. Wide enough, row one takes a
+    # fourth column by pulling the e-mail up; the marker keeps the stylesheet
+    # asking that question explicitly rather than assuming the answer.
+    row_two = [_email_fact(ctx, css="c3"), _address_fact(ctx, css="c3 v-wide")]
 
-    body = ('%s<div class="facts id-grid r2-%d">%s</div>'
-            % (_name_line(ctx, cust), len(builders),
+    body = ('%s<div class="facts id-grid r2-2">%s</div>'
+            % (_name_line(ctx, cust),
                "".join(f for f in row_one + row_two if f)))
 
     return c.section_card(body=body, aside=_residency(cust), **meta)
@@ -308,8 +302,8 @@ def _expiry_line(ctx, expiry, conflict=""):
 def _expiry_note(ctx, expiry):
     """Folded-row expiry, graded against the report date.
 
-    A folded value can be a CURRENT passport now (see _split_display), so the
-    old flat 'expired YYYY' would mislabel a live document. Without a report
+    A folded value can be a CURRENT passport (see _split_display), so a flat
+    'expired YYYY' would mislabel a live document. Without a report
     date no claim is made either way -- the year renders neutrally.
     """
     parsed = dates.parse_any(expiry)
@@ -323,23 +317,27 @@ def _expiry_note(ctx, expiry):
 
 
 def _mobile_fact(ctx, css=""):
-    """The Phone tile: current mobiles listed, prior mobiles and every
-    landline folded.
+    """The Phone tile: current mobiles listed; prior mobiles, every landline
+    and every additional mobile folded.
 
-    Landlines (contacts 'Phone Number') sit behind their own chevron so the
-    grid does not change: collapsed, they take no height.
+    Landlines (contacts 'Phone Number') and additional mobiles (contacts
+    'Additional Mobile Number') sit behind their own chevrons so the grid
+    does not change: collapsed, they take no height.
     """
     current, prior = identity.contacts(ctx, "Mobile Number")
     land_cur, land_prior = identity.contacts(ctx, "Phone Number")
     landlines = land_cur + land_prior
-    if not current and not prior and not landlines:
+    add_cur, add_prior = identity.contacts(ctx, "Additional Mobile Number")
+    additional = add_cur + add_prior
+    if not (current or prior or landlines or additional):
         return c.fact("Phone", '<span class="na">Not reported</span>', css=css)
 
     key = "Phone " + c.hint(_PROVIDER_HINT)
-    if prior:
-        key += " " + c.chevron("mobHist", "%d prior" % len(prior))
-    if landlines:
-        key += " " + c.chevron("landHist", "%d landline" % len(landlines))
+    for hist_id, entries, label in (("mobHist", prior, "%d prior"),
+                                    ("landHist", landlines, "%d landline"),
+                                    ("addMob", additional, "%d additional")):
+        if entries:
+            key += " " + c.chevron(hist_id, label % len(entries))
 
     if current:
         rows = "".join(
@@ -361,17 +359,25 @@ def _mobile_fact(ctx, css=""):
                 _when(e))
             for e in prior
         ])
-    if landlines:
-        extra += c.cell_hist("landHist", [
-            c.hist_row(
-                '<b>%s</b> <span class="histflag">%s</span>%s'
-                % (_value_html(e), "Historical" if e.historical else "Current",
-                   _landline_flag(e)),
-                _when(e))
-            for e in landlines
-        ])
+    extra += _status_fold("landHist", landlines, _landline_flag)
+    extra += _status_fold("addMob", additional, _not_mobile_flag)
     return ('<div class="fact %s"><span class="k">%s</span>'
             '<div class="mob-list">%s</div>%s</div>' % (css, key, rows, extra))
+
+
+def _status_fold(hist_id, entries, flag):
+    """A folded list whose rows each say Current or Historical -- landlines
+    and additional mobiles, which mix both. '' when there is nothing."""
+    if not entries:
+        return ""
+    return c.cell_hist(hist_id, [
+        c.hist_row(
+            '<b>%s</b> <span class="histflag">%s</span>%s'
+            % (_value_html(e), "Historical" if e.historical else "Current",
+               flag(e)),
+            _when(e))
+        for e in entries
+    ])
 
 
 def _landline_flag(entry) -> str:

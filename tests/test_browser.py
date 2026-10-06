@@ -12,7 +12,7 @@ import subprocess
 
 import pytest
 
-from aecb import context
+from aecb import context, runtime
 from aecb.render.page import render_page
 from conftest import SYNTHETIC, find_chrome
 
@@ -39,10 +39,12 @@ def _dom(chrome, html, tmp_path):
 
 
 def test_report_script_runs_under_the_csp(chrome, tmp_path):
-    html = render_page(context.from_file(SYNTHETIC), ai_panel=False)
+    # The page a server ships by default: AI panel "coming soon".
+    html = render_page(context.from_file(SYNTHETIC), ai_mode=runtime.AI_SOON)
     dom = _dom(chrome, html, tmp_path)
     assert dom.count('class="hm-row') > 1       # heatmap rows drawn by report.js
     assert 'class="tl-event' in dom             # application markers drawn
+    assert 'class="bb-soon"' in dom             # the coming-soon badge
 
 
 def test_a_tampered_script_is_blocked(chrome, tmp_path):

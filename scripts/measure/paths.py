@@ -33,7 +33,7 @@ ROOT = os.environ.get("AECB_ROOT") or os.path.dirname(
 
 # Scratch space for rendered HTML, captures and screenshots.
 #
-# NEVER inside ROOT: app.py's list_payloads() scans ReferenceJSON/ and would
+# NEVER inside ROOT: app.py's dev sample picker scans ReferenceJSON/ and would
 # offer stray copies in the sidebar, and repository-wide checks (tests, the
 # Python 3.9 syntax test) would pick up generated files.
 WORK = os.environ.get("AECB_WORK") or os.path.join(
@@ -43,15 +43,15 @@ PAYLOAD = os.environ.get("AECB_PAYLOAD") or os.path.join(
     ROOT, "ReferenceJSON", "aecb_payload_archive_170623.json")
 
 # The widths that matter, and why each one is here. A shorter list steps over a
-# boundary: 1572 is .wrap's cap and the only width where --f reaches 1; 1560 is
-# the design viewport; 1510/1509 straddles the density step; 1181/1180
-# straddles the point where the brief rail stops being a grid track and the
-# report column jumps 683->1074; 820 is where the spine disappears.
+# boundary: 1572 is where --f first reaches 1; 1560 is the design viewport;
+# 1510/1509 straddles the density step; 1181/1180 straddles the report
+# column's media-query step at 1180px; 820 is where the spine disappears.
 WIDTHS = [1572, 1560, 1510, 1509, 1400, 1181, 1180, 1100, 820, 760]
 
-# Both rail states, always. The layout has two axes and the rail axis is the
-# one that gets forgotten.
-STATES = ("railoff", "railon")
+# The layout states to capture: one, the report, with body.rail-off (the
+# layout-state class the CSS is calibrated to). The AI Analysis view hides the
+# report rather than reflowing it, so it has no geometry of its own to track.
+STATES = ("report",)
 
 _CHROME_CANDIDATES = (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -107,17 +107,18 @@ def render(payload=None) -> str:
         os.chdir(previous)
 
 
-def rail_variants(html: str) -> dict:
-    """{'railoff': html, 'railon': html} -- the rail state as a FILE variant.
+def variants(html: str) -> dict:
+    """{state: html} -- each layout state as a FILE variant.
 
-    Two rendered files rather than a click, so a capture is reproducible and
-    does not depend on script timing.
+    Rendered files rather than clicks, so a capture is reproducible and does
+    not depend on script timing. The one state asserts the body class every
+    measured geometry is keyed on, so a change to page.py's default cannot
+    pass unnoticed.
     """
-    on = html.replace('<body class="rail-off">', "<body>", 1)
-    if on == html:
-        raise SystemExit("render() produced no <body class=\"rail-off\"> to strip; "
-                         "has page.py's default rail state changed?")
-    return {"railoff": html, "railon": on}
+    if '<body class="rail-off">' not in html:
+        raise SystemExit("render() produced no <body class=\"rail-off\">; "
+                         "has page.py's default layout state changed?")
+    return {"report": html}
 
 
 def shoot(html: str, width: int, height: int, png: str, scale: int = 1) -> None:

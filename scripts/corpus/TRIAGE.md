@@ -130,18 +130,3 @@ Log every check you close in `corpus_report/triage_log.md`, one row each:
    `python3 scripts/check_corpus.py --approve`.
 3. From then on, every code change is checked against that baseline. Rerun the
    corpus and review every `baseline.changed` diff.
-
-## Optional tooling: prompt for an AI coding assistant
-
-This section is optional. The playbook above is complete without it. A team
-that uses an AI coding assistant (for example Claude Code) on the corpus
-machine can start a triage session with the prompt below. The assistant's
-output is reviewed like any other change, and CONFIG GAPs and DECISIONS NEEDED
-still go to the product owner.
-
-> Read `scripts/corpus/TRIAGE.md`, then `corpus_report/summary.md`. Run the
-> self-test first. Then triage every ERROR and FAIL check in the order the
-> report lists them, following the playbook: classify each, fix CODE BUGs and
-> HARNESS FALSE POSITIVEs, and bring CONFIG GAPs and DECISIONS NEEDED to me
-> with a recommendation. Log everything in `corpus_report/triage_log.md`. Rerun
-> the corpus after each fix and show me the before/after counts.

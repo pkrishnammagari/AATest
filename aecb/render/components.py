@@ -126,7 +126,7 @@ def hist_row(text, when="") -> str:
 
 
 def prov_badge(code, kind="bank") -> str:
-    """Provider chip. kind: 'bank' | 'tel' | 'onus'."""
+    """Provider chip. kind: 'bank' | 'tel' | 'nbfi' | 'onus'."""
     cls = "prov-badge" if kind == "bank" else "prov-badge %s" % kind
     return '<span class="%s">%s</span>' % (cls, esc(code, dash="?"))
 
@@ -146,7 +146,9 @@ def prov_badges(codes) -> str:
     if not codes:
         return ""
     first = str(codes[0])
-    badge = prov_badge(first, "tel" if first.upper().startswith("T") else "bank")
+    # The same prefix rule as ReportContext.provider's fallback: T## telecom,
+    # N## non-bank lender, otherwise bank.
+    badge = prov_badge(first, {"T": "tel", "N": "nbfi"}.get(first.upper()[:1], "bank"))
     if len(codes) > 1:
         badge += ('<span class="prov-more" data-info="%s">+%d</span>'
                   % (attr("Also reported by: " + ", ".join(str(x) for x in codes[1:])),
@@ -154,14 +156,14 @@ def prov_badges(codes) -> str:
     return badge
 
 
-def aed(amount, decimals=0) -> str:
+def aed(amount) -> str:
     """'AED 12,345' with the currency mark styled down."""
     if amount is None:
         return "—"
     value = number(amount)
     if value is None:
         return esc(amount)
-    return '<span class="aed">AED</span>%s' % format_number(value, decimals)
+    return '<span class="aed">AED</span>%s' % format_number(value)
 
 
 def format_number(value, decimals=0) -> str:

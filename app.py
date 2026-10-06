@@ -1,147 +1,303 @@
-"""FH AECB Analyzer -- development harness. NOT deployed (see app_api.py).
+"""FH AECB Analyzer -- the application: CB subject id in, bureau report out.
 
-    streamlit run app.py
+    streamlit run app.py        (the server runs it as a service; see
+                                 docs/OPERATIONS.md)
 
-Renders the committed, anonymized fixtures in ReferenceJSON/ or an uploaded
-payload, offers the optional local-model AI brief (Ollama), and can reload
-report.css / report.js from disk without restarting the server. Uploads are
-session-scoped: nothing is written to disk, and one session's file is never
-visible to another.
+One entry point for every environment. Asks for a CB subject id, fetches the
+payload from the internal bureau-report API (aecb/api.py; endpoint in
+config/api.json, service account from the environment), validates it, and
+renders it through the standard pipeline (context.from_bytes -> render_page).
+
+What else it offers follows AECB_ENV (aecb/runtime.py; unset means prod):
+
+    uat, prod   the subject-id screen only. The AI Analysis button shows
+                "Coming soon" (AECB_AI_BRIEF defaults to coming_soon) and the
+                brief package is never loaded.
+    dev         also a sample picker (the committed fixtures in ReferenceJSON/
+                and, when configured, the archived responses), a CSS/JS
+                reload button, and the AI Analysis from the local Ollama model.
+
+There is no file uploader in any environment.
+
+Settings come from the process environment: systemd's EnvironmentFile on a
+server, ~/etc/aecb-analyzer/aecb.env on a developer machine (aecb/settings.py,
+read here at start-up; the shell wins over the file).
+
+The fetched payload lives in this session's memory for rendering. Each
+successful API response is also archived verbatim outside the application
+tree (aecb/archive.py, AECB_ARCHIVE_DIR). Every API query writes one line to
+the "aecb.audit" log, as does every generated AI analysis block and every
+feedback vote; samples are not queries and are neither audited nor archived.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 
 import streamlit as st
 
-from aecb import brief, context, logsetup, ui
-from aecb.render import branding
-from aecb.render.page import clear_cache, render_page
+from aecb import settings
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PAYLOAD_DIR = os.path.join(HERE, "ReferenceJSON")
+# Before anything reads the environment -- logging included (AECB_LOG_DIR).
+_SETTINGS_PROBLEM = settings.load_local()
+
+from aecb import api, archive, context, logsetup, runtime, ui  # noqa: E402
+from aecb.render import branding  # noqa: E402
+from aecb.render.page import clear_cache, render_page  # noqa: E402
 
 logsetup.configure()
 _LOG = logging.getLogger("aecb.app")
+_AUDIT = logging.getLogger("aecb.audit")
+settings.log_once(_SETTINGS_PROBLEM)
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SAMPLE_DIR = os.path.join(HERE, "ReferenceJSON")
+
+# CB subject ids are short alphanumeric references. Anything else is refused
+# before it reaches the API or the logs.
+_SUBJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")
+
+_PAYLOAD_KEY = "_payload"
+_SOURCE_KEY = "_source"
+_SUBJECT_KEY = "_subject"
 
 ui.configure_page()
-ui.hide_streamlit_chrome()
+
+# Read once per script run, so a changed setting shows on the next rerun.
+_ENV, _AI, _AI_PROBLEM = runtime.resolve(runtime.PROD)
+_DEV = _ENV == runtime.DEV
 
 
-def list_payloads():
-    if not os.path.isdir(PAYLOAD_DIR):
-        return []
-    return sorted(f for f in os.listdir(PAYLOAD_DIR) if f.lower().endswith(".json"))
+def _audit(subject_id: str, outcome: str) -> None:
+    """One audit line per query: who (when known), from where, which subject."""
+    user = ui.audit_user()
+    _AUDIT.info("query subject=%r outcome=%s user=%r client_ip=%s",
+                subject_id, outcome, user or "-", st.context.ip_address or "-")
 
 
-def parse_upload(uploaded):
-    """Validate an uploaded payload into a session-scoped ReportContext.
-
-    Returns None (after showing why) when the file is rejected.
-    """
-    name = os.path.basename(uploaded.name or "").strip() or "upload.json"
+def _validated_context(raw: bytes, source_name: str):
+    """Parse and validate a payload. Raises ValueError (logged here)."""
     try:
         return context.require_aecb_payload(
-            context.from_bytes(uploaded.getvalue(), source_name=name))
+            context.from_bytes(raw, source_name=source_name))
     except ValueError as exc:
-        st.sidebar.error("Could not read that payload: %s" % exc)
-        return None
+        _LOG.warning("Payload %r rejected: %s", source_name, exc)
+        raise
 
 
-def load_context():
-    """Resolve the ReportContext from the sidebar controls. None if unavailable."""
-    uploaded = st.sidebar.file_uploader("Upload an AECB payload", type=["json"])
-    if uploaded is not None:
-        ctx = parse_upload(uploaded)
-        if ctx is not None:
-            st.sidebar.caption("Rendering the uploaded file (this session only).")
-            return ctx
-
-    files = list_payloads()
-    if not files:
-        st.sidebar.warning("No JSON payloads found in ReferenceJSON/.")
-        return None
-    chosen = st.sidebar.selectbox("Payload", files)
-    return context.from_file(os.path.join(PAYLOAD_DIR, chosen))
+def _show(raw: bytes, source_name: str, subject_id) -> None:
+    """Stash a validated payload for the report screen."""
+    st.session_state[_PAYLOAD_KEY] = raw
+    st.session_state[_SOURCE_KEY] = source_name
+    st.session_state[_SUBJECT_KEY] = subject_id
+    st.rerun()
 
 
-def attach_brief(ctx):
-    """Sidebar controls for the AI brief; sets ctx.brief when one is cached.
+def _reset() -> None:
+    for key in (_PAYLOAD_KEY, _SOURCE_KEY, _SUBJECT_KEY):
+        st.session_state.pop(key, None)
+    st.rerun()
 
-    The report always renders immediately WITHOUT the brief -- a model call
-    takes tens of seconds and must never gate first paint. The result is
-    cached in session memory only, keyed by payload hash + model + prompt
-    version.
-    """
-    st.divider()
-    st.markdown("**AI brief**")
 
-    reason = brief.probe()
-    if reason:
-        st.caption("Unavailable: %s." % reason)
-        return
-
-    cache = st.session_state.setdefault("_brief_cache", {})
-    key = brief.cache_key(ctx)
-
-    if st.button("Generate AI brief",
-                 help="One local-model pass over a derived fact digest. "
-                      "Findings are validated against the payload before "
-                      "anything renders; nothing leaves this machine."):
-        with st.spinner("Reading the payload with %s…" % brief.MODEL):
+def _fetch(subject_id: str) -> None:
+    """Fetch, validate, archive and stash one subject's report."""
+    source_name = "api:%s" % subject_id
+    try:
+        with st.spinner("Querying the bureau report for %s…" % subject_id):
+            raw = api.fetch_report(subject_id)
             try:
-                cache[key] = brief.generate_brief(ctx)
-            except brief.BriefUnavailable:
-                _LOG.exception("Brief generation failed for %r",
-                               ctx.source_name)
-                st.warning("The model did not return a usable brief; "
-                           "details are in the server log.")
+                _validated_context(raw, source_name)   # reject before storing
+            except ValueError:
+                raise api.ApiError(
+                    "The API answered for %r, but the response is not a "
+                    "readable AECB payload. Details are in the server log."
+                    % subject_id) from None
+    except api.ApiError as exc:
+        _LOG.warning("Bureau API fetch failed for %r: %s", subject_id, exc)
+        _audit(subject_id, "failed")
+        st.error(str(exc))
+        return
+    _audit(subject_id, "ok")
+    archive.save_response(raw, subject_id)
+    _show(raw, source_name, subject_id)
 
-    cached = cache.get(key)
-    if cached is not None:
-        ctx.brief = cached
-        st.caption("Brief attached — %d finding(s), %d unknown(s), %d "
-                   "dropped by validation. Open it with the AI Analysis "
-                   "button."
-                   % (len(cached["findings"]), len(cached["unknowns"]),
-                      len(cached["dropped"])))
+
+# --- development only ---------------------------------------------------------
+
+def _samples() -> dict:
+    """label -> path: the committed fixtures, then the archived responses."""
+    found = {}
+    folders = [("", SAMPLE_DIR)]
+    archived = archive.configured_dir()
+    if archived:
+        folders.append(("archive/", archived))
+    for prefix, folder in folders:
+        if os.path.isdir(folder):
+            for name in sorted(os.listdir(folder)):
+                if name.lower().endswith(".json"):
+                    found[prefix + name] = os.path.join(folder, name)
+    return found
 
 
-def main() -> None:
-    with st.sidebar:
-        st.markdown("### %s" % branding.APP_NAME)
-        st.caption("Development harness — fixtures and uploads")
-        try:
-            ctx = load_context()
-        except (OSError, ValueError):
-            # A missing or malformed config file raises on purpose (see
-            # aecb.context); the traceback belongs in the server log.
-            _LOG.exception("Failed to load the payload or configuration")
-            st.error("Failed to load the payload or configuration; details "
-                     "are in the server log.")
-            ctx = None
-        if ctx is not None:
-            attach_brief(ctx)
-        st.divider()
-        if st.button("Reload CSS / JS", help="Re-read report.css and report.js "
-                                             "from disk without restarting."):
-            clear_cache()
-            st.rerun()
-
-    if ctx is None:
+def _sample_picker() -> None:
+    """Open a payload from disk instead of the API (AECB_ENV=dev only)."""
+    st.markdown("**Development:** or open a sample payload")
+    samples = _samples()
+    if not samples:
+        st.caption("No sample payloads found.")
+        return
+    label = st.selectbox("Sample payload", list(samples))
+    if not st.button("Open sample", use_container_width=True):
         return
     try:
-        html = render_page(ctx)
+        with open(samples[label], "rb") as fh:
+            raw = fh.read()
+        _validated_context(raw, "sample:%s" % label)
+    except (OSError, ValueError):
+        st.error("That sample could not be read as an AECB payload; details "
+                 "are in the server log.")
+        return
+    _show(raw, "sample:%s" % label, None)
+
+
+def _dev_sidebar() -> None:
+    st.divider()
+    st.caption("Environment `%s` · AI panel `%s`" % (_ENV, _AI))
+    if st.button("Reload CSS / JS", help="Re-read report.css and report.js "
+                                         "from disk without restarting."):
+        clear_cache()
+        st.rerun()
+
+
+# --- screens ------------------------------------------------------------------
+
+def _landing() -> None:
+    """The first screen: one field, one button. Enter submits too (st.form)."""
+    ui.hide_streamlit_chrome()
+    st.markdown("<div style='height:18vh'></div>", unsafe_allow_html=True)
+    _, mid, _ = st.columns([1, 2, 1])
+    with mid:
+        st.markdown(
+            "<h2 style='margin-bottom:0'>%s</h2>"
+            "<p style='color:#5B6B7C; margin-top:4px'>Enter a CB subject id to "
+            "pull the live bureau report and render the underwriting screen.</p>"
+            % branding.APP_NAME,
+            unsafe_allow_html=True,
+        )
+        if _SETTINGS_PROBLEM:
+            st.warning(_SETTINGS_PROBLEM)
+        with st.form("subject_form"):
+            subject_id = st.text_input("CB Subject ID",
+                                       placeholder="CB subject id")
+            submitted = st.form_submit_button("Display report", type="primary",
+                                              use_container_width=True)
+        if submitted:
+            _submit(subject_id.strip())
+        if _DEV:
+            _sample_picker()
+
+
+def _submit(subject_id: str) -> None:
+    if not subject_id:
+        st.error("Enter a CB subject id first.")
+    elif not _SUBJECT_ID.match(subject_id):
+        st.error("A CB subject id is up to 40 letters, digits, hyphens or "
+                 "underscores.")
+    else:
+        _fetch(subject_id)
+
+
+def _mismatch(ctx, requested: str):
+    """The delivered subject id, when it does not answer the requested one."""
+    delivered = str(ctx.customer.get("CBSubjectId") or "").strip()
+    if not delivered or delivered.casefold() == requested.strip().casefold():
+        return None
+    return delivered
+
+
+def _sidebar_head(ctx, subject) -> None:
+    """The sidebar above the report block: title, reset, setting notices,
+    development tools, and the AI Analysis controls when the panel is live."""
+    st.markdown("### %s" % branding.APP_NAME)
+    st.caption("Live bureau report via the history API" if subject
+               else "Development sample — not fetched from the API")
+    if st.button("Query another subject", use_container_width=True):
+        _reset()
+    archive_off = archive.status()
+    if archive_off:
+        st.caption(archive_off)
+    for problem in (_AI_PROBLEM, _SETTINGS_PROBLEM):
+        if problem:
+            st.caption(problem)
+    if _DEV:
+        _dev_sidebar()
+    if _AI == runtime.AI_LIVE:
+        ui.analysis_controls(ctx, _ENV, subject=subject, user=ui.audit_user())
+
+
+def _render(ctx) -> tuple:
+    """(screen HTML, download HTML).
+
+    The same document, except: while the AI panel is "coming soon" the
+    downloaded file is filed against the credit application, and a record
+    should not advertise a feature, so it carries no AI control at all; and
+    while an analysis exists the screen reopens in the analysis view after
+    every rerun, whereas the filed copy opens on the report.
+    """
+    if _AI == runtime.AI_SOON:
+        return render_page(ctx, ai_mode=_AI), render_page(ctx, ai_mode=runtime.AI_OFF)
+    html = render_page(ctx, ai_mode=_AI)
+    if getattr(ctx, "analysis", None) is None:
+        return html, html
+    return render_page(ctx, ai_mode=_AI, analysis_open=True), html
+
+
+def _report() -> None:
+    subject = st.session_state.get(_SUBJECT_KEY)
+    try:
+        ctx = _validated_context(st.session_state[_PAYLOAD_KEY],
+                                 st.session_state[_SOURCE_KEY])
+    except ValueError:
+        # Session bytes were validated before they were stored; if they fail
+        # now, recover to the form rather than stranding the user.
+        st.error("The stored report could not be read again. Details are in "
+                 "the server log.")
+        if st.button("Query another subject"):
+            _reset()
+        return
+
+    with st.sidebar:
+        _sidebar_head(ctx, subject)
+
+    try:
+        html, download = _render(ctx)
     except Exception:  # noqa: BLE001 -- any render fault is reported the same way
+        # Full traceback to the server log only -- paths and code lines must
+        # not reach the browser (CWE-209).
         _LOG.exception("Failed to render payload %r", ctx.source_name)
         st.error("Failed to render the report for `%s`. The payload may be "
-                 "malformed; details are in the server log." % ctx.source_name)
+                 "malformed; details are in the server log."
+                 % (subject or ctx.source_name))
         return
+
     with st.sidebar:
-        ui.report_sidebar(ctx, html)
+        ui.report_sidebar(ctx, download, requested=subject)
+
+    delivered = _mismatch(ctx, subject) if subject else None
+    ui.hide_streamlit_chrome(banner=delivered is not None)
+    if delivered is not None:
+        st.warning(
+            "**Subject id mismatch.** You requested `%s`, but the payload the "
+            "API returned identifies subject `%s`. The report below renders "
+            "the delivered payload — verify you are reading the right "
+            "customer before acting on it." % (subject, delivered)
+        )
     ui.show_report(html)
 
 
-main()
+if _PAYLOAD_KEY in st.session_state:
+    _report()
+else:
+    _landing()

@@ -70,16 +70,16 @@ def parse_any(value):
     return None
 
 
-def fmt_short(value, dash: str = "—") -> str:
+def fmt_short(value) -> str:
     """'26 Oct 2023'. Returns an em dash when there is no date."""
     d = parse_any(value)
-    return d.strftime("%d %b %Y") if d else dash
+    return d.strftime("%d %b %Y") if d else "—"
 
 
-def fmt_mon(value, dash: str = "—") -> str:
+def fmt_mon(value) -> str:
     """\"Oct '23\" -- the heatmap and timeline axis label."""
     d = parse_any(value)
-    return d.strftime("%b '%y") if d else dash
+    return d.strftime("%b '%y") if d else "—"
 
 
 def fmt_month_year(value, dash: str = "—") -> str:

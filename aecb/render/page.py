@@ -16,15 +16,18 @@ from __future__ import annotations
 import base64
 import hashlib
 
-from . import branding, css, js, shell
+from .. import runtime
+from . import analysis, branding, css, js, shell
 from .components import esc
 from .sections import render_all
 
-# The brief rail starts CLOSED (body.rail-off). The underwriting screen is the
-# deliverable; the AI reading is opt-in, and the AI Analysis button in the top
-# bar toggles it. Anything calibrated to the width of a card's right-hand
-# column -- sections/returns.py _COL_W -- is calibrated to THIS state, because
-# it is the one the page loads in.
+# body.rail-off is the layout-state class every measured geometry is
+# calibrated to; report.css computes the fluid scale (--f) and the density
+# step on it, so it is always set. The AI Analysis view is a separate
+# full-width section that REPLACES the report while body.analysis-on is set
+# -- toggled by the top-bar button in report.js, or on load when the host
+# asks for it (analysis_open) so a re-render after each generated block
+# reopens where the user was.
 _DOC = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,15 +40,15 @@ _DOC = """<!DOCTYPE html>
 {styles}
 </style>
 </head>
-<body class="rail-off">
+<body class="rail-off{open}">
 {topbar}
 <div class="wrap">
 {spine}
   <div class="report">
 {sections}
   </div>
-{rail}
 </div>
+{analysis}
 <script>{script}</script>
 </body>
 </html>
@@ -62,15 +65,23 @@ def _csp(script: str) -> str:
         script_hash="sha256-" + base64.b64encode(digest).decode("ascii"))
 
 
-def render_page(ctx, title: str = "", ai_panel: bool = True) -> str:
+def render_page(ctx, ai_mode: str = runtime.AI_LIVE,
+                analysis_open: bool = False) -> str:
     """Full standalone HTML document for one AECB report.
 
-    ai_panel=False leaves out the AI Analysis button and the brief rail
-    altogether -- for deployments with no language model behind them, where
-    the panel could only ever say that no brief was generated.
+    ai_mode is the AI panel's state (aecb/runtime.py):
+      live         the AI Analysis button and the analysis view, drawing
+                   ctx.analysis when the host attached one;
+      coming_soon  the same button, muted and badged, opening a view that
+                   says the analysis is being built -- never findings;
+      off          neither the button nor the view.
+    analysis_open=True loads the page with the analysis view showing (the
+    host sets it while an analysis exists, so a re-render keeps the user in
+    the view). An unknown mode raises ValueError rather than guessing.
     """
-    if not title:
-        title = "%s — %s" % (branding.APP_NAME, ctx.subject_id)
+    if ai_mode not in runtime.AI_MODES:
+        raise ValueError("unknown AI panel mode %r" % (ai_mode,))
+    title = "%s — %s" % (branding.APP_NAME, ctx.subject_id)
     script = js.script(ctx)
     return _DOC.format(
         csp=_csp(script),
@@ -80,10 +91,12 @@ def render_page(ctx, title: str = "", ai_panel: bool = True) -> str:
         title=esc(title),
         favicon=esc(branding.favicon_data_uri()),
         styles=css.stylesheet(),
-        topbar=shell.topbar(ctx, ai_panel=ai_panel),
+        topbar=shell.topbar(ctx, ai_mode),
         spine=shell.spine(),
         sections=render_all(ctx),
-        rail=shell.rail(ctx) if ai_panel else "",
+        analysis=analysis.view(ctx, ai_mode),
+        open=" analysis-on" if analysis_open and ai_mode != runtime.AI_OFF
+        else "",
         script=script,
     )
 

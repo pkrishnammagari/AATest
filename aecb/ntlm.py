@@ -1,9 +1,9 @@
 """Minimal NTLMv2 client authentication (MS-NLMP), stdlib only.
 
 The bureau-report API sits behind IIS Windows authentication (WWW-Authenticate:
-Negotiate/NTLM). The deployment server is
-air-gapped with a deliberately one-line requirements.txt, so rather than adding
-pyspnego + cryptography wheels to the offline bundle, the three-message NTLMv2
+Negotiate/NTLM). The deployment server is air-gapped with a deliberately
+one-line requirements.txt, so rather than adding pyspnego + cryptography
+wheels to the offline bundle, the three-message NTLMv2
 handshake is implemented here from the MS-NLMP specification:
 
     type 1  NEGOTIATE     ->  we announce ourselves

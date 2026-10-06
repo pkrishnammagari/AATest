@@ -101,7 +101,7 @@ _FALLBACK_ICON = (
 )
 
 
-def favicon_data_uri(blue: str = None) -> str:
+def favicon_data_uri() -> str:
     """Browser-tab icon: the supplied logo, else the blue FH monogram.
 
     The monogram's colour comes from the design tokens rather than a literal, so
@@ -110,12 +110,10 @@ def favicon_data_uri(blue: str = None) -> str:
     A wide wordmark logo will letterbox in a square tab, but showing the real
     mark still beats showing a generic one.
     """
-    if blue is None:
-        blue = tokens.token("fh-blue")
     uri = logo_data_uri()
     if uri:
         return uri
-    svg = _FALLBACK_ICON % blue
+    svg = _FALLBACK_ICON % tokens.token("fh-blue")
     return "data:image/svg+xml;base64,%s" % base64.b64encode(
         svg.encode("utf-8")).decode("ascii")
 

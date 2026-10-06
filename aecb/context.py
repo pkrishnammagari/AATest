@@ -172,7 +172,7 @@ class ReportContext:
         # ('Active Payments') while the heatmap works in letter codes ('U').
         self._status_by_label = {}
         for code, meta in (self.status_codes.get("codes") or {}).items():
-            label = (meta.get("label") or "").strip().lower()
+            label = _normalize_label(meta.get("label") or "")
             if label:
                 self._status_by_label[label] = code
 
@@ -334,8 +334,9 @@ class ReportContext:
                 "kind": entry.get("kind") or "bank",
                 "code": code,
             }
-        # Telecom providers are coded T##, credit providers B##.
-        kind = "tel" if code.upper().startswith("T") else "bank"
+        # Telecom providers are coded T##, non-bank lenders N##, banks B##.
+        prefix = code.upper()[:1]
+        kind = {"T": "tel", "N": "nbfi"}.get(prefix, "bank")
         return {"name": code, "kind": kind, "code": code}
 
     def status(self, value) -> dict:
@@ -360,7 +361,7 @@ class ReportContext:
             return {"code": text, "label": meta.get("label", text),
                     "rank": meta["rank"]}
 
-        code = self._status_by_label.get(text.lower())
+        code = self._status_by_label.get(_normalize_label(text))
         if code:
             meta = codes[code]
             return {"code": code, "label": meta.get("label", text),
@@ -398,6 +399,13 @@ class ReportContext:
 
 def _text(value) -> str:
     return str(value or "").strip()
+
+
+def _normalize_label(text) -> str:
+    """A status label reduced for matching: hyphens read as spaces, runs of
+    whitespace collapse to one, case ignored. AECB delivers 'Write Off'
+    where its published table (and the config) says 'Write-off'."""
+    return " ".join(str(text).replace("-", " ").split()).lower()
 
 
 def _latest_enquiry(rows):

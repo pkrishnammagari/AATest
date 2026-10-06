@@ -19,7 +19,13 @@ One module per lens:
     behavior       -- payment waterfall, early-tenor delinquency, returned
                       instruments, post-loan balances, dormant cards.
     absence        -- what the file does NOT establish.
-    background     -- curated, as-of-dated macro context (optional config).
+    cycling, seasonality, cleanup, concentration
+                   -- the non-obvious-risk lenses (theme "risk"): card usage
+                      patterns, delays that return with the calendar,
+                      pre-enquiry clean-up, where the exposure sits and who
+                      gets paid. Shared arithmetic in patterns.py.
+    background     -- curated, as-of-dated macro context and register
+                      (optional config).
 
 Each fact carries the exact payload fields behind it and the NAME of the report
 section where the human can verify it (names, not numbers: displayed numbers
@@ -39,9 +45,11 @@ test suite asserts it. DOB-derived age stays.
 
 from __future__ import annotations
 
-from . import absence, background, behavior, inconsistency, structure, trajectory
-from ._common import CAT_CARD, Facts, category, contract_label, \
-    history_by_contract, is_active
+from . import (absence, background, behavior, cleanup, concentration, cycling,
+               inconsistency, seasonality, structure, trajectory)
+from ._common import (ABSENCE, BEHAVIOR, CAT_CARD, INCONSISTENCY, STRUCTURE,
+                      Facts, category, contract_label, history_by_contract,
+                      is_active)
 
 PROHIBITED_FIELDS = ("Nationality", "Gender", "ResidentFlag")
 
@@ -77,6 +85,7 @@ def build(ctx):
     facts = Facts()
 
     structure.portfolio(ctx, facts)
+    structure.opening_dates(ctx, facts)
     structure.guarantees(ctx, facts)
     structure.worst_anchor(ctx, facts)
     structure.buried_counters(ctx, facts)
@@ -105,6 +114,18 @@ def build(ctx):
     absence.reporting_gaps(ctx, facts, labelled_active)
     absence.income_corroboration(ctx, facts)
 
+    cycling.card_usage(ctx, facts, by_contract)
+    seasonality.seasonal_delays(ctx, facts, labelled)
+    seasonality.coverage(ctx, facts, labelled_active)
+    cleanup.pre_enquiry_cleanup(ctx, facts, labelled)
+    concentration.lender_concentration(ctx, facts)
+    concentration.nbfi_reliance(ctx, facts)
+    concentration.guarantor_beside_own(ctx, facts)
+    concentration.maturity_vs_age(ctx, facts)
+    concentration.income_trajectory(ctx, facts)
+    concentration.employer_churn(ctx, facts)
+    concentration.selective_default(ctx, facts, by_contract)
+
     background.macro_facts(facts)
 
     return facts.rows
@@ -118,3 +139,29 @@ def digest(facts) -> str:
 
 def by_id(facts) -> dict:
     return {f["id"]: f for f in facts}
+
+
+# The themes a headline index carries: payload lenses other than the
+# per-contract series (the tables carry those) and curated background (not
+# payload). Step facts are the checklist's arithmetic and stay out too. The
+# risk block's index of "the rest of the file" uses INDEX_THEMES; the
+# hypothesis pass reads only what a hypothesis can be about -- the file's
+# structure and behaviour -- and never the risk lenses, which are block 2's.
+# Lines are cut at INDEX_CHARS: a headline orients, the
+# full fact is what a cite is checked against.
+INDEX_THEMES = (STRUCTURE, INCONSISTENCY, BEHAVIOR, ABSENCE)
+H_INDEX_THEMES = (STRUCTURE, BEHAVIOR)
+INDEX_CHARS = 80
+
+
+def index(facts, themes=INDEX_THEMES) -> str:
+    """The digest as headlines: one truncated line per fact of `themes`."""
+    lines = []
+    for f in facts:
+        if f["theme"] not in themes:
+            continue
+        text = f["text"]
+        if len(text) > INDEX_CHARS:
+            text = text[:INDEX_CHARS].rstrip() + "..."
+        lines.append("%s [%s] %s" % (f["id"], f["theme"], text))
+    return "\n".join(lines)

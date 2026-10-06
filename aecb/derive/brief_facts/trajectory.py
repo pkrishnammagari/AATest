@@ -255,10 +255,9 @@ def card_payment_pattern(facts, label, history):
                   SEC_DETAIL)
     elif carried >= 0.75 * total or carried <= 0.25 * total:
         facts.add(TRAJECTORY,
-                  "%s -- a balance was carried in %d of %d reported month(s). "
-                  "Card activity fields (AmountSpent, BilledAmount) were not "
-                  "delivered, so a revolving pattern cannot be distinguished "
-                  "from an inactive card paying down."
+                  "%s -- a balance was carried in %d of %d reported month(s); "
+                  "AmountSpent and BilledAmount not delivered, so revolving "
+                  "and paying down cannot be told apart."
                   % (label, carried, total),
                   [F_HIST_BALANCE],
                   SEC_DETAIL)

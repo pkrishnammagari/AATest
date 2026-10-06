@@ -1,10 +1,9 @@
 """Reading untyped payload scalars -- one set of rules for every module.
 
 The AECB payload is untrusted input: an amount may arrive as 12500, 12500.0,
-"12500" or "12,500"; a flag as true, 1, "Y" or "N"; any field as null. Before
-this module each derive and render module parsed these on its own, and the
-report and the AI digest could read the same field differently. Every reader
-now goes through here.
+"12500" or "12,500"; a flag as true, 1, "Y" or "N"; any field as null. Every
+derive and render module reads them through here, so the report and the AI
+digest can never read the same field differently.
 
 Rules:
   * number()  -- a finite float, or None. Thousands commas and surrounding

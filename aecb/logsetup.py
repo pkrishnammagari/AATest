@@ -1,4 +1,4 @@
-"""Logging for the Streamlit entry points -- configured once per process.
+"""Logging for the Streamlit app -- configured once per process.
 
 Every "aecb.*" logger (API client error dumps, archive, render failures,
 audit lines) goes to:

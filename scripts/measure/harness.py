@@ -1,6 +1,6 @@
 """Capture computed-style + geometry vectors for the report.
 
-Every width in paths.WIDTHS x both rail states, written as one JSON file per
+Every width in paths.WIDTHS x every layout state, written as one JSON file per
 combination. Run it identically before and after a change so the two captures
 are comparable; capture the BEFORE from a second checkout of the old
 revision (e.g. a git worktree), not from memory:
@@ -67,13 +67,15 @@ window.addEventListener('load', function () {
     /* EVERY element, tagged with the section it belongs to. The comparator
        keys these PER SECTION, not by this global index -- when a section's
        markup changes, every index after it shifts and an index-keyed compare
-       lines up different elements against each other. That mistake once
-       produced 17,245 false failures. */
+       lines up different elements against each other. */
     var all = document.querySelectorAll('*');
     for (var i = 0; i < all.length; i++) {
       var el = all[i];
       var c = getComputedStyle(el), b = el.getBoundingClientRect();
-      var sec = el.closest ? el.closest('section.sec') : null;
+      /* The AI Analysis view (#analysis) is its own scope: hidden behind the
+         report by default, so its geometry is not the page's, but its
+         element count still shows up as a change when it is edited. */
+      var sec = el.closest ? (el.closest('section.sec') || el.closest('#analysis')) : null;
       out.leak.push(i + '|' + (sec ? sec.id : '-') + '|' + el.tagName + '|' +
                     (el.className || '') + '|' +
                     c.fontSize + '|' + c.padding + '|' + c.gap + '|' +
@@ -99,7 +101,7 @@ def main() -> int:
         os.makedirs(outdir)
 
     html = paths.render()
-    for state, doc in sorted(paths.rail_variants(html).items()):
+    for state, doc in sorted(paths.variants(html).items()):
         for width in paths.WIDTHS:
             data = paths.probe(doc, JS, width, sentinel="P")
             target = os.path.join(outdir, "%s_%d.json" % (state, width))

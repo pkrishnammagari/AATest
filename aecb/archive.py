@@ -1,7 +1,7 @@
 """Save a reference copy of each successful API response.
 
-Used only by app_api.py -- the development harness (app.py) never imports this
-module. Responses are real bureau data, so they are written OUTSIDE the
+Used by app.py for API responses only -- development samples are never
+archived. Responses are real bureau data, so they are written OUTSIDE the
 application tree, to the directory named by the AECB_ARCHIVE_DIR environment
 variable:
 
@@ -42,7 +42,8 @@ _DIR_MODE = 0o700
 _FILE_MODE = 0o600
 
 
-def _inside_app_tree(path: str) -> bool:
+def inside_app_tree(path: str) -> bool:
+    """Whether `path` resolves to somewhere under the application tree."""
     root = os.path.realpath(_APP_ROOT)
     target = os.path.realpath(path)
     return os.path.commonpath([root, target]) == root
@@ -51,7 +52,7 @@ def _inside_app_tree(path: str) -> bool:
 def configured_dir() -> "str | None":
     """The archive directory from the environment, or None if unusable."""
     value = (os.environ.get(ENV_ARCHIVE_DIR) or "").strip()
-    if not value or _inside_app_tree(value):
+    if not value or inside_app_tree(value):
         return None
     return value
 
@@ -62,7 +63,7 @@ def status() -> "str | None":
     if not value:
         return ("Response archiving is off: %s is not set."
                 % ENV_ARCHIVE_DIR)
-    if _inside_app_tree(value):
+    if inside_app_tree(value):
         return ("Response archiving is off: %s points inside the application "
                 "folder; it must be outside it." % ENV_ARCHIVE_DIR)
     return None
@@ -89,16 +90,16 @@ def _write_exclusive(directory: str, safe: str, stamp: str, raw: bytes) -> str:
                   % (_MAX_SUFFIX, safe, stamp))
 
 
-def save_response(raw: bytes, subject_id: str, directory: str = None,
+def save_response(raw: bytes, subject_id: str,
                   now: datetime.datetime = None) -> "str | None":
     """Write raw response bytes to a timestamped file; return the path.
 
-    directory and now exist for tests; production callers pass neither and
-    the directory comes from AECB_ARCHIVE_DIR. Returns None when archiving is
-    off or the write fails -- the caller's fetch already succeeded, so an
-    archive problem is a log entry, not a user-facing error.
+    The directory comes from AECB_ARCHIVE_DIR; `now` exists for tests.
+    Returns None when archiving is off or the write fails -- the caller's
+    fetch already succeeded, so an archive problem is a log entry, not a
+    user-facing error.
     """
-    directory = directory or configured_dir()
+    directory = configured_dir()
     if directory is None:
         _LOG.warning("API response for %r not archived: %s",
                      subject_id, status())

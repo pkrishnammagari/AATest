@@ -1,8 +1,7 @@
 """Proves every check can fire -- on deliberately broken copies of the fixtures.
 
-A check that has never been seen to fail proves nothing when it passes
-(scripts/measure/synthetic.py learned this the hard way). So each case here
-breaks one thing and asserts the matching check reports it:
+A check that has never been seen to fail proves nothing when it passes. So
+each case here breaks one thing and asserts the matching check reports it:
 
   payload cases  mutate a committed fixture's JSON and run the whole pipeline;
   page cases     render a fixture, then corrupt the PAGE -- so the check is

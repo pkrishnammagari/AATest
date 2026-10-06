@@ -141,11 +141,14 @@ def _card(ctx, cat, main, co, gtr, counts, live_rows):
             % (cat, CATEGORY_LABEL.get(cat, cat)))
 
     # A category with nothing in it says so, rather than showing dashes that
-    # could be misread as zero balances on real facilities.
+    # could be misread as zero balances on real facilities. Card utilisation
+    # still renders here: it lives on contractsTotalSummary, not on any
+    # contract, so the bureau can deliver it with no open card at all.
     if _is_empty(main, co, gtr, counts, live_rows):
-        return ('<div class="fac empty">%s%s</div>'
+        return ('<div class="fac empty">%s%s%s</div>'
                 % (head, c.empty_state("No facilities",
-                                       "Nothing reported in this category.")))
+                                       "Nothing reported in this category."),
+                   _utilisation(ctx) if cat == "C" else ""))
 
     parts = [head]
     if cat == "C":
@@ -187,7 +190,7 @@ def _role_block(title, cat, fin, counts):
     # The role label sits ON the balance line rather than above it. It is the
     # caption for that figure, so a line of its own said the same thing twice
     # and cost one per block. .fac-block wraps at narrow widths, which puts the
-    # figure back underneath -- the old layout, reached only when it is needed.
+    # figure back underneath only when it is needed.
     return ('<div class="fac-block"><span class="fac-role">%s</span>%s</div>%s%s'
             % (title, _headline(fin), _rows(cat, fin), _outcomes(counts)))
 
@@ -296,11 +299,23 @@ def _utilisation(ctx):
     101% from 300%, since the bar cannot. That figure is also why there is no
     0/100% scale under the bar: "57%" printed above a track filled just over
     halfway already says the track's full width is 100%.
+
+    A delivered value that is not a number ("NC") is still delivered: it is
+    shown verbatim, without a % and without a bar -- a fill would fabricate a
+    percentage the bureau never sent. Only a missing or blank value hides
+    the line.
     """
     raw = ctx.totals.get("CreditUtilizationRate")
+    if raw is None or not str(raw).strip():
+        return ""
     pct = number(raw)
     if pct is None:
-        return ""
+        return (
+            '<div class="fac-util">'
+            '<div class="fac-util-h"><span class="k">Utilisation</span>'
+            '<span class="v">%s</span>%s</div>'
+            '</div>'
+        ) % (c.esc(raw), _tag_delivered())
 
     over = pct >= 100
     fill = 100.0 if over else max(0.0, pct)

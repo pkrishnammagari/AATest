@@ -4,8 +4,8 @@
 #
 #   bash deploy/make_release.sh
 #
-# Writes aecb-analyzer-<version>.tar.gz and its .sha256 next to the
-# repository. The archive is `git archive HEAD`, so it holds exactly what is
+# Writes aecb-analyzer-<version>.tar.gz and its .sha256 in the repository
+# root. The archive is `git archive HEAD`, so it holds exactly what is
 # committed -- nothing from the working tree -- minus the development-only
 # paths in DEV_ONLY below. Pair it with the wheel bundle from
 # deploy/build_wheels.sh; docs/OPERATIONS.md has the full procedure.
@@ -23,11 +23,10 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   exit 1
 fi
 
-# Never shipped to the server: the development harness, tests, developer
-# tooling, documentation, the anonymized archive fixture (the install smoke
-# test uses the synthetic one) and development/scan configuration.
+# Never shipped to the server: tests, developer tooling, documentation, the
+# anonymized archive fixture (the install smoke test uses the synthetic one)
+# and development/scan configuration.
 DEV_ONLY=(
-  app.py
   tests
   scripts
   docs

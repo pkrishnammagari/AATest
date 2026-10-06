@@ -15,9 +15,10 @@ import re
 
 import pytest
 
+from aecb import runtime
 from aecb.render import js
 from aecb.render.page import render_page
-from conftest import context_of, fixture_payload, FIXTURES
+from conftest import context_of, fixture_payload, FIXTURES, FIXTURE_IDS
 
 MARK = "\"'><x-inj>"
 
@@ -40,7 +41,7 @@ def _split(html):
     return html[:start], html[start:]
 
 
-@pytest.mark.parametrize("path", FIXTURES, ids=("synthetic", "archive"))
+@pytest.mark.parametrize("path", FIXTURES, ids=FIXTURE_IDS)
 def test_no_payload_value_reaches_the_page_unescaped(path):
     payload = fixture_payload(path)
     _poison(payload)
@@ -57,9 +58,11 @@ def test_data_blob_cannot_close_or_comment_out_the_script():
     assert json.loads(text) == data
 
 
-def test_page_carries_a_csp_that_admits_only_its_own_script(fixture_path):
+@pytest.mark.parametrize("ai_mode", runtime.AI_MODES)
+def test_page_carries_a_csp_that_admits_only_its_own_script(fixture_path,
+                                                            ai_mode):
     from aecb import context
-    html = render_page(context.from_file(fixture_path))
+    html = render_page(context.from_file(fixture_path), ai_mode=ai_mode)
     csp = re.search(r'<meta http-equiv="Content-Security-Policy" '
                     r'content="([^"]+)">', html).group(1)
     assert "default-src 'none'" in csp

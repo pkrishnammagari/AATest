@@ -44,11 +44,11 @@ _CHECKS = (
     # --- load & render -------------------------------------------------------
     ("load.json", ERROR, "load",
      "File is not readable JSON",
-     "The file is not UTF-8 JSON. app_api.py only archives responses that "
+     "The file is not UTF-8 JSON. app.py only archives responses that "
      "parsed, so suspect the copy onto this machine before the code."),
     ("load.shape", ERROR, "load",
      "Not an AECB payload",
-     "No customerInfo, summary or score row -- app_api._validated_context "
+     "No customerInfo, summary or score row -- app._validated_context "
      "would have rejected it. Check the file really is a report."),
     ("load.context", ERROR, "load",
      "ReportContext could not be built",
@@ -68,7 +68,7 @@ _CHECKS = (
      "Over the --slow threshold. Profile the payload; large contractsHistory "
      "arrays are the usual suspect."),
 
-    # --- the existing gate ---------------------------------------------------
+    # --- the fast gate -------------------------------------------------------
     ("gate.check_report", FAIL, "no-drop",
      "scripts/check_report.py assertion failed",
      "The same assertions the fast gate runs on the committed fixtures, run "
@@ -107,8 +107,9 @@ _CHECKS = (
      "(top bar)."),
     ("nodrop.contacts_type", WARN, "no-drop",
      "Contacts of a type the page never shows",
-     "sections/identity.py renders Mobile Number, Phone Number and E-mail "
-     "only. Any other base ContactType is dropped -- needs a decision."),
+     "sections/identity.py renders Mobile Number, Phone Number, Additional "
+     "Mobile Number and E-mail only. Any other base ContactType is dropped "
+     "-- needs a decision."),
     ("nodrop.fin_summary_role", FAIL, "no-drop",
      "Section 06 summary rows with a role or category the page never reads",
      "derive/facilities.financial_summary/count_summary match ContractRole "
@@ -145,7 +146,7 @@ _CHECKS = (
      "green, unknown uncoloured; the pill follows the worst panel."),
     ("recompute.worst_floor", FAIL, "recompute",
      "Section 03 36-month panel is milder than the delivered 24 months",
-     "User decision 24 Sep 2026: the 36 months include the 24, so the "
+     "The 36 months include the 24, so the "
      "delivered figure shows whenever the derivation comes out milder. "
      "sections/worst_status._derived_36m / _delay_line_36."),
     ("recompute.income_current", FAIL, "recompute",
@@ -237,8 +238,10 @@ _CHECKS = (
      "Section 01 shows 'Residency: <value>' in grey."),
     ("vocab.info_type", WARN, "vocabulary",
      "identification InfoType other than EmiratesId / Passport",
-     "Section 01 has tiles for those two only; check_report will FAIL if the "
-     "value never reaches the page."),
+     "Section 01 has tiles for those two only. DrivingLicense is left off the "
+     "page by decision and check_report skips it, so for that type this is "
+     "informational. Any other type is new vocabulary and needs a decision "
+     "on where it shows."),
     ("vocab.provider", INFO, "vocabulary",
      "Provider codes not in config/providers.json",
      "providers.json is a stub by decision; codes show as names."),

@@ -1,8 +1,13 @@
-"""Hallucination guards for the brief.
+"""Hallucination guards for the AI analysis.
 
 The model's output is treated the way the loader treats the payload: nothing
-reaches the page unchecked. Guards run in order and a failing finding is
+reaches the page unchecked. Guards run in order and a failing item is
 DROPPED, never repaired -- a repaired claim is a claim nobody wrote.
+
+validate() is the lens block's validator; the toolkit it is built from
+(numbers, entities, vouch, prose, resolve_cites, capped, strip_fact_refs) is
+public so every block validator (aecb/brief/blocks/) holds its output to the
+same guards.
 
 Guards:
     1. shape        -- the schema is enforced at decode time by Ollama, but
@@ -38,11 +43,17 @@ from decimal import Decimal, InvalidOperation
 
 _SEVERITIES = ("severe", "adverse", "watch", "info")
 _CONFIDENCES = ("low", "medium", "high")
+_FRAMINGS = ("story", "capacity_vs_behaviour", "who_gets_paid", "intent",
+             "absence")
+# A finding resting ONLY on refuted hypotheses is capped here.
+_REFUTED = "not_supported"
+_REFUTED_CAP = "watch"
 
-# At most this many findings render; the rail is a brief, not a second report.
+# At most this many findings render; the analysis is a reading, not a second report.
 _MAX_FINDINGS = 10
 _MAX_UNKNOWNS = 5
 _MAX_BACKGROUND = 3
+_MAX_OBSERVATIONS = 3
 
 _NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
@@ -99,13 +110,14 @@ def _strip_fact_refs(text) -> str:
     return cleaned.strip()
 
 
-def _entities(text) -> set:
+def _entities(text, allow=()) -> set:
     """Proper-noun-looking tokens that must be vouched for by a fact.
 
     The first alphabetical word of each sentence is exempt -- English
     capitalises it whether or not it names anything -- and so is the
-    allowlist. Possessives are stripped ('Telecom's' -> 'telecom') before
-    matching.
+    allowlist (plus any block-specific `allow` words, such as the register's
+    sector vocabulary for the risk block). Possessives are stripped
+    ('Telecom's' -> 'telecom') before matching.
     """
     out = set()
     for sentence in re.split(r"[.!?]+\s*", text or ""):
@@ -119,7 +131,7 @@ def _entities(text) -> set:
         for word in words:
             token = word.rstrip("s'’").lower() if word.endswith(("'s", "’s")) \
                 else word.lower()
-            if token not in _ENTITY_ALLOWLIST:
+            if token not in _ENTITY_ALLOWLIST and token not in allow:
                 out.add(token)
     return out
 
@@ -133,10 +145,10 @@ def _mentions(haystack: str, token: str) -> bool:
     return re.search(r"\b%s(?:s|es)?\b" % re.escape(token), haystack) is not None
 
 
-def _unvouched(text, source_text) -> list:
+def _unvouched(text, source_text, allow=()) -> list:
     """Entities in `text` that `source_text` never mentions."""
     haystack = (source_text or "").lower()
-    return sorted(t for t in _entities(text) if not _mentions(haystack, t))
+    return sorted(t for t in _entities(text, allow) if not _mentions(haystack, t))
 
 
 # Drop reasons per channel. The wording is part of the contract: the reasons
@@ -163,6 +175,12 @@ _UNKNOWN_MSG = {
     "figures": "unknown carries figures not in the digest: %s",
     "names": "unknown carries names not in the digest: %s",
 }
+_OBSERVATION_MSG = {
+    "empty": "empty observation",
+    "only_refs": "observation was only fact references",
+    "figures": "observation carries figures not in the tables: %s",
+    "names": "observation carries names not in the tables: %s",
+}
 
 
 def _prose(value, msg):
@@ -175,23 +193,42 @@ def _prose(value, msg):
     return text, ""
 
 
+def coerce_cite(cite, facts_by_id) -> str:
+    """A cite as an id: the id itself, or the ONE fact whose text the model
+    quoted instead of its id.
+
+    gpt-oss has filled "cites" with the fact's wording rather than its id
+    (two runs in three, on gpt-oss:20b). That is still the model's own
+    evidence, so a quote that matches exactly one fact's text -- as a
+    whole, or as a substring of it -- resolves to that fact. Anything
+    ambiguous or unmatched is returned unchanged and fails the cite check.
+    """
+    cite = str(cite).strip()
+    if cite in facts_by_id or len(cite) < 12:
+        return cite
+    needle = cite.lower().rstrip(".")
+    hits = [fid for fid, fact in facts_by_id.items()
+            if needle in fact["text"].lower()]
+    return hits[0] if len(hits) == 1 else cite
+
+
 def _resolve_cites(cites, facts_by_id, msg):
     """(cleaned cite list, '') or (None, drop reason)."""
     if not isinstance(cites, list) or not cites:
         return None, msg["no_cites"]
-    cites = [str(c).strip() for c in cites]
+    cites = [coerce_cite(c, facts_by_id) for c in cites]
     missing = [c for c in cites if c not in facts_by_id]
     if missing:
         return None, msg["unknown_cites"] % ", ".join(missing)
     return cites, ""
 
 
-def _vouch(text, source_text, msg) -> str:
+def _vouch(text, source_text, msg, allow=()) -> str:
     """'' when every figure and name in `text` is in `source_text`; else why."""
     invented = _numbers(text) - _numbers(source_text)
     if invented:
         return msg["figures"] % ", ".join(sorted(invented))
-    unvouched = _unvouched(text, source_text)
+    unvouched = _unvouched(text, source_text, allow)
     if unvouched:
         return msg["names"] % ", ".join(unvouched)
     return ""
@@ -226,21 +263,40 @@ def _clean_finding(raw, facts_by_id):
 
     action = raw.get("suggested_action")
     action = _strip_fact_refs(action) if isinstance(action, str) else ""
-    reason = _vouch(claim + " " + action, _cited_text(cites, facts_by_id),
-                    _FINDING_MSG)
+    so_what = raw.get("so_what")
+    so_what = _strip_fact_refs(so_what) if isinstance(so_what, str) else ""
+    reason = _vouch(" ".join((claim, action, so_what)),
+                    _cited_text(cites, facts_by_id), _FINDING_MSG)
     if reason:
         return None, reason
 
+    severity, capped = _cap_refuted(severity, cites, facts_by_id)
+    framing = raw.get("framing")
     # The verify-at pointer comes from the facts, never the model. Cited facts
     # can span sections; the first cite is the finding's primary evidence.
     return {
         "claim": claim.strip(),
+        "so_what": so_what.strip(),
         "severity": severity,
         "confidence": confidence,
+        "framing": framing if framing in _FRAMINGS else "",
         "cites": cites,
         "suggested_action": action,
         "section": facts_by_id[cites[0]]["section"],
+        "capped": capped,
     }, ""
+
+
+def _cap_refuted(severity, cites, facts_by_id):
+    """(severity, note): a finding whose every cite is a refuted hypothesis
+    is at most _REFUTED_CAP. The text stands; only the severity is held
+    down, and the cap is recorded with the drop reasons so it is visible."""
+    statuses = [facts_by_id[c].get("status") for c in cites]
+    if all(status == _REFUTED for status in statuses) and \
+            _SEVERITIES.index(severity) < _SEVERITIES.index(_REFUTED_CAP):
+        return _REFUTED_CAP, ("severity capped at %s: the finding rests only "
+                              "on refuted hypotheses" % _REFUTED_CAP)
+    return severity, ""
 
 
 def _clean_note(raw, facts_by_id):
@@ -322,6 +378,9 @@ def validate(raw_output, facts):
         if finding is None:
             dropped.append(reason)
             continue
+        note = finding.pop("capped")
+        if note:
+            dropped.append(note)
         # Two findings over the same cite set are one finding said twice.
         cite_set = frozenset(finding["cites"])
         if cite_set in seen_cite_sets:
@@ -339,23 +398,62 @@ def validate(raw_output, facts):
     return findings, background, unknowns, dropped
 
 
-def validate_synthesis(text, findings) -> str:
-    """The synthesis line, or '' when it cannot be vouched for.
+_ALIAS_RE = re.compile(r"\bK\d{1,2}\b")
 
-    The synthesis pass reads only validated findings, and this check holds it
-    to that: every figure and name in the sentence must already appear in a
-    finding. A synthesis that fails simply does not render -- the brief is
-    complete without it, so there is nothing to repair and nobody to warn.
+
+def _resolve_aliases(text, labels) -> str:
+    """Contract aliases (K1, K2 ...) replaced by the labels they stand for.
+
+    `labels` maps an alias to (label, contract id). The alias is a handle
+    Python minted for the tables; the underwriter never sees the tables, so
+    an alias in prose would name nothing. This is resolution of our own
+    identifier, like a cite id to its fact -- not a repair of the model's
+    content. Where the model already wrote the contract id right after the
+    alias ("K1 Credit Card C418..."), the alias is simply removed rather
+    than doubled. An alias outside the tables stays as it is and reads as
+    what it is: unresolved.
     """
-    if not isinstance(text, str) or not text.strip():
-        return ""
-    text = _strip_fact_refs(text)
-    if not text:
-        return ""
-    source = " ".join(f["claim"] + " " + f.get("suggested_action", "")
-                      for f in findings)
-    if _numbers(text) - _numbers(source):
-        return ""
-    if _unvouched(text, source):
-        return ""
-    return text.strip()
+    def resolve(match):
+        entry = labels.get(match.group(0))
+        if entry is None:
+            return match.group(0)
+        label, contract_id = entry
+        following = text[match.end():match.end() + 80]
+        if contract_id and contract_id in following:
+            return ""
+        return label
+    resolved = _ALIAS_RE.sub(resolve, text)
+    return re.sub(r"\s{2,}", " ", resolved).strip()
+
+
+def validate_observations(texts, source_text, labels=None):
+    """(observations, drop reasons): the model's custom hypotheses, vouched
+    against the text they were proposed from -- the raw tables and the
+    headline index, plus the labels the contract aliases resolve to --
+    never against the digest. They render apart as
+    unverified: figures and names must still be real, but nothing has been
+    tested, so they are never findings and never reach the memo."""
+    out, seen, dropped = [], set(), []
+    for raw in texts or []:
+        text, reason = _prose(raw, _OBSERVATION_MSG)
+        text = _resolve_aliases(text, labels or {})
+        reason = reason or _vouch(text, source_text, _OBSERVATION_MSG)
+        if not reason and text.lower() in seen:
+            reason = "duplicate observation"
+        if reason:
+            dropped.append(reason)
+            continue
+        seen.add(text.lower())
+        out.append(text.strip())
+    return _capped(out, _MAX_OBSERVATIONS, "observation", dropped), dropped
+
+
+# The public toolkit for the other block validators.
+numbers = _numbers
+unvouched = _unvouched
+vouch = _vouch
+prose = _prose
+resolve_cites = _resolve_cites
+capped = _capped
+strip_fact_refs = _strip_fact_refs
+cited_text = _cited_text

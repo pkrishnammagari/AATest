@@ -450,8 +450,8 @@ def _income_reason(model) -> str:
 
     In the spans state a usable figure can only be undated (usable + any date
     = plottable), so the first branch cannot coexist with a drawable point.
-    Order matters: a usable-but-undated figure beside a placeholder used to
-    fall into the placeholder sentence, which then claimed every figure was
+    Order matters: a usable-but-undated figure beside a placeholder must not
+    fall into the placeholder sentence, which would claim every figure was
     below the floor while a real one sat in the tray beneath it.
     """
     if any(r.income_usable for r in model["records"]):
@@ -504,9 +504,9 @@ def _records(model) -> str:
 
 def _employer(model, rec) -> str:
     # Exactly one row can be Current -- the newest start among the unfinished
-    # jobs. Previously every row without a '(Historical)' name claimed it, which
-    # put "Current" on employers whose own DateOfTermination was printed beside
-    # it. An ongoing job that simply is not the newest gets NO badge: the bureau
+    # jobs. Letting every row without a '(Historical)' name claim it would put
+    # "Current" on employers whose own DateOfTermination is printed beside it.
+    # An ongoing job that simply is not the newest gets NO badge: the bureau
     # reported no end date, so calling it prior would be an inference, and it is
     # not the current one either. Neither claim is made.
     if rec is model["current"]:

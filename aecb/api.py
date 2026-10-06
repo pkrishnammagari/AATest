@@ -1,4 +1,4 @@
-"""Bureau-report API client -- the live source app_api.py renders from.
+"""Bureau-report API client -- the live source app.py renders from.
 
 Stdlib only: the deployment is air-gapped and requirements.txt is
 deliberately one line long. The endpoint is an internal host configured in

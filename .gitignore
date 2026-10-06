@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 
-# Built by scripts/build_wheels.sh -- ~103 MB of binary wheels, rebuild rather
+# Built by deploy/build_wheels.sh -- ~103 MB of binary wheels, rebuild rather
 # than commit.
 wheels/
 wheels.tgz
@@ -14,9 +14,16 @@ assets/fonts/*.woff2
 
 .DS_Store
 node_modules/
-aecb_api.log
 
-# Live API captures written by app_api.py via aecb/archive.py -- real bureau
+# Local tool settings, test and coverage output, release archives
+# (deploy/make_release.sh writes them in the repository root).
+.claude/
+.coverage
+coverage.xml
+aecb-analyzer-*.tar.gz
+aecb-analyzer-*.tar.gz.sha256
+
+# Live API captures written by app.py via aecb/archive.py -- real bureau
 # data, never commit. The anonymized fixtures at ReferenceJSON/ top level ARE
 # committed.
 ReferenceJSON/api_responses/

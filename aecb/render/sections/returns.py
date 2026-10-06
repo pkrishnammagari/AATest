@@ -55,14 +55,12 @@ _R = 9                 # marker radius
 # .rec (padding + .rec-t head), .rec-item (one return), .rec-list (the gap) --
 # and were measured against it; if those rules change, these follow.
 #
-# They are now measured in the FLUID state. report.css grows .rec-t, .rec-meta
-# and .ret-amt with the page, so a tile is taller with the brief rail closed
-# than with it open, and these are the closed values because closed is how the
-# page loads -- the same rule _COL_W follows below. Re-measure, do not reason:
-# render, then read .rec's rendered height and .rec-item's, at 1560 with the
-# rail closed. _TILE_ENTRY is .rec-item's height PLUS its 7px margin-top;
-# _TILE_BASE is .rec's height minus one entry. They were 37/57 before the
-# fluid scale and measured 38.7/61.6 after it.
+# They are measured in the FLUID state: report.css grows .rec-t, .rec-meta and
+# .ret-amt with the page, so these are the values at the 1560 design viewport
+# in the layout the page loads in (body.rail-off). Re-measure, do not reason:
+# render, then read .rec's rendered height and .rec-item's, at 1560.
+# _TILE_ENTRY is .rec-item's height PLUS its 7px margin-top; _TILE_BASE is
+# .rec's height minus one entry (measured 38.7 and 61.6).
 _TILE_BASE = 39        # a tile with no entries, i.e. a .rec-none statement
 _TILE_ENTRY = 62       # one .rec-item inside a tile
 _TILE_GAP = 8          # .rec-list gap between tiles
@@ -71,21 +69,18 @@ _TILE_GAP = 8          # .rec-list gap between tiles
 # a 520-unit viewBox. Converting through it makes the chart and the tiles end
 # level there.
 #
-# It tracks the state the page LOADS in, which is the brief rail closed (see
-# the comment on <body> in render/page.py). It was 503.0 while the rail loaded
-# open; if that default is ever changed back, this has to move with it, and the
-# way to get the new number is to measure .inc-vis's content width rather than
-# to reason about it.
+# It tracks the layout the page loads in (see the comment on <body> in
+# render/page.py). If that layout changes, measure .inc-vis's content width
+# rather than reasoning about it.
 #
 # It is a design width, not a measurement of the live column, and cannot be
 # anything else: the SVG is static, so the width it will be rendered at is not
-# knowable here. Opening the brief rail narrows this half to about 503px and
-# the chart then scales down and stops short of the tile block. The two halves
-# still END level -- .inc-split stretches both cells to the row -- so what shows
-# is a short tail on one side, not a misalignment. Making it exact in both
-# states would mean generating the chart at runtime, which would move the
-# drawing out of Python and away from the payload decisions it is built from.
-# Not worth that trade.
+# knowable here. At other widths the chart scales and may stop short of the
+# tile block; the two halves still END level -- .inc-split stretches both
+# cells to the row -- so what shows is a short tail on one side, not a
+# misalignment. Making it exact at every width would mean generating the
+# chart at runtime, which would move the drawing out of Python and away from
+# the payload decisions it is built from.
 _COL_W = 706.0
 
 _TONE_FILL = {"red": "red", "amber": "amber", "neutral": "ink-3"}

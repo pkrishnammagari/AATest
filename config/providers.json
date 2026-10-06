@@ -8,10 +8,13 @@
     "names left as the code itself. Fill in `name` as the real registry becomes",
     "available. Unknown codes degrade gracefully: ReportContext.provider() falls",
     "back to the raw code and infers `kind` from the prefix (T## telecom,",
-    "otherwise bank), so nothing blanks out.",
+    "N## non-bank lender, otherwise bank), so nothing blanks out.",
     "",
-    "kind drives the badge style: 'bank' | 'tel' | 'onus'.",
-    "Set kind='onus' for Finance House's own code so our facilities are marked."
+    "kind drives the badge style and the AI Analysis's provider-kind lenses:",
+    "'bank' | 'tel' | 'nbfi' | 'onus'. Set kind='onus' for Finance House's own",
+    "code so our facilities are marked; 'nbfi' for non-bank lenders (the",
+    "payment-waterfall and non-bank-reliance lenses group by it; a change here",
+    "is under docs/AI_ANALYSIS_MRM.md change control)."
   ],
   "providers": {
     "B01": {"name": "B01", "kind": "bank"},
@@ -23,6 +26,7 @@
     "B10": {"name": "B10", "kind": "bank"},
     "B12": {"name": "B12", "kind": "bank"},
     "T03": {"name": "T03", "kind": "tel"},
-    "T05": {"name": "T05", "kind": "tel"}
+    "T05": {"name": "T05", "kind": "tel"},
+    "N01": {"name": "N01", "kind": "nbfi"}
   }
 }

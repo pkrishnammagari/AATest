@@ -4,7 +4,7 @@
 
 The third argument lists the sections you MEANT to change (ids as rendered:
 s1..s8, matching the displayed numbers 01..08). Everything else must be
-identical in BOTH rail states -- that is the whole assertion. What changed
+identical in every layout state -- that is the whole assertion. What changed
 inside the named sections is reported, not judged.
 
 Exits non-zero on any violation, so it can gate a change.
@@ -59,6 +59,14 @@ def by_section(capture):
     return out
 
 
+def _scope_order(scope):
+    """Sections by number first (s1, s2, ...), then the other scopes
+    ('-' for outside any section, 'analysis' for the AI view) by name."""
+    if scope.startswith("s") and scope[1:].isdigit():
+        return (0, int(scope[1:]), "")
+    return (1, 0, scope)
+
+
 def differs(before, after, ignore_height=False):
     moved = [i for i in RENDERED if before[i] != after[i]]
     if ignore_height:
@@ -67,10 +75,9 @@ def differs(before, after, ignore_height=False):
 
 
 def _compare_run(state, width, before, after, changed, fails, moved_props):
-    """All assertions for one (rail state, width) capture pair.
+    """All assertions for one (layout state, width) capture pair.
 
-    Returns how many elements were compared. A pure extraction from main() --
-    same checks, same order.
+    Returns how many elements were compared.
     """
     compared = 0
 
@@ -112,8 +119,8 @@ def _compare_run(state, width, before, after, changed, fails, moved_props):
 
     # --- nothing may clip or overflow WORSE than before ---------------------
     # Several elements legitimately overflow their box via absolutely
-    # positioned ::after tooltips (.hint, .spine-dot, .ss-marker,
-    # .tv-meter) and always did. Only a regression is a finding.
+    # positioned ::after tooltips (.hint, .spine-dot, .tv-meter). Only a
+    # regression is a finding.
     if after["meta"]["overflowX"] and not before["meta"]["overflowX"]:
         fails.append("OVERFLOW %s@%d: the page now scrolls horizontally"
                      % (state, width))
@@ -147,20 +154,17 @@ def main() -> int:
 
     # --- report ---------------------------------------------------------
     print("=" * 72)
-    b1560 = load(before_dir, "railoff", 1560)
-    a1560 = load(after_dir, "railoff", 1560)
-    print("Section heights at 1560 (rail closed / rail open):")
+    b1560 = load(before_dir, "report", 1560)
+    a1560 = load(after_dir, "report", 1560)
+    print("Section heights at 1560:")
     bo, ao = b1560["meta"]["sections"], a1560["meta"]["sections"]
-    bn = load(before_dir, "railon", 1560)["meta"]["sections"]
-    an = load(after_dir, "railon", 1560)["meta"]["sections"]
     for sid in sorted(set(ao), key=lambda s: int(s[1:])):
         mark = "  <- changed" if sid in changed else ""
-        arrow = "" if (bo.get(sid) == ao.get(sid) and bn.get(sid) == an.get(sid)) else \
-                "   was %s / %s" % (bo.get(sid), bn.get(sid))
-        print("   %-16s %4s / %-4s%s%s"
-              % (SECTION_NAME.get(sid, sid), ao.get(sid), an.get(sid), arrow, mark))
+        arrow = "" if bo.get(sid) == ao.get(sid) else "   was %s" % bo.get(sid)
+        print("   %-16s %4s%s%s"
+              % (SECTION_NAME.get(sid, sid), ao.get(sid), arrow, mark))
 
-    print("\nReturns (§05) mirror witnesses at 1560, rail closed")
+    print("\nReturns (§05) mirror witnesses at 1560")
     print("   (sections/returns.py _TILE_BASE/_TILE_ENTRY/_TILE_GAP/_COL_W track these):")
     for sel in MIRRORS:
         rb, ra = b1560["watch"].get(sel), a1560["watch"].get(sel)
@@ -172,7 +176,7 @@ def main() -> int:
 
     if moved_props:
         print("\nWhat moved inside the sections you named:")
-        for sid in sorted(moved_props, key=lambda s: int(s[1:])):
+        for sid in sorted(moved_props, key=_scope_order):
             print("   %-16s %s" % (SECTION_NAME.get(sid, sid),
                                    ", ".join(sorted(moved_props[sid]))))
 

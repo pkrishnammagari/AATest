@@ -1,13 +1,13 @@
-"""Per-section rail-closed vs rail-open comparison images, for visual review.
+"""Per-section images of the report, for visual review.
 
     .venv/bin/python scripts/measure/shots.py            # every section
     .venv/bin/python scripts/measure/shots.py s1 s2      # just these
 
-Writes one PNG per section into the work area, each stacking the two rail
-states with the report column width and section height labelled. Computed
-styles can be right while the page still looks wrong -- a specificity slip once
-left a tile a quarter of its intended width with every font-size in the vector
-still correct. Look at the pictures.
+Writes one PNG per section into the work area, with the report column width
+and section height labelled. Computed styles can be right while the page still
+looks wrong -- a specificity slip can leave a tile a fraction of its intended
+width with every font-size in the vector still correct -- so look at the
+images.
 
 Python 3.9 compatible. Needs Pillow (a dev-only dependency, deliberately not in
 requirements.txt, which is the air-gapped runtime bundle).
@@ -70,7 +70,7 @@ def main() -> int:
     wanted = set(sys.argv[1:])
     outdir = paths.work("shots")
     html = paths.render()
-    variants = paths.rail_variants(html)
+    variants = paths.variants(html)
 
     meta, full = {}, {}
     for state, doc in variants.items():
@@ -94,8 +94,7 @@ def main() -> int:
             continue
         pair = by_id[sid]
         crops, labels = [], []
-        for state, caption in (("railoff", "RAIL CLOSED  —  default on load"),
-                               ("railon", "RAIL OPEN  —  brief panel showing")):
+        for state, caption in (("report", "REPORT  —  default on load"),):
             s = pair[state]
             image = full[state]
             crops.append(image.crop(
@@ -108,7 +107,7 @@ def main() -> int:
         height = PAD + sum(HDR + c.height for c in crops) + GAP + PAD
         canvas = Image.new("RGB", (width, height), "#FFFFFF")
         draw = ImageDraw.Draw(canvas)
-        title = "%s  %s" % (pair["railoff"]["no"], pair["railoff"]["title"])
+        title = "%s  %s" % (pair["report"]["no"], pair["report"]["title"])
         y = PAD
         for i, crop in enumerate(crops):
             if i == 0:
@@ -123,8 +122,8 @@ def main() -> int:
                            outline="#DCE2E9")
             y += crop.height + (GAP if i == 0 else 0)
 
-        slug = re.sub(r"[^a-z0-9]+", "-", pair["railoff"]["title"].lower()).strip("-")
-        name = os.path.join(outdir, "%s_%s.png" % (pair["railoff"]["no"], slug[:28]))
+        slug = re.sub(r"[^a-z0-9]+", "-", pair["report"]["title"].lower()).strip("-")
+        name = os.path.join(outdir, "%s_%s.png" % (pair["report"]["no"], slug[:28]))
         canvas.save(name)
         made.append(name)
         print("  %-46s %dx%d" % (os.path.basename(name), canvas.width, canvas.height))

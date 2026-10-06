@@ -22,6 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from aecb import context, dates               # noqa: E402
+from aecb.coerce import number                # noqa: E402
 from aecb.derive import identity as derive_identity  # noqa: E402
 from aecb.derive import scoring               # noqa: E402
 from aecb.render.components import esc        # noqa: E402
@@ -73,8 +74,8 @@ def check(path):
 def check_page(ctx, raw):
     """Every assertion below, against an already-rendered page.
 
-    Split out of check() so scripts/check_corpus.py can run the same gate on
-    each archived API payload without rendering it twice.
+    Separate from check() so scripts/check_corpus.py can run the same gate
+    on each archived API payload without rendering it twice.
     """
     html = strip_noise(raw)
 
@@ -108,8 +109,8 @@ def check_page(ctx, raw):
                         "surfaced in section 01" % variant)
 
     # The bureau subject id must be VISIBLE, in section 01's traits line --
-    # not merely present in <title>, which Streamlit never shows (it used to
-    # satisfy a bare substring check on its own).
+    # not merely present in <title>, which Streamlit never shows (a bare
+    # substring check would pass on the <title> alone).
     cb_id = ctx.cb_subject_id
     if cb_id and ('<b class="mono id-subj">%s</b>' % cb_id) not in html:
         problems.append("payload value missing from page: CB subject id in "
@@ -125,8 +126,14 @@ def check_page(ctx, raw):
     # Every delivered identification value must reach the page -- the newest
     # current one as the tile headline, everything else (superseded values AND
     # surplus current ones) inside the expander. Dropping one is information
-    # loss the page would never reveal (decision, 8 Sep 2026).
+    # loss the page would never reveal. The one exception is DrivingLicense,
+    # which section 01 leaves off by decision: only that exact base type is
+    # skipped, so any other new InfoType still fails here until someone
+    # decides where it shows.
     for row in ctx.rows("identification"):
+        if derive_identity.base_type(
+                row.get("InfoType")).lower() == "drivinglicense":
+            continue
         info = row.get("Info")
         if info and not _on_page(info, html):
             problems.append("payload value missing from page: identification "
@@ -149,10 +156,12 @@ def check_page(ctx, raw):
                         "but the page shows no 'Address not provided' entry")
 
     # Likewise every mobile number, landline (Phone Number, in the Phone
-    # tile's landline fold since 24 Sep 2026) and e-mail.
+    # tile's landline fold), additional mobile (in the Phone tile's
+    # "N additional" fold) and e-mail.
     for row in ctx.rows("contacts"):
         base = derive_identity.base_type(row.get("ContactType")).lower()
-        if base not in ("mobile number", "phone number", "e-mail"):
+        if base not in ("mobile number", "phone number",
+                        "additional mobile number", "e-mail"):
             continue
         value = row.get("Contact")
         if value and not _on_page(value, html):
@@ -173,7 +182,7 @@ def check_page(ctx, raw):
                             "(%r, reported by %s)" % (shown, row.get("ProviderNo")))
 
     # And every other-income amount (incomes), with or without a Source -- a
-    # sourceless row was once dropped whole.
+    # sourceless row must not be dropped whole.
     for row in ctx.rows("incomes"):
         amount = row.get("GrossAnnualIncome")
         if amount is None:
@@ -246,7 +255,7 @@ def check_page(ctx, raw):
         problems.append("top bar does not state that the enquiry scope is "
                         "unreported")
 
-    # ctx.report_date is the enquiry ladder (decision, 10 Sep 2026): the
+    # ctx.report_date is the enquiry ladder, by decision: the
     # latest-dated sectionStatus row's 'Last EnquiryDate', else
     # score.DataPullDate. Recomputed above from the raw arrays -- not via
     # ctx.report_date -- so a regression in context.py cannot certify itself.
@@ -319,6 +328,14 @@ def check_page(ctx, raw):
                                   raw, flags=re.S)]
     delay = _values_in("wsx-sub", raw)
     util = _values_in("fac-util-h", raw)
+    # A delivered utilisation that is not a number ("NC") carries no unit on
+    # the page and no fill bar: a bar would fabricate a percentage.
+    util_raw = ctx.totals.get("CreditUtilizationRate")
+    util_numeric = number(util_raw) is not None
+    if util_raw is not None and not util_numeric \
+            and '<div class="fac-util-bar">' in html:
+        problems.append("§06 card utilisation %r is not a number but the page "
+                        "draws a fill bar for it" % util_raw)
 
     # Each figure is checked against the element that is supposed to carry it
     # and nowhere else. Searching the whole page would prove nothing: the
@@ -332,7 +349,7 @@ def check_page(ctx, raw):
          "§03 life-time worst status count"),
         (ctx.totals.get("MaxPaymentDelay24M"), "%s days", delay,
          "§03 24-month max payment delay"),
-        (ctx.totals.get("CreditUtilizationRate"), "%s%%", util,
+        (util_raw, "%s%%" if util_numeric else "%s", util,
          "§06 card utilisation rate"),
     ]
     for value, shape, found, label in verbatim:

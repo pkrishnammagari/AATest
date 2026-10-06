@@ -1,4 +1,4 @@
-"""Page chrome: the sticky top bar, the left spine nav, and the brief rail.
+"""Page chrome: the sticky top bar and the left spine nav.
 
 Report validity lives in the top bar rather than in a section card. It is one
 status and two dates -- a whole card was spending a screenful on a single line
@@ -18,19 +18,33 @@ from __future__ import annotations
 
 import datetime
 
-from .. import dates
+from .. import dates, runtime
 from ..derive import scoring
+from . import analysis as render_analysis
 from . import branding
-from . import brief as render_brief
 from . import components as c
 from .sections import nav_items
 
 
-_BRIEF_BUTTON = ('<button class="brief-btn" id="briefBtn">'
-                 '<span class="bb-ic">◧</span> AI Analysis</button>')
+# The top-right control per AI panel mode (aecb/runtime.py). Both visible
+# variants keep id="briefBtn", so report.js toggles the analysis view the
+# same way; the coming-soon badge is absolutely positioned and leaves the
+# button's box -- and the top bar's measured breakpoints -- exactly as the
+# live one.
+_BRIEF_BUTTONS = {
+    runtime.AI_LIVE: ('<button class="brief-btn" id="briefBtn">'
+                      '<span class="bb-ic">◧</span> AI Analysis</button>'),
+    runtime.AI_SOON: ('<button class="brief-btn soon" id="briefBtn" '
+                      'aria-label="AI Analysis (%s)">'
+                      '<span class="bb-ic">◧</span> AI Analysis'
+                      '<span class="bb-soon">%s</span></button>'
+                      % (render_analysis.SOON_BADGE.lower(),
+                         c.esc(render_analysis.SOON_BADGE))),
+    runtime.AI_OFF: "",
+}
 
 
-def topbar(ctx, ai_panel: bool = True) -> str:
+def topbar(ctx, ai_mode: str = runtime.AI_LIVE) -> str:
     return """
 <header class="topbar">
   <div class="brand">
@@ -44,7 +58,7 @@ def topbar(ctx, ai_panel: bool = True) -> str:
 </header>
 """.format(mark=branding.brand_mark(), name=branding.APP_NAME,
            validity=_validity_strip(ctx),
-           brief_button=_BRIEF_BUTTON if ai_panel else "")
+           brief_button=_BRIEF_BUTTONS[ai_mode])
 
 
 def _date_label(v) -> str:
@@ -176,8 +190,8 @@ def _validity_strip(ctx):
     # otherwise -- expired pins the marker at the far
     # end, future-dated sits at zero (scoring clamps pct to 0..100). The end
     # date always reads "Valid until" -- it is the last valid day (age ==
-    # window is still valid), so calling it the day the report "lapsed" was
-    # a day early. Only an expired report paints that date red; a
+    # window is still valid), not the day the report lapsed. Only an expired
+    # report paints that date red; a
     # future-dated one is ungradable, not lapsed, so it stays neutral.
     expired = v["state"] == "expired"
     red = v["state"] != "valid"
@@ -274,13 +288,12 @@ def _days_label(v) -> str:
 
 
 def spine() -> str:
-    """Left rail of numbered markers, one per section.
+    """Left column of numbered markers, one per section.
 
     A sticky column in the grid rather than a fixed overlay. Fixed positioning
-    pinned the rail to the iframe's own viewport, which is taller than the
-    browser window, so it drifted away from the content as the outer page
-    scrolled. Sticky keeps it in one scroll context -- the same approach the
-    brief rail on the right already uses.
+    would pin the column to the iframe's own viewport, which is taller than
+    the browser window, so it would drift away from the content as the outer
+    page scrolls. Sticky keeps it in one scroll context with the report.
 
     The number stays as the spoken reference ("look at section 6") and the
     section name slides out on hover.
@@ -294,48 +307,3 @@ def spine() -> str:
     return ('<nav class="spine" id="spine" aria-label="Report sections">'
             '<div class="spine-inner"><div class="spine-line"></div>%s</div></nav>'
             % dots)
-
-
-def rail(ctx) -> str:
-    """The underwriting brief panel.
-
-    Renders the AI brief when one is attached to the context (ctx.brief, set
-    by the Streamlit host after a validated model run -- see aecb.brief) and
-    falls back to the long-standing "no brief generated" shell when none is:
-    the target server may have no model available, and the report must not
-    carry narrative about a customer it cannot describe.
-    """
-    brief = getattr(ctx, "brief", None)
-    if brief is not None:
-        body = render_brief.body(brief)
-        foot_extra = render_brief.provenance(brief)
-    else:
-        body = """
-      <div class="rail-empty">
-        <div class="re-title">No brief generated</div>
-        <div class="re-body">
-          <p>This panel summarises the payload in narrative form and cites the
-          field behind every claim. It requires a language model, which is not
-          available on this deployment.</p>
-          <p>Read the sections directly. Every figure on this page is either
-          delivered by AECB or derived from delivered values, and derived
-          figures are marked.</p>
-        </div>
-      </div>
-"""
-        foot_extra = ""
-    return """
-  <aside class="rail" id="rail">
-    <div class="rail-head">
-      <div class="rail-ht">
-        <div class="ai-mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.9 4.5L18.5 9l-4.6 1.5L12 15l-1.9-4.5L5.5 9l4.6-1.5L12 3z" fill="#fff"/><circle cx="18" cy="17" r="2" fill="#9DDBDF"/></svg></div>
-        <div><div class="rail-title">Underwriting Brief</div><div class="rail-sub">AI reading of the bureau payload</div></div>
-        <button class="rail-x" id="railX" title="Hide">›</button>
-      </div>
-    </div>
-    <div class="rail-body">{body}</div>
-    <div class="rail-foot">{foot_extra}
-      <div class="rail-note">The brief interprets only — it never computes figures and never renders the decision. In-tenancy · model + prompt under MRM change control.</div>
-    </div>
-  </aside>
-""".format(body=body, foot_extra=foot_extra)

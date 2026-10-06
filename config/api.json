@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Bureau-report API endpoint for the app_api.py entry. The endpoint returns",
+    "Bureau-report API endpoint for app.py. The endpoint returns",
     "the AECB payload document itself for a POSTed {\"cbSubjectId\": \"...\"}.",
     "",
     "base_url is the full endpoint URL, exactly as in the integration Postman",

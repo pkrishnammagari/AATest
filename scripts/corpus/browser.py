@@ -105,9 +105,9 @@ def probe(chrome, html, timeout=90):
         with open(page, "w", encoding="utf-8") as fh:
             fh.write(_instrument(html))
         # No --user-data-dir: headless Chrome already gives every instance a
-        # throwaway profile, and an explicit one hangs it on macOS (measured
-        # 28 Sep 2026: 0.6 s without, a 40 s timeout with). Parallel
-        # instances were verified not to collide.
+        # throwaway profile, and an explicit one hangs it on macOS (measured:
+        # 0.6 s without, a 40 s timeout with). Parallel instances do not
+        # collide.
         cmd = [chrome, "--headless", "--disable-gpu", "--no-sandbox",
                "--hide-scrollbars", "--no-first-run", "--no-default-browser-check",
                "--window-size=%d,1200" % WIDTH, "--virtual-time-budget=6000",

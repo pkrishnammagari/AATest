@@ -1,36 +1,71 @@
 {
   "_comment": [
-    "Curated macro / market context for the AI underwriting brief.",
+    "Curated macro / market context for the AI Analysis (the context register).",
     "",
     "This file is OPTIONAL and unlike every other config it degrades",
-    "silently: when it is absent the brief simply runs without macro",
+    "silently: when it is absent the analysis simply runs without macro",
     "context. It is the only channel through which anything time-sensitive",
     "reaches the model on an air-gapped deployment -- the model's own",
     "knowledge is frozen at its training cutoff and is never allowed to",
     "supply current conditions.",
     "",
     "Rules for maintainers (this file is under the same MRM change control",
-    "as the prompt in aecb/brief/prompt.py):",
+    "as the prompts in aecb/brief/prompts/):",
     "  - every entry must hold true AS OF the as_of date below; update",
     "    as_of whenever entries are reviewed, even if unchanged",
     "  - entries are short, factual and generic -- no issuer-specific or",
     "    customer-specific content, no forecasts",
-    "  - the brief renders these as background context with the as_of date",
-    "    attached; they never carry severity and never cite the payload"
+    "  - the analysis renders these as background context with the as_of date",
+    "    attached; they never carry severity and never cite the payload",
+    "",
+    "`owner` and `review_cadence` name who keeps this file current and how",
+    "often; `sectors` is the closed vocabulary the AI Analysis's risk block",
+    "may use when it INFERS an employer's sector from the employer name",
+    "(always labelled 'inferred, verify'); `register`",
+    "entries are dated, topic-tagged context (sectors under stress, rate",
+    "direction, regulatory caps, salary-flow risks) and join the background",
+    "facts -- the only channel. The model's own macro knowledge stays",
+    "forbidden."
   ],
   "as_of": "2026-08",
-  "facts": [
+  "owner": "to be named (model owner)",
+  "review_cadence": "quarterly",
+  "sectors": {
+    "telecom": "Telecommunications",
+    "construction": "Construction and contracting",
+    "government": "Government and government-related",
+    "banking": "Banking and finance",
+    "hospitality": "Hospitality and tourism",
+    "retail": "Retail trade",
+    "real_estate": "Real estate",
+    "logistics": "Transport and logistics",
+    "oil_gas": "Oil, gas and energy",
+    "healthcare": "Healthcare",
+    "education": "Education",
+    "aviation": "Aviation",
+    "other": "Other or not inferable"
+  },
+  "register": [
     {
-      "topic": "rates",
-      "text": "UAE retail lending is predominantly variable-rate priced off EIBOR; the repayment burden on variable-rate facilities moves with the rate environment, so long-tenor exposure opened in a low-rate period can carry payment shock later."
+      "topic": "sectors_under_stress",
+      "text": "Sectors whose income is project-cyclical or demand-sensitive carry more salary-interruption risk than salaried government or banking employment; construction and contracting, hospitality and tourism and retail trade are the sectors to read with that caution.",
+      "sectors": [
+        "construction",
+        "hospitality",
+        "retail"
+      ]
     },
     {
-      "topic": "regulation",
-      "text": "Central Bank of the UAE retail lending rules cap the debt burden ratio at 50% of gross salary and personal loans at 20 times salary; facilities granted near these ceilings leave little absorption room."
+      "topic": "rate_direction",
+      "text": "Retail lending is predominantly variable-rate priced off EIBOR; a borrower with long-tenor variable-rate exposure carries payment-shock risk if rates move up, and relief if they move down. No forecast is made here."
     },
     {
-      "topic": "sectors",
-      "text": "Income stability differs structurally by sector in the UAE: government and government-related employment is salaried and comparatively stable; construction and contracting income is project-cyclical; hospitality and retail trade are seasonal and demand-sensitive."
+      "topic": "caps",
+      "text": "Central Bank of the UAE retail rules cap the debt burden ratio at 50% of gross salary, personal loans at 20 times salary with a 48-month tenor, and auto loans at 80% of the vehicle value; facilities granted near these ceilings leave little absorption room."
+    },
+    {
+      "topic": "salary_flow",
+      "text": "Salary-transfer repayment is deducted at source, so a delay on a salary-transfer facility is consistent with the salary stopping or moving; an employer change or a termination near such a delay is the first thing to verify."
     }
   ]
 }

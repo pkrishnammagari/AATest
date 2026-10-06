@@ -12,7 +12,7 @@ import pytest
 
 from conftest import ROOT
 
-_SHIPPED = ["app_api.py"] + [
+_SHIPPED = ["app.py"] + [
     os.path.relpath(os.path.join(folder, name), ROOT)
     for folder, _dirs, files in os.walk(os.path.join(ROOT, "aecb"))
     for name in files if name.endswith(".py")]

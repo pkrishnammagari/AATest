@@ -58,9 +58,10 @@ problem:
 - missing or unordered severity cut-offs;
 - a score scale or band list that is not ordered;
 - an unknown band tone.
-*Rationale:* a silently empty or defaulted configuration once rendered every
-status as clean. A defaulted policy value produces a plausible report whose
-policy has quietly gone.
+
+*Rationale:* a silently empty or defaulted configuration renders every status
+as clean. A defaulted policy value produces a plausible report whose policy
+has quietly gone.
 
 **GEN-7 Unknown vocabulary is shown, never guessed.**
 *Decision:* statuses, phases, roles, frequencies, severities and providers that
@@ -76,8 +77,9 @@ configuration entry, not a code default.
 - Flags have three states: true/1/Y/yes/T means yes, false/0/N/no/F means
   no, and anything else means not reported.
 
-*Rationale:* before this module, the report and the AI digest could read the
-same field differently, and `"N"` was read as a raised dispute.
+*Rationale:* the report and the AI Analysis's fact digest must read the same
+field the same way, and `"N"` must never read as a raised dispute. One module
+is the only way to guarantee both.
 
 ## Payload traps (handled; do not regress)
 
@@ -85,10 +87,10 @@ same field differently, and `"N"` was read as a raised dispute.
 |---|---|---|
 | TRAP-1 | Trailing spaces on enum values (`"Requested "`, `"E-mail "`) | Loader strips every string. An empty string becomes null. |
 | TRAP-2 | `ContractCategory` is a letter in `contracts` but a phrase in `contractsSummary` | Canonicalised to `I`/`C`/`N`/`S` |
-| TRAP-3 | Superseded values are marked by a `(Historical)` suffix on the type string, not by a flag | Suffix split off. Current vs historical is decided per provider (ID-2). |
+| TRAP-3 | Values that are no longer current are marked by a `(Historical)` suffix on the type string, not by a flag | Suffix split off. Current vs historical is decided per provider (ID-2). |
 | TRAP-4 | Rows repeat once per reporting provider, not once per fact | Rows deduplicated by value, keeping the set of providers |
 | TRAP-5 | Three date formats: ISO, `25 July 2016`, DDMMYY | One parser. Two-digit years are read as 20xx. |
-| TRAP-6 | Contract status arrives as display text (`Active Payments`), not a code | A reverse map from label to code. An unmatched status becomes `?`, never an invented letter. |
+| TRAP-6 | Contract status arrives as display text (`Active Payments`), not a code, and not always spelled as AECB's table (`Write Off` for `Write-off`) | A reverse map from label to code that ignores hyphens, spacing and case. An unmatched status becomes `?`, never an invented letter. |
 | TRAP-7 | `ClosedDate` on an **active** instalment is the scheduled maturity date | Closure is decided by `ActiveFlag` alone |
 | TRAP-8 | `contractsHistory` is sparse (most contracts have a few months) | Unreported months render grey, as "not reported" |
 | TRAP-9 | `WorstStatus24M` exists in two arrays with two vocabularies (display text in `contractsTotalSummary`, letter code in `summary`) | §03 shows `contractsTotalSummary`. `summary`'s value only raises an amber `!` when it names a different status. |
@@ -166,7 +168,9 @@ guesswork.**
 *Decision:* a leading `00`, `971` and a single `0` are removed, and a UAE
 mobile (nine digits starting with 5) is keyed as `971…`. Any other value keys
 on its exact digits and carries a "not a valid UAE mobile" note. Every
-current mobile is listed. Landlines fold inside the same Phone tile.
+current mobile is listed. Landlines fold inside the same Phone tile, and so
+do Additional Mobile Numbers, behind their own "N additional" chevron
+(grouped the same way as mobiles).
 *Rationale:* one person legitimately holds several numbers, and a merge the
 data does not support is a fabrication.
 
@@ -192,6 +196,13 @@ later may be a move away and back.
 *Decision:* the value is read with the three-state flag rules. An
 unrecognised value is shown as "Residency: *value*".
 *Rationale:* residency is a fact, not a risk signal (GEN-5).
+
+**ID-8 Driving licences are not shown.**
+*Decision:* `identification` rows whose type is `DrivingLicense` (current or
+historical) stay off the page. This is the one exception to ID-1:
+`check_report.py` skips exactly that type, so any other new `InfoType` still
+fails the gate until a decision says where it shows. The corpus harness
+lists it as an informational `vocab.info_type` warning.
 
 ## §02 Score & Bureau History
 
@@ -219,7 +230,7 @@ opinions.
 *Decision:* numeric text such as `"732"` or `"732.0"` is accepted. A value
 like `732.9` is not a score and reads "Score not reported", with the bureau's
 `ErrorDescription` when one was sent.
-*Rationale:* the old behaviour truncated such a value into a plausible score.
+*Rationale:* truncating such a value would give a plausible score.
 
 **SC-5 Layout: a half-width card with a 120° arc dial beside §03.**
 *Rationale:* the score and the worst conduct read as one risk-at-a-glance row.
@@ -359,8 +370,8 @@ severity, render neutral.
 *Decision:* the flag raises an amber `!` when it contradicts the rows.
 
 **RET-6 The archive fixture carries four injected returns.**
-*Decision:* the fixture shipped with none. Synthetic returns were added so
-that the populated paths render.
+*Decision:* the delivered file has no returns. Four synthetic returns are
+added so that the populated paths render.
 *Consequence:* replace them with a real anonymized adverse payload when one is
 available.
 
@@ -382,9 +393,12 @@ category is zero, but a non-zero total cannot be assigned to a category.
 
 **FAC-3 The utilisation line sits at card level, above the role split.**
 *Decision:* the bar fills green below 100% and full red at or above 100%.
-There is no 0/100 scale.
+There is no 0/100 scale. A value that is not a number (e.g. `NC`) is shown
+as delivered, with no % and no bar. The line also shows in an empty Credit
+cards card.
 *Rationale:* the rate has no role dimension, and the printed percentage
-already gives the scale.
+already gives the scale. It is a total-level figure, delivered even when no
+card is open, and a bar for a non-number would invent a percentage.
 
 **FAC-4 No volume counts are displayed.**
 *Decision:* `TotalNo`, `ActiveNo` and `ClosedNo` are read only to decide
@@ -535,24 +549,210 @@ client address).
 anonymized subject. The delinquent fixture is generated by
 `scripts/make_synthetic_payload.py`.
 
-## AI brief
+## AI Analysis
 
-**AI-1 The model interprets only.**
-*Decision:* the model never computes figures and never gives a decision.
-Every figure it writes must appear verbatim in a cited, deterministically
-computed fact. A failing item is dropped, never repaired.
+**AI-1 The model computes nothing, and the underwriter decides.**
+*Decision:* every figure the model writes must appear verbatim in a cited,
+deterministically computed fact or validated item; a failing item is dropped,
+never repaired. The model may state a *suggested* outcome (Approve / Approve
+with conditions / Refer / Decline) with cited drivers. It is advisory, always
+labelled "Suggested from bureau data only; policy and application context not
+applied; the underwriter decides", and **no floor or decision rule is applied
+in code**.
+*Rationale:* the analysis is an additional risk input the underwriter reads
+and weighs, not the decision mechanism. A floor is a credit-policy rule;
+policy is not connected to this tool, and a hidden rule in the model's output
+path would be a decision rule without a policy owner. The evaluation harness,
+not the runtime, asserts that the delinquent golden fixture never yields
+"Approve".
 
 **AI-2 Prohibited factors are excluded.**
 *Decision:* `Nationality`, `Gender` and `ResidentFlag` never enter the fact
-digest. A runtime check refuses the brief if one does.
+digest. A runtime check refuses the analysis if one does.
 *Rationale:* nationality and gender are impermissible underwriting factors,
 and ResidentFlag is nationality-adjacent.
 
-**AI-3 Local and opt-in.**
-*Decision:* the brief is generated on request by a model on the loopback
-address. The rail loads closed, and the report is complete without it.
+**AI-3 Opt-in, routed by environment.**
+*Decision:* the analysis is generated on request, never automatically, one
+block at a time so finished blocks show while the next runs. The view opens
+from the top-bar button; the report is complete without it. The model
+provider follows `AECB_ENV`: `dev` uses the local open-weight model (Ollama,
+loopback only); `uat` and `prod` use Core42 through its API.
+*Consequence:* the Core42 connector is a placeholder until Core42 is
+onboarded (OPEN-13). The provider map is in `aecb/brief/providers.py`;
+changing it changes where bureau-derived data goes, so it is a model change
+([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) section 7).
 
-## Deployment decisions (29 Sep 2026)
+**AI-4 The checklist is replayed by the model from step packets, with a
+tripwire audit.**
+*Decision:* the credit team's ten steps are performed by the model, which
+judges each step's status and writes the indicators, but every day count,
+expiry comparison, window test and over-limit inference is computed in
+Python and handed over as citable facts (`derive/brief_facts/steps.py`). An
+indicator may cite only its own step's facts. A step marked clear while its
+packet carries a tripwire fact is flagged "possible miss"; the model's status
+stands.
+*Rationale:* the team wants the AI to follow their process, not a rules
+engine; the packets keep its arithmetic honest and the audit makes a missed
+tripwire visible instead of silent.
+
+**AI-5 Step 2 carries the age only.**
+*Decision:* the name is not sent to the model (no subject identifier ever
+is), and nationality, gender and residency never enter any text (AI-2). The
+step states that the policy comparison is not available.
+
+**AI-6 The memo reads validated items only.**
+*Decision:* the memo and recommendation pass receives the validated findings
+and indicators of the other blocks, renumbered, plus each step's status --
+never the payload or the digest -- and its output is re-validated against
+those items. It cannot introduce a figure or a name the blocks did not carry.
+
+**AI-7 Feedback is an append-only file outside the application.**
+*Decision:* one thumbs up/down and an optional comment per analysis, written
+as JSON lines to `AECB_FEEDBACK_DIR` (0700/0600, off when unset), each
+carrying the analysis's generation id. The comment is never logged; the
+verdict is, in the audit log. Review of the file is the model owner's
+monitoring task ([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) section 8.2).
+
+**AI-8 The AI Analysis is a full-width view.**
+*Decision:* while open, the AI Analysis replaces the report (body class
+`analysis-on`), with a sticky block nav and "Verify at §N" links back into
+the report.
+*Rationale:* four blocks and a memo need the page width; hiding the report
+rather than reflowing it keeps every measured geometry unchanged.
+*Consequence:* `rail-off` stays as the layout-state class every page carries
+(`report.css` computes the fluid scale and the density step on it). Folding
+it into plain selectors is deferred and needs the geometry harness
+(OPEN-15).
+
+**AI-9 The fresh lens is a hypothesis -> verification loop.**
+*Decision:* the model proposes typed hypotheses from raw monthly tables
+(contracts aliased K1..Kn) in a closed grammar of eight types; Python
+verifies each one against the full history and records it as confirmed, not
+supported or not assessable; confirmed and refuted results become citable
+facts (`[verified]`); the findings pass then writes over the fact table plus
+those facts, with a framing per finding. A finding resting only on refuted
+facts is held at "watch". The model's free-text ("custom") hypotheses are
+never verified: they render apart as "Unverified observations" (figures and
+names checked against the tables only), never as findings and never in the
+memo. If the model proposes no typed hypothesis, a fixed Python candidate
+list is verified instead and the block says so.
+*Rationale:* a pattern claim from a model over a 36-month history is either
+computed or it is a guess; the loop makes the model's pattern-finding
+testable and keeps every figure in a verified fact computed. Recording
+refuted hypotheses keeps the loop honest on the page.
+*Consequence:* two model passes per lens (hypotheses, findings); the
+verifiers' thresholds are part of the digest contract under MRM change
+control ([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) section 3a).
+
+**AI-10 Non-obvious risk is computed by lenses and read with a basis.**
+*Decision:* block 2's patterns (card cycling, cash-like cards, minimum
+payments with spend, seasonal delays, pre-enquiry clean-up, lender
+concentration, non-bank reliance, guarantor exposure, instalments past
+working age, income trajectory, employer churn, selective default) are
+deterministic Python lenses with documented thresholds; the model reads
+them against the context register and a headline index of the file (not
+the full digest) and writes findings whose basis -- payload, payload with
+register context, or inferred -- Python derives from the cites. An
+employer's sector may be inferred from its name alone, from the register's
+closed vocabulary, labelled "inferred, verify", capped at watch; such a
+finding reaches the memo as an item the memo may weigh but a driver may not
+cite.
+*Rationale:* the patterns are arithmetic and belong in Python; the model's
+value is connecting them. A sector guessed from a name is useful colour and
+never evidence, so it is bounded, labelled and kept out of the decision
+path. The compact input keeps the pass at about a third of the findings
+pass's tokens.
+
+**AI-11 The context register has an owner, a cadence and a vocabulary.**
+*Decision:* `config/macro_context.json` names an `owner` (today "to be
+named (model owner)") and a `review_cadence` (quarterly), carries dated
+topic-tagged `register` entries and the closed `sectors` vocabulary, and the
+loader refuses a vocabulary without an owner. The register is the only
+background channel: the file carries no separate macro `facts` list.
+`config/providers.json` tags non-bank lenders `kind: "nbfi"` (N01 for the
+patterns fixture; unknown N## codes read as nbfi). Both are model inputs
+under MRM change control.
+*Rationale:* one channel means one owner and one review for everything
+time-sensitive the model sees.
+*Consequence:* the model owner's first task is to put a name on the
+register ([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) section 11).
+
+**AI-12 Reasoning level per pass and compact inputs.**
+*Decision:* each pass declares its reasoning level beside its prompt
+(`EFFORT` in `aecb/brief/prompts/`): `low` for lens H (hypotheses), lens W
+(findings) and the risk pass; `medium` for the checklist and the memo. Every
+model input is compact without dropping a figure, a field path, a hard rule
+or a guard:
+- raw tables carry a card's limit instead of a utilisation column, cells
+  only where they carry something and identical consecutive months
+  collapsed, within a 10,000-character budget;
+- pass H's headline index holds the structure and behaviour facts at 80
+  characters each, and the risk block's index is cut to 80 characters;
+- contract labels omit the opening date, which one fact states for every
+  contract;
+- of the checklist's step facts, pass W reads only the tripwires and the
+  validity fact, and is validated against exactly what it read;
+- memo item labels are short, and the system texts are tight.
+
+*Rationale:* Core42 bills per token, and reasoning is most of every reply.
+On gpt-oss:20b, `low` makes the lens and risk replies 70-90% smaller and
+meets every evaluation assertion on the development runs; the checklist at
+`low` marked a tripwire step clear in two of four runs, and the memo's
+drivers lost their figures, so those two run at `medium`
+([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) sections 2.4 and 8.3).
+*Not done, on evidence or by decision:*
+- the risk pass is not merged into pass W: its facts in W displaced a golden
+  finding, and block 2 would become a by-product of the lens;
+- the shared hard rules (`RULES_COMMON`) and the checklist's
+  one-status-per-line table are kept word for word: compressed versions cost
+  quality at `low` in A/B runs on identical input;
+- no positional trajectory series: a misattributed month would pass the
+  figure guard;
+- the history stays at 36 months.
+
+*Consequence:* the full evaluation (`scripts/eval_brief.py`) on the `p1.0`
+prompts with gpt-oss:20b has not been run. At `low`, pass W sometimes loses
+the unconverted-applications finding to the figure guard; if the evaluation
+fails that golden, the fallback is pass W at `medium` (`p1.1`).
+`scripts/token_budget.py` measures the prompt side of a change in about a
+minute.
+
+**AI-13 The target model is gpt-oss-120b; the local model comes from a closed list.**
+*Decision:* the target model is gpt-oss-120b, the model UAT and production
+use through Core42. In development the Ollama client serves one of two
+reviewed models, `gpt-oss:120b` (the default) or `gpt-oss:20b`, chosen by
+the developer-machine setting `AECB_OLLAMA_MODEL`; any other value leaves
+the panel unavailable with the reason shown and never falls back to another
+model. The model is read when used (`provider.model()`), not at import, so a
+settings file loaded after import still applies. Both models run the same
+decoding options and the same per-pass reasoning levels (AI-12); the
+timeout is per model (600 s for 120b, an estimate; 300 s for 20b). The AI
+Analysis scripts (`check_brief.py`, `eval_brief.py`, `token_budget.py`) read
+`~/etc/aecb-analyzer/aecb.env` from `main()`, as the app does;
+`scripts/eval_brief.py --effort` runs passes at other levels for
+development only. The Core42 placeholder's documented contract names
+gpt-oss-120b, `reasoning_effort`, `response_format` with the schema keywords
+the passes rely on, reasoning returned separately and Harmony applied
+server-side; the placeholder has no network code.
+*Rationale:* the evidence should come from the model that will run, so the
+org laptop (M5 Max, 128 GB) runs 120b by default, while the 24 GB
+development Mac, which cannot hold 120b's ~65 GB, develops on 20b. A closed
+list keeps every selectable model reviewed and a mistyped setting harmless,
+as `runtime.resolve` does for an invalid environment. Every 20b workaround
+is kept: each is a guard or costs nothing, and removing one would be
+unverified risk for no token gain. The 20b reasoning levels are the
+starting point because their failure modes are known; on a stronger model
+`medium` costs tokens, not quality.
+*Consequence:* the evidence to date is gpt-oss:20b
+([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) section 8.3). Every 120b figure
+(prompt and reply tokens, latency, memory, timeout, price) is an estimate;
+MRM section 9 holds the ten assumptions (A1-A10), the org-laptop validation
+plan and its decision rule, and section 12 the 120b planning estimate. The
+validation is pending. Core42's own run at onboarding governs UAT and
+production (OPEN-13).
+
+## Deployment
 
 **DEP-1 The server stays on Python 3.9.**
 *Decision:* the air-gapped server keeps CPython 3.9 with streamlit 1.50.0.
@@ -574,22 +774,76 @@ working unnoticed.
 off. Retention is an operations task.
 *Rationale:* the archive holds real bureau data.
 
-**DEP-4 The AI brief is not deployed on UAT.**
-*Decision:* the production page renders without the AI Analysis panel, and no
-model service (Ollama) is installed.
+**DEP-4 The AI Analysis is not live on UAT or production.**
+*Decision:* on UAT and production the page shows the AI Analysis button
+marked "Coming soon". Clicking it opens a view that says the feature is
+being built and will be switched on after validation and approval. No model
+is called, and `app.py` does not load the `aecb.brief` package in this
+state. The downloaded HTML carries no AI control. No model service (Ollama)
+is installed. The server stays air-gapped (DEP-10) until Core42 is
+onboarded.
+*Consequence:* going live means setting `AECB_AI_BRIEF=live`, a model change
+that needs Core42 onboarded, the one egress route from the server to Core42
+(DEP-10) and MRM approval first ([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md)
+sections 2.1 and 11).
 
-**DEP-5 `app.py` is not deployed.**
-*Decision:* the development harness (fixture picker, uploader, CSS reload) is
-excluded from the release archive.
+**DEP-5 One entry point, `app.py`, everywhere.**
+*Decision:* the app has one entry point, `app.py`, run the same way on every
+machine (`streamlit run app.py`). Development tools (a sample picker over the
+fixtures and the archive, a CSS/JS reload button) render only with
+`AECB_ENV=dev`. There is no file uploader in any environment. On a developer
+machine the app reads `~/etc/aecb-analyzer/aecb.env` itself
+(`aecb/settings.py`); on a server systemd loads the environment file.
+*Rationale:* one way to run the app removes the confusion of several. The
+development tools ship in the release but are gated: servers set `uat` or
+`prod`, and unset or invalid means `prod` (test-enforced). Having no
+uploader keeps the control that no user can submit a payload file.
 
 **DEP-6 Authentication happens in front of the app.**
-*Decision:* the app binds to 127.0.0.1 and relies on a TLS-terminating,
-SSO-authenticating reverse proxy. The proxy can pass the user name for the
-audit line.
+*Decision:* in production the app binds to 127.0.0.1:8501 and relies on a
+TLS-terminating, SSO-authenticating reverse proxy
+(`deploy/aecb-analyzer.service`). The proxy can pass the user name for the
+audit line. UAT is the one exception (DEP-9).
 
 **DEP-7 The release is exactly what is committed.**
 *Decision:* the release is a `git archive` of HEAD, and every dependency is
-pinned with a sha256 hash in `requirements.lock`.
+pinned with a sha256 hash in `requirements.lock`. The installer's
+`pip check` accepts only the one known line "streamlit 1.50.0 requires
+watchdog, which is not installed." and fails on anything else.
+*Rationale:* the lock is resolved on macOS, where streamlit does not need
+watchdog; watchdog only watches source files, and file watching is off
+(`.streamlit/config.toml`). Any other broken requirement is a real fault.
+
+**DEP-8 The environment is named by `AECB_ENV`.**
+*Decision:* `AECB_ENV` is `dev`, `uat` or `prod`; the UAT server sets `uat`.
+Unset, `app.py` assumes `prod`; the AI Analysis scripts, which never run on
+a server, assume `dev`. `dev` also turns on the development tools (DEP-5).
+`AECB_AI_BRIEF` (`live`, `coming_soon` or `off`) sets the AI panel; unset, it
+is `live` in dev and `coming_soon` in uat and prod.
+*Rationale:* an invalid value must not stop the report, and must never switch
+the AI Analysis on. It falls back to `prod` with the panel "coming soon",
+logs the error, and shows a sidebar note that does not echo the value.
+
+**DEP-9 UAT is served directly on port 8080.**
+*Decision:* the UAT server serves the app at `http://<server>:8080` (bound
+to 0.0.0.0:8080) with no reverse proxy and no SSO, a UAT-only exception to
+DEP-6. The bind address and port come from a systemd drop-in
+(`systemctl edit aecb-analyzer`); the shipped unit is unchanged
+([OPERATIONS.md](OPERATIONS.md), "UAT").
+*Rationale:* a drop-in keeps the exception on the UAT server: the shipped
+unit still binds to loopback, so a production install does not inherit it.
+*Consequence:* UAT has no TLS and no sign-on, so its audit lines carry no
+user. Production must use the reverse proxy.
+
+**DEP-10 The server is air-gapped.**
+*Decision:* the UAT and production server has no internet access (no PyPI,
+no CDN). Its only outbound connection is the internal bureau-report API.
+The single exception is one egress route to Core42, opened only when the AI
+Analysis goes live (DEP-4, OPEN-13); it adds no general internet access.
+*Consequence:* the install is offline from a hash-pinned wheel bundle
+(`pip --no-index --require-hashes`, DEP-7), and the page is self-contained:
+fonts and logo inlined, a Content-Security-Policy and no external references
+(SEC-1, SEC-2).
 
 ---
 
@@ -607,5 +861,8 @@ pinned with a sha256 hash in `requirements.lock`.
 | OPEN-8 | `YYYYMMDD` dates are not parsed | They render as unreadable or not reported |
 | OPEN-9 | The retention period for the API response archive must come from the data-retention policy | No purge until operations schedules one ([OPERATIONS.md](OPERATIONS.md)) |
 | OPEN-10 | Upgrade the server's Python to 3.10 or later | Known dependency findings are accepted in [DEPENDENCY_RISK.md](DEPENDENCY_RISK.md) |
-| OPEN-11 | AI brief (only if it is proposed for deployment): the eval assertion "delinquent: some finding cites a trajectory fact" fails (pre-existing model behaviour); model owner and approver not yet named | Not deployed ([AI_BRIEF_MRM.md](AI_BRIEF_MRM.md)) |
+| OPEN-11 | AI Analysis, before it goes live on UAT or production: the evaluation golden "delinquent: some finding cites a trajectory fact" is intermittent on gpt-oss:20b; the full evaluation on `p1.0` and the gpt-oss-120b validation are not yet run (AI-12, AI-13); the model owner, the approver and the context register's owner are not yet named (AI-11) | "Coming soon" on UAT and production ([AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md)) |
 | OPEN-12 | The bureau-report API is reached over plain HTTP on the internal network. Switch `config/api.json` `base_url` to `https://` when the API team offers TLS | NTLM sends no password, but payloads cross the internal network in clear text. The client supports HTTPS with no code change ([SECURITY_REVIEW.md](SECURITY_REVIEW.md)) |
+| OPEN-13 | Core42 onboarding for the AI Analysis on UAT and production: endpoint, authentication, model (gpt-oss-120b; Core42's id pinned at onboarding), JSON-schema output support, the reasoning control, and an egress route from the air-gapped server to Core42, the single exception to the air gap (DEP-10). Checklist in [AI_ANALYSIS_MRM.md](AI_ANALYSIS_MRM.md) section 11 | The Core42 connector is a placeholder that refuses every call; the panel shows "Coming soon" |
+| OPEN-14 | RHEL 8's python39 venv ships pip 20.2; `deploy/install_offline.sh` requires pip 20.3 or later | Bootstrap pip from a bundled wheel by hand ([OPERATIONS.md](OPERATIONS.md), "UAT"); the scripts do not yet do it |
+| OPEN-15 | Fold the `rail-off` layout-state class into plain selectors (AI-8) | Deferred; needs the `scripts/measure` geometry harness |

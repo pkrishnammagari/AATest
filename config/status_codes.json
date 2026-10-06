@@ -53,7 +53,7 @@
   },
   "frequency": {
     "_comment": "AECB Frequency of Payment Type. Delivered for Installments only. The payload carries the long description; short is for the row label.",
-    "W": {"short": "Weekly", "long": "weekly instalments - 7 days"},
+    "W": {"short": "Weekly", "long": "weekly instalments-7 days"},
     "F": {"short": "Fortnightly", "long": "fortnight instalments-15 days"},
     "M": {"short": "Monthly", "long": "monthly instalments-30 days"},
     "B": {"short": "Bi-monthly", "long": "bimonthly instalments-60 days"},

@@ -120,9 +120,11 @@ window.
 2. **Read the report.** The full screen is the deliverable.
 3. **Download it** as a standalone file to keep with the application.
 
-The application has no login of its own. It sits behind the bank's secure,
-single-sign-on gateway, and every query is recorded in an audit log: which
-subject was queried, by whom and with what outcome.
+The application has no login of its own. In production it sits behind the
+bank's secure single-sign-on gateway; UAT, the test installation, is opened
+directly on the internal network without sign-on. Every query is recorded in
+an audit log: which subject was queried, by whom (the signed-on user, in
+production) and with what outcome.
 
 Each report the service returns is also kept as a reference copy in a
 restricted folder on the server, outside the application. How long these
@@ -160,13 +162,33 @@ Sections 02 and 03 share one row: the score beside the worst statuses.
 Throughout, hovering over anything explains it: where the figure came from,
 what period it covers, and what a missing value means.
 
-### The AI brief (not part of the UAT deployment)
+### The AI Analysis (coming soon on UAT and production)
 
-A development version of the app can add an *AI Analysis* panel: a second
-reading of the report produced by a language model that runs on the same
-machine. It only connects facts that the app has already computed. It never
-calculates figures and never recommends a decision. It is **not part of the
-UAT deployment**, and the production screen has no AI panel.
+The app has an *AI Analysis* view: a reading of the report produced by a
+language model. It replaces the report on screen while it is open, and it
+has four blocks:
+
+| Block | What it gives the underwriter |
+|---|---|
+| **Fresh lens** | An independent reading of the file. The model suggests patterns worth testing in the month-by-month figures; the app tests each one with its own arithmetic, and the findings are written from the facts and those test results. Remarks the app could not test are shown apart, marked as unverified. |
+| **Non-obvious risk** | Patterns a line-by-line review tends to miss, found by the app's own calculations: for example a card that swings repeatedly between half-used and nearly full, late payments that recur at the same time of year, accounts closed or arrears cleared just before the bureau was queried, most of the debt sitting with one lender, or borrowing from a non-bank lender. The model reads them against a short, dated note on current conditions that the bank maintains. A finding that rests on the model's own inference is marked "verify" and never drives the recommendation. |
+| **Checklist replay** | The credit team's ten-step review, step by step, with indicators that can be copied into the credit file. A step marked clear while its own warning sign is present is flagged as a possible miss. |
+| **Memo and recommendation** | A credit memo and a suggested outcome (Approve, Approve with conditions, Refer or Decline), written only from the checked findings of the first three blocks. |
+
+It only connects facts that the app has already computed; it never
+calculates figures. Every sentence is checked before it is shown: each
+figure and each name must appear in the facts it cites, and anything that
+fails is dropped rather than corrected. The suggested outcome is advisory and
+labelled as such: the underwriter decides, and every finding links back to
+the evidence on the report.
+
+In development it uses an open-source model running on the developer's own
+machine. On UAT and production it will use Core42, which is still being
+onboarded. Until then the screen there shows the *AI Analysis* button marked
+**Coming soon**; clicking it explains that the feature is being built and
+will be switched on only after validation and approval. No model is called.
+The servers have no internet access; switching the AI Analysis on would add
+one approved connection, to Core42, and nothing else (see Deployment).
 
 ---
 
@@ -212,20 +234,22 @@ place on the page that is meant to show them.
 
 **The automated test suite.** Automated tests cover how the report is read and
 checked, the connection to the bureau service, the security protections (no
-report content can turn into active page content), and the two entry screens.
-The tests must pass on the same Python version the server runs.
+report content can turn into active page content), the AI Analysis's checks,
+and the app's screens in every environment. The tests must pass on the same
+Python version the server runs.
 
-**The layout harness.** The page has two independent layout dimensions: the
-window width, and (in the development version) whether the AI panel is open. A
-change that looks right in one combination can break another. A set of
-development tools renders the page at ten widths in both states, measures
-every element, and confirms that a change stayed inside the sections it was
-meant to touch.
+**The layout harness.** The page's layout changes with the window width, and
+a change that looks right at one width can break another. A set of
+development tools renders the page at ten widths, measures every element, and
+confirms that a change stayed inside the sections it was meant to touch. (The
+AI Analysis view hides the report rather than reflowing it, so it does not
+disturb those measurements.)
 
-**The real-report corpus check.** Reports the service returns are kept on the
-server as reference copies (never in the code repository). A second automated
-check runs the whole collection through the report and verifies for each one
-that:
+**The real-report corpus check.** Each report the service returns is kept as
+a reference copy in the archive folder of the machine that fetched it, never
+in the code repository. A second automated check runs on a machine that holds
+a collection of these copies, with customer details masked. It runs every one
+through the report and verifies for each that:
 
 - nothing crashed, and no delivered value went missing;
 - the headline figures and status labels agree with the rules, recalculated
@@ -242,7 +266,8 @@ contains an external reference.
 ## 8. Deployment
 
 The target is a **Linux server with no internet access**, running Python 3.9.
-Both facts shape delivery:
+Its only connection out is to the bank's internal bureau-report service. The
+missing internet access and the Python version shape delivery:
 
 1. On a connected machine, a script downloads every dependency in advance as a
    ready-built bundle. Each file is checked against a recorded fingerprint, and
@@ -250,11 +275,15 @@ Both facts shape delivery:
    processor type.
 2. A release package is made from the approved version of the code only. It
    leaves out development tools, tests and documentation.
-3. The package and the bundle are copied to the server, and an install script
-   sets the application up with the network disabled. A missing or altered
-   file therefore fails at once.
-4. The application runs as a system service. It is reachable only through the
-   bank's secure, single-sign-on gateway.
+3. The package and the bundle are copied to the server and installed from
+   the bundle alone, with no network access. A missing or altered file
+   therefore fails at once.
+4. The application runs as a system service. In production it is reachable
+   only through the bank's secure single-sign-on gateway. UAT is reached
+   directly on the internal network, without sign-on, for testing.
+
+The AI Analysis would add one approved connection out, to Core42, when it
+goes live; nothing else on the server reaches outside the bank.
 
 Fonts are handled the same way: they are downloaded once on a connected
 machine and built permanently into the application's stylesheet.
@@ -279,10 +308,13 @@ the product leaves the gap visible rather than guessing:
   as codes.
 - **Debt-service ratio and application context** (product, amount, tenor).
   These have no source in a bureau report and would need a separate input.
-- **A real adverse sample report.** The reference customer is entirely clean. A
-  deliberately delinquent synthetic file is bundled, so every adverse display
-  (the late-payment colours, severe statuses, dispute flags) can be seen in
-  the app. A real, anonymized adverse report would still be the better test.
+- **A real adverse sample report.** The one real (anonymized) reference
+  report has a clean payment record; the few returned cheques and debits it
+  shows were added for testing. Two synthetic files are bundled: a
+  deliberately delinquent one, so every adverse display (the late-payment
+  colours, severe statuses, dispute flags) can be seen in the app, and one
+  that plants the patterns the AI Analysis looks for. A real, anonymized
+  adverse report would still be the better test.
 
 ---
 

@@ -119,19 +119,19 @@ def applied_on(row):
                            or row.get("DateOfLastUpdate"))
 
 
-def in_window(ctx, rows, days=FOCUS_DAYS):
+def in_window(ctx, rows):
     """Applications inside the window, counted the way AECB counts them.
 
-    STRICTLY less than `days` old. That is not arbitrary: on the reference
+    STRICTLY less than FOCUS_DAYS old. That is not arbitrary: on the reference
     payload it is what reconciles the rows with the delivered
     contractsTotalSummary.Applications90D exactly (five, not six -- one
     application sits on day 90 itself). An inclusive bound made the section
     report a conflict with the bureau that was our own off-by-one.
     """
-    return in_window_at(ctx.report_date, rows, days)
+    return in_window_at(ctx.report_date, rows)
 
 
-def in_window_at(anchor, rows, days=FOCUS_DAYS):
+def in_window_at(anchor, rows):
     """in_window() against any anchor date -- used to test whether AECB's
     delivered counter was computed at its own data pull date."""
     if not anchor:
@@ -139,7 +139,7 @@ def in_window_at(anchor, rows, days=FOCUS_DAYS):
     out = []
     for row in rows:
         when = applied_on(row)
-        if when and 0 <= (anchor - when).days < days:
+        if when and 0 <= (anchor - when).days < FOCUS_DAYS:
             out.append(row)
     return out
 

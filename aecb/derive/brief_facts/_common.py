@@ -16,6 +16,7 @@ INCONSISTENCY = "inconsistency"
 BEHAVIOR = "behavior"
 ABSENCE = "absence"
 BACKGROUND = "background"
+RISK = "risk"
 
 # Report sections a fact can be verified in, by registry NAME (see
 # render/sections/__init__.py). Numbers are assigned positionally there and
@@ -62,13 +63,13 @@ def fmt(value):
     return "{:,.2f}".format(n)
 
 
-def text(value, limit: int = _TEXT_LIMIT) -> str:
+def text(value) -> str:
     """Payload free text made safe to place inside a fact line."""
     cleaned = _CONTROL.sub(" ", str(value))
     cleaned = _FACT_ID.sub("", cleaned).replace("[", "(").replace("]", ")")
     cleaned = " ".join(cleaned.split())
-    if len(cleaned) > limit:
-        cleaned = cleaned[:limit].rstrip() + "..."
+    if len(cleaned) > _TEXT_LIMIT:
+        cleaned = cleaned[:_TEXT_LIMIT].rstrip() + "..."
     return cleaned
 
 
@@ -92,15 +93,20 @@ def category(contract) -> str:
     return str(contract.get("ContractCategory", "")).strip().upper()
 
 
+def contract_name(contract):
+    """'Credit Card C41880273' -- the product type and the contract id."""
+    return "%s %s" % (text(contract.get("ContractType") or "Contract"),
+                      text(contract.get("CBContractId") or "?"))
+
+
 def contract_label(ctx, contract):
-    """'Credit Card C41880273 (Bank B01, opened 12 March 2018)' -- enough for
-    the model to name the facility without inventing detail."""
-    return "%s %s (%s, opened %s)" % (
-        text(contract.get("ContractType") or "Contract"),
-        text(contract.get("CBContractId") or "?"),
-        provider_name(ctx, contract.get("ProviderNo")),
-        text(contract.get("OpenDate") or "unknown date"),
-    )
+    """'Credit Card C41880273 (B01)' -- enough for the model to name the
+    facility without inventing detail, and the id and provider every fact
+    must carry for the name guard. The opening date is stated once, in the
+    structure lens's contracts fact, not in every fact that names a contract
+    (a label appears dozens of times in a digest)."""
+    return "%s (%s)" % (contract_name(contract),
+                        provider_name(ctx, contract.get("ProviderNo")))
 
 
 def provider_name(ctx, code) -> str:

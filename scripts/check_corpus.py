@@ -1,10 +1,9 @@
 """Run every archived API payload through the report and check what it shows.
 
-check_report.py gates the two committed fixtures. This runs the same gate --
-and a good deal more -- over every real response app_api.py has archived
-(the AECB_ARCHIVE_DIR folder; ReferenceJSON/api_responses/ on machines that
-still hold the older in-tree archive), because a code path the fixtures never
-take is a code path nothing has tested.
+check_report.py gates the three committed fixtures. This runs the same gate
+-- and a good deal more -- over every real response app.py has archived (the
+AECB_ARCHIVE_DIR folder, else ReferenceJSON/api_responses/), because a code
+path the fixtures never take is a code path nothing has tested.
 
     python3 scripts/check_corpus.py                    # $AECB_ARCHIVE_DIR
     python3 scripts/check_corpus.py --only 20260915    # files whose name contains it
@@ -42,12 +41,18 @@ REPO = os.path.dirname(SCRIPTS)
 sys.path.insert(0, REPO)
 sys.path.insert(0, SCRIPTS)
 
+from aecb import settings                             # noqa: E402
 from aecb.render import branding                      # noqa: E402
 from corpus import (browser, checks, pagetext, registry, report,   # noqa: E402
                     snapshot)
 
-# Where app_api.py archives responses (aecb/archive.py); the in-tree folder
-# is the pre-AECB_ARCHIVE_DIR location, kept as the fallback.
+# AECB_ARCHIVE_DIR from ~/etc/aecb-analyzer/aecb.env, like the app.
+_SETTINGS_PROBLEM = settings.load_local()
+if _SETTINGS_PROBLEM:
+    print("note: %s" % _SETTINGS_PROBLEM, file=sys.stderr)
+
+# Where app.py archives responses (aecb/archive.py); the in-tree folder is
+# the fallback when AECB_ARCHIVE_DIR is unset.
 DEFAULT_DIR = (os.environ.get("AECB_ARCHIVE_DIR")
                or os.path.join(REPO, "ReferenceJSON", "api_responses"))
 DEFAULT_OUT = os.path.join(REPO, "corpus_report")

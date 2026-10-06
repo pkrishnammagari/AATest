@@ -29,8 +29,8 @@ from . import (
     worst_status,
 )
 
-# Report validity is not here: it lives in the top bar, where a single pill and
-# two dates say everything a full section card was spending a card on.
+# Report validity is not a section: it lives in the top bar, where a single
+# pill and two dates say everything about it.
 SECTIONS = (
     identity,
     (score, worst_status),

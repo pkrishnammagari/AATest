@@ -4,7 +4,7 @@ run_payload() takes one archived API response and returns every finding the
 harness can raise for it, in seven layers:
 
   load       the file parses and builds a ReportContext, through the same
-             context.from_bytes() seam app_api.py uses;
+             context.from_bytes() seam app.py uses;
   render     render_page() completes -- and when it does not, each section is
              rendered alone so the finding names the one that raised;
   no-drop    delivered rows reach the page: scripts/check_report.py's
@@ -162,7 +162,10 @@ def ladder(ctx):
 
 def strict_status(ctx, value):
     """The configured status a text names -- code or label -- or None.
-    Mirrors the spec for section 03: resolve strictly, never guess."""
+    Mirrors the spec for section 03: resolve strictly, never guess. Labels
+    match with hyphens, spacing and case ignored ('Write Off' is
+    'Write-off', signed off) -- restated here, not imported, so a
+    regression in aecb/context.py cannot certify itself."""
     if value is None:
         return None
     codes = ctx.status_codes.get("codes") or {}
@@ -171,9 +174,13 @@ def strict_status(ctx, value):
         return codes[text]
     for meta in codes.values():
         if isinstance(meta, dict) and \
-                (meta.get("label") or "").strip().lower() == text.lower():
+                _label_key(meta.get("label") or "") == _label_key(text):
             return meta
     return None
+
+
+def _label_key(text):
+    return " ".join(str(text).replace("-", " ").split()).lower()
 
 
 def grade(meta):
@@ -272,7 +279,7 @@ def run_payload(path, keep_html=False, slow_seconds=5.0):
     result["fields"] = _field_inventory(payload)
 
     try:
-        # The same seam app_api.py feeds: bytes in, ReportContext out.
+        # The same seam app.py feeds: bytes in, ReportContext out.
         ctx = context.from_bytes(raw_bytes, source_name=name)
     except Exception as exc:   # noqa: BLE001
         col.add("load.context", "%s: %s" % (type(exc).__name__, exc),
@@ -280,7 +287,7 @@ def run_payload(path, keep_html=False, slow_seconds=5.0):
         return _finish(result, col)
     if not any(ctx.rows(k) for k in ("customerInfo", "summary", "score")):
         col.add("load.shape", "no customerInfo, summary or score row -- "
-                "app_api.py would have rejected this response")
+                "app.py would have rejected this response")
 
     report_date, _basis = ladder(ctx)
     delivered = _delivered_strings(payload)
@@ -389,7 +396,8 @@ def check_unknown_arrays(ctx, rd, col):
 
 
 def check_contact_types(ctx, rd, col):
-    shown = ("mobile number", "phone number", "e-mail")
+    shown = ("mobile number", "phone number", "additional mobile number",
+             "e-mail")
     lost = collections.Counter()
     for row in rows(ctx, "contacts"):
         base = d_id.base_type(row.get("ContactType"))

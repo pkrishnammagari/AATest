@@ -282,20 +282,15 @@ def _lifetime_count(ctx):
 def _known_status(ctx, value):
     """The AECB status this text names, or None when it names none.
 
-    ctx.status() also refuses to grade the unknown (it returns rank None), but
-    this panel wants the config row itself and a plain None for "unrecognised",
-    so it resolves strictly here -- on code or on label -- and _grade() leaves
-    anything unresolved uncoloured. A green tone is a reassurance the bureau
-    never gave.
+    Resolved by ctx.status() -- on code, or on label with hyphens, spacing
+    and case ignored ('Write Off' is 'Write-off') -- so this panel and the
+    rest of the page can never recognise different vocabularies. It returns
+    the config row itself, or a plain None for "unrecognised", and _grade()
+    leaves anything unresolved uncoloured. A green tone is a reassurance the
+    bureau never gave.
     """
     codes = ctx.status_codes.get("codes") or {}
-    text = str(value).strip()
-    if text in codes:
-        return codes[text]
-    for meta in codes.values():
-        if (meta.get("label") or "").strip().lower() == text.lower():
-            return meta
-    return None
+    return codes.get(ctx.status(value)["code"])
 
 
 _GRADES = {"severe": ("red", "severe"), "adverse": ("amber", "adverse"),

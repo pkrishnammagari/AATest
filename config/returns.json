@@ -19,5 +19,5 @@
     "Multiple": "red",
     "Reported": "neutral"
   },
-  "_severity_tones_comment": "Delivered Severity text -> display tone. Single/Multiple/Reported is the full vocabulary per RRM (Aug 2026). 'Reported' is rendered neutral pending a business definition of what it grades; unknown values also render neutral rather than being guessed into a risk colour."
+  "_severity_tones_comment": "Delivered Severity text -> display tone. Single/Multiple/Reported is the full vocabulary per RRM. 'Reported' is rendered neutral pending a business definition of what it grades; unknown values also render neutral rather than being guessed into a risk colour."
 }

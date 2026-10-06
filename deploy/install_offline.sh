@@ -76,7 +76,22 @@ PY
 echo "==> Installing from ${WHEELS}/ (no network, hashes enforced)"
 "${VENV}/bin/python" -m pip install --no-index --find-links="./${WHEELS}" \
   --require-hashes --no-deps -r "${LOCK}"
-"${VENV}/bin/python" -m pip check
+
+# requirements.lock is resolved on macOS, where streamlit does not need
+# watchdog, so on Linux pip check reports exactly one known line. watchdog
+# only watches source files for changes, and .streamlit/config.toml sets
+# fileWatcherType = "none". That line is accepted; anything else stops the
+# install.
+KNOWN_PIP_CHECK="streamlit 1.50.0 requires watchdog, which is not installed."
+echo "==> Checking installed requirements"
+if ! PIP_CHECK="$("${VENV}/bin/python" -m pip check 2>&1)"; then
+  if [ "${PIP_CHECK}" != "${KNOWN_PIP_CHECK}" ]; then
+    echo "${PIP_CHECK}" >&2
+    fail "pip check found broken requirements."
+  fi
+  echo "    ${PIP_CHECK}"
+  echo "    (expected: file watching is off in .streamlit/config.toml)"
+fi
 
 # --- smoke test --------------------------------------------------------------
 echo
@@ -88,12 +103,13 @@ import sys
 import streamlit
 
 sys.path.insert(0, os.getcwd())
-from aecb import context
+from aecb import context, runtime
 from aecb.render.page import render_page
 
 print("    streamlit", streamlit.__version__, "on Python", sys.version.split()[0])
 fixture = "ReferenceJSON/1_SyntheticJSONPayload_Delinquent_MultiFacility.json"
-html = render_page(context.from_file(fixture), ai_panel=False)
+# The shipped default on a server: the AI panel shows "coming soon".
+html = render_page(context.from_file(fixture), ai_mode=runtime.AI_SOON)
 if "http://" in html or "https://" in html:
     sys.exit("ERROR: the rendered report contains an external reference -- it "
              "will not work offline.")

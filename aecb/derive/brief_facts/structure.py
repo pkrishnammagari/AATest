@@ -57,6 +57,22 @@ def portfolio(ctx, facts):
               SEC_FACILITIES)
 
 
+def opening_dates(ctx, facts):
+    """Each contract with its opening date as delivered -- the one place the
+    digest states them (contract labels carry type, id and provider only)."""
+    contracts = ctx.rows("contracts")
+    if not contracts:
+        return
+    facts.add(STRUCTURE,
+              "Contracts on file and their opening dates: %s."
+              % "; ".join("%s opened %s" % (contract_label(ctx, c),
+                                            text(c.get("OpenDate") or "unknown date"))
+                          for c in contracts),
+              ["contracts[].ContractType", "contracts[].CBContractId",
+               "contracts[].ProviderNo", "contracts[].OpenDate"],
+              SEC_FACILITIES)
+
+
 def guarantees(ctx, facts):
     balance = number(ctx.totals.get("TotalBalanceGuaranteed"))
     overdue = number(ctx.totals.get("TotalOverdueGuaranteed"))

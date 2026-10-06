@@ -7,7 +7,7 @@
  * Sections:
  *   1. helpers
  *   2. charts   (applications timeline, conduct heatmap)
- *   3. behaviour (tooltip, expanders, folds, spine nav, rail)
+ *   3. behaviour (tooltip, expanders, folds, spine nav, analysis view)
  *
  * The income and returns timelines and the facilities utilisation line are
  * inline SVG/HTML built in Python (aecb/render/sections/), not drawn here:
@@ -67,7 +67,7 @@
      older is compressed into the rest -- and every position arrives already
      computed as a percentage from derive/applications.py. Percentages rather
      than an SVG viewBox on purpose: the row has to scale with the report column
-     across two rail states and ten widths, and a viewBox would magnify the
+     across ten widths, and a viewBox would magnify the
      8.5px axis labels along with it. */
   const TIMELINE_BASE = 30;
 
@@ -593,11 +593,13 @@
   }
 
   /* Open a section if it is folded, then scroll to it -- shared by the spine
-     dots and the brief's "Verify at" links. */
+     dots and the analysis's "Verify at" links. A verify link first leaves the
+     analysis view, since the report is display:none while it is on. */
   function bindOpenAndScroll(link) {
     link.addEventListener("click", function () {
       const t = el(link.dataset.to);
       if (!t) return;
+      if (link.classList.contains("bf-go")) document.body.classList.remove("analysis-on");
       secOpen(t);
       t.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -635,16 +637,68 @@
     }
   }
 
-  function railToggle() {
-    const x = el("railX"), btn = el("briefBtn");
-    if (x) x.addEventListener("click", function () { document.body.classList.add("rail-off"); });
-    if (btn) btn.addEventListener("click", function () { document.body.classList.toggle("rail-off"); });
+  /* The top-bar button toggles the analysis view; the view's own button
+     returns to the report. Both only flip a body class. */
+  function viewToggle() {
+    const x = el("analysisX"), btn = el("briefBtn");
+    if (btn) btn.addEventListener("click", function () { document.body.classList.toggle("analysis-on"); });
+    if (x) x.addEventListener("click", function () {
+      document.body.classList.remove("analysis-on");
+      window.scrollTo({ top: 0 });
+    });
   }
 
-  /* Brief findings carry "Verify at" links; the brief is baked server-side,
-     so binding once at boot is enough. */
-  function briefLinks() {
+  /* Analysis items carry "Verify at" links; the analysis is baked
+     server-side, so binding once at boot is enough. */
+  function verifyLinks() {
     for (const link of document.querySelectorAll(".bf-go[data-to]")) bindOpenAndScroll(link);
+  }
+
+  function analysisNav() {
+    for (const a of document.querySelectorAll(".an-nav a[data-to]")) {
+      a.addEventListener("click", function () {
+        const t = el(a.dataset.to);
+        if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }
+
+  /* Copy buttons copy a plain-text block built server-side from validated
+     items only (a hidden <pre>), never scraped markup. The clipboard API
+     needs a user gesture, which a click is; where it is refused the legacy
+     command is tried, and failing that the text is revealed for selection. */
+  function copyFallback(pre, done, fail) {
+    const area = document.createElement("textarea");
+    area.value = pre.textContent;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    document.body.removeChild(area);
+    if (ok) done(); else fail();
+  }
+
+  function copyButtons() {
+    for (const b of document.querySelectorAll(".an-copy[data-copy]")) {
+      b.addEventListener("click", function () {
+        const pre = el(b.dataset.copy);
+        if (!pre) return;
+        const label = b.textContent;
+        const done = function () {
+          b.textContent = "Copied";
+          setTimeout(function () { b.textContent = label; }, 1500);
+        };
+        const fail = function () { pre.classList.add("shown"); b.textContent = "Select text below"; };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(pre.textContent).then(done, function () { copyFallback(pre, done, fail); });
+        } else {
+          copyFallback(pre, done, fail);
+        }
+      });
+    }
   }
 
   /* ---------- boot ---------- */
@@ -657,6 +711,8 @@
   expanders();
   collapsibles();
   spineNav();
-  railToggle();
-  briefLinks();
+  viewToggle();
+  verifyLinks();
+  analysisNav();
+  copyButtons();
 })();

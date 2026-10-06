@@ -12,7 +12,7 @@ Assertions here are about STRUCTURE, deliberately not about pixel heights:
 different payloads legitimately produce different heights, and pinning numbers
 would make this rot. Height regressions are compare.py's job.
 
-Traps met while writing these, so nobody meets them twice:
+Traps:
   * contacts key off `ContactType`, not `Type`, and carry a trailing space
     ("E-mail "). Addresses are their own array keyed on `Address`.
   * A mutation that silently matches nothing gives a green run that proves
@@ -60,9 +60,8 @@ window.addEventListener('load', function () {
                 equal: row.every(function (t) { return t.h === row[0].h; })};
       });
 
-    /* The passport tile, found by its label. "The last tile with a .v-sub"
-       stopped meaning the passport on 24 Sep 2026, when the Emirates ID
-       gained an expiry line and the address an "Updated" date. */
+    /* The passport tile, found by its label: the Emirates ID and address
+       tiles also carry a .v-sub line. */
     var tileKey = function (t) {
       var k = t.querySelector('.k'); return k ? k.textContent.trim() : ''; };
     var pp = null, mail = null;
@@ -80,8 +79,8 @@ window.addEventListener('load', function () {
       .map(function (p) {
         var f = p.querySelector('.wsx-worst');
         return {cls: f ? f.className.replace('wsx-worst', '').trim() : null,
-                /* The figure's own text, without an amber '!' mark (added
-                   24 Sep 2026) -- the mark is asserted separately. */
+                /* The figure's own text, without an amber '!' mark -- the
+                   mark is asserted separately. */
                 text: f ? (function () { var k = f.cloneNode(true);
                   [].slice.call(k.querySelectorAll('.attn')).forEach(function (a) { a.remove(); });
                   return k.textContent.trim(); })() : null,
@@ -125,9 +124,9 @@ window.addEventListener('load', function () {
 
     /* Section 07 stacks three separate repeat(36,1fr) grids -- status, DPD,
        utilisation -- and a month must line up with itself down all three. This
-       asserts them against EACH OTHER, which is the only way to see it: the
-       misalignment that shipped on 7 Aug had every strip internally consistent,
-       nothing clipped, nothing overflowed, and the section measured shorter.
+       asserts them against EACH OTHER, which is the only way to see it: a
+       misaligned strip can be internally consistent, with nothing clipped,
+       nothing overflowing, and the section measuring shorter.
        Rows inside a collapsed fold report zeros for all three, so they agree
        trivially rather than failing. */
     var misaligned = 0;
@@ -387,7 +386,7 @@ def build_cases(base):
     cases["apps-quiet"] = d
 
     # Every application on one day. Pathological rather than realistic, and the
-    # point is the lane cap: without it this rendered a 565px chart.
+    # point is the lane cap: without it this renders a 565px chart.
     d = copy.deepcopy(base)
     for r in d["applications"]:
         r["LastUpdateDate"] = r["DateOfLastUpdate"] = "2023-06-14T00:00:00"
@@ -417,8 +416,8 @@ def _blocks(r):
 # What each case must be true of, beyond the universal checks. Guards against a
 # mutation that silently matched nothing.
 EXPECT = {
-    # Since 24 Sep 2026 the E-mail tile always renders -- "Not reported"
-    # rather than vanishing -- so the grid keeps five tiles.
+    # The E-mail tile always renders -- "Not reported" rather than
+    # vanishing -- so the grid keeps five tiles.
     "no-email": lambda r: r["tiles"] == 5 and r["mailNa"] is True,
     # NOTE: "reference" is the one case that asserts something about every
     # section, so it lives at the BOTTOM of this dict with the section 06
@@ -514,8 +513,7 @@ def _s1(r):
 def _wsx_ref(r):
     return (r["wsx"][0]["cls"] == "green"
             and r["wsx"][0]["text"] == "Active Payments"
-            # The 36-month panel is derived since 9 Sep 2026 (it was a
-            # pending placeholder before): clean on the reference file.
+            # The 36-month panel is derived: clean on the reference file.
             and r["wsx"][1]["cls"] == "green"
             and r["wsx"][1]["text"] == "Active Payments"
             and r["wsx"][2]["cls"] == "green"
@@ -551,8 +549,8 @@ def _fac(got) -> str:
 def _assert_frames(name, width, got, fails):
     """Every structural assertion for one probed width.
 
-    A pure extraction from main(): the same checks in the same order, moved
-    out so main() reads as case -> render -> probe -> assert.
+    Kept out of main() so main() reads as case -> render -> probe ->
+    assert.
     """
     # Worst statuses' frame: three panels, always, whatever the payload carries.
     # A missing figure becomes a stated absence in its panel; it never removes
@@ -581,16 +579,16 @@ def _assert_frames(name, width, got, fails):
             fails.append("%s@%d: facility card %s clips"
                          % (name, width, card["cat"]))
         # Every non-empty card carries BOTH role blocks -- see the frame note
-        # above. This must run per card, for every case: it once sat under the
-        # strip-misalignment branch below, reading this loop's leftover
-        # variable, and asserted nothing.
+        # above. This must run per card, for every case, inside this loop:
+        # under the strip-misalignment branch below it would read the loop's
+        # leftover variable and assert nothing.
         if not card["empty"] and card["roles"] != ["Main holder", "Guarantor"]:
             fails.append("%s@%d: card %s has roles %r, not both"
                          % (name, width, card["cat"], card["roles"]))
 
     # Section 07: every facility reaches exactly one bucket. A row that
     # falls out of all four would simply vanish from the report, which
-    # is the one failure mode this restructure could introduce.
+    # is the one failure mode the bucketing can introduce.
     if got["hm"]["rows"] != 15:
         fails.append("%s@%d: section 07 lists %d facilities, not 15"
                      % (name, width, got["hm"]["rows"]))

@@ -10,9 +10,8 @@ runOnSave = false
 fileWatcherType = "none"
 enableXsrfProtection = true
 enableCORS = true
-# Only the development harness (app.py) has an uploader; a bureau payload is a
-# few hundred KB.
-maxUploadSize = 10
+# The app has no file uploader in any environment; kept small regardless.
+maxUploadSize = 1
 
 [browser]
 # The server is air-gapped; never attempt to send usage statistics.

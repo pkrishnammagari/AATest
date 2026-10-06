@@ -1,12 +1,12 @@
 """Against the REAL bureau-report API -- only where it is reachable.
 
-Skipped unless the service account and a test subject are configured:
+Skipped unless the service account and a test subject are configured in
+the shell or in ~/etc/aecb-analyzer/aecb.env (AECB_API_USERNAME,
+AECB_API_DOMAIN, AECB_API_PASSWORD, AECB_TEST_SUBJECT_ID -- aecb/settings.py):
 
-    python scripts/local_env.py exec -- python -m pytest -m live_api
+    python -m pytest -m live_api
 
-reads them from ~/etc/aecb-analyzer/aecb.env (AECB_API_USERNAME,
-AECB_API_DOMAIN, AECB_API_PASSWORD, AECB_TEST_SUBJECT_ID). The endpoint is
-config/api.json's, as in production. Nothing is archived or logged from the
+The endpoint is config/api.json's, as in production. Nothing is archived or logged from the
 payload: the response stays in memory for the duration of the test.
 """
 
@@ -18,21 +18,37 @@ import pytest
 
 import check_report  # scripts/check_report.py -- the verbatim-value gate
 
-from aecb import api, context
+from aecb import api, context, runtime, settings
 from aecb.render.page import render_page
 
 pytestmark = pytest.mark.live_api
 
-SUBJECT = (os.environ.get("AECB_TEST_SUBJECT_ID") or "").strip()
+# Read at collection, before conftest points settings.LOCAL_FILE elsewhere
+# for every test. The shell wins over the file, as in the app.
+try:
+    _FILE = settings.read(settings.LOCAL_FILE)
+except (settings.SettingsError, OSError):
+    _FILE = {}
+_KEYS = (api.ENV_USERNAME, api.ENV_DOMAIN, api.ENV_SECRET)
+
+
+def _setting(name: str) -> str:
+    return (os.environ.get(name) or _FILE.get(name) or "").strip()
+
+
+SUBJECT = _setting("AECB_TEST_SUBJECT_ID")
 
 
 @pytest.fixture(scope="module")
 def live_payload():
-    if not (os.environ.get(api.ENV_USERNAME) and SUBJECT):
+    if not (_setting(api.ENV_USERNAME) and SUBJECT):
         pytest.skip("live API not configured: set AECB_API_USERNAME, "
-                    "AECB_API_PASSWORD and AECB_TEST_SUBJECT_ID "
-                    "(python scripts/local_env.py exec -- ...)")
-    return api.fetch_report(SUBJECT)
+                    "AECB_API_PASSWORD and AECB_TEST_SUBJECT_ID in "
+                    "~/etc/aecb-analyzer/aecb.env")
+    with pytest.MonkeyPatch.context() as mp:
+        for key in _KEYS:
+            mp.setenv(key, _setting(key))
+        return api.fetch_report(SUBJECT)
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +63,7 @@ def test_live_api_returns_an_aecb_payload(live_context):
 
 
 def test_live_payload_renders_every_value_verbatim(live_context):
-    html = render_page(live_context, ai_panel=False)
+    html = render_page(live_context, ai_mode=runtime.AI_SOON)
     assert check_report.check_page(live_context, html) == []
 
 

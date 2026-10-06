@@ -1,12 +1,13 @@
-# systemd unit for FH AECB Analyzer (production entry: app_api.py).
+# systemd unit for FH AECB Analyzer (entry point: app.py).
 #
 # Install (as root), adjusting /opt/aecb-analyzer to the release directory:
 #   cp deploy/aecb-analyzer.service /etc/systemd/system/
 #   systemctl daemon-reload && systemctl enable --now aecb-analyzer
 #
 # Binds to localhost: put the TLS-terminating, SSO-authenticating reverse
-# proxy in front of it (docs/OPERATIONS.md). Streamlit's own settings come
-# from .streamlit/config.toml in the working directory.
+# proxy in front of it (docs/OPERATIONS.md). UAT overrides the address and
+# port with a drop-in (docs/OPERATIONS.md, "UAT"). Streamlit's own settings
+# come from .streamlit/config.toml in the working directory.
 
 [Unit]
 Description=FH AECB Analyzer
@@ -19,7 +20,7 @@ User=aecb
 Group=aecb
 WorkingDirectory=/opt/aecb-analyzer
 EnvironmentFile=/etc/aecb-analyzer/aecb.env
-ExecStart=/opt/aecb-analyzer/.venv/bin/python -m streamlit run app_api.py \
+ExecStart=/opt/aecb-analyzer/.venv/bin/python -m streamlit run app.py \
     --server.address 127.0.0.1 --server.port 8501
 Restart=on-failure
 RestartSec=5
